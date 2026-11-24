@@ -811,7 +811,7 @@ here produce the same bytes.)
 |---|---|---|
 | 4.2.1 (8C148) | home screen, apps, input, Cydia/TLSFix | **PASS** (70 s to SpringBoard + input, 0 failures) |
 | 4.1 (8B117) | home screen with stock icons; Cydia/TLSFix disabled | **PASS** after the soak harness stopped accepting the green boot console as a home reference (60 s to SpringBoard + input, 0 failures) |
-| 3.1.3 (7E18) | `/dev/md0` mounts, launchd + mDNSResponder; SpringBoard launches and stays up with extra liblockdown stubs, but stops at the "Connect to iTunes" activation screen (re-log 114) | not meaningful until the home screen appears |
+| 3.1.3 (7E18) | `/dev/md0` mounts, launchd + mDNSResponder; SpringBoard launches, stays up and draws the Apple logo/spinner, but no SBLockdownManager method is called and there is no UI (re-log 114 and NEXT) | not meaningful until the home screen appears |
 | 2.2.1 (5H11a) | `/dev/md0` mounts, launchd + mDNSResponder, display; no SpringBoard | not meaningful until the home screen appears |
 
 **What works on the older versions.** The kernel-side shim is shared by all
