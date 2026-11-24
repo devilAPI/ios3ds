@@ -52,3 +52,87 @@ void firm_swap_restore(void)
     f_unlink(FLAG);
     log_ok("launcher swap: restored, next boot is Luma\n");
 }
+
+/*
+ * Issue #9: a Luma-chainloaded payload (sd:/luma/payloads/ios3ds.firm) that is
+ * older than the sd:/ios3ds/ folder. Updating means copying the new ios3ds/
+ * folder; the chainloader copy is easy to miss. The launcher (.3dsx) boots
+ * ios3ds/ios3ds.firm, so that path worked while the chainloader kept booting
+ * the old payload against the new shim.bin/gpu.bin. The two disagree on the
+ * shared layout (e.g. the SELECT+START word moved from shim+0x6C to
+ * shim+0x6500): garbled screen, dead buttons, spurious panics. ios3ds.firm in
+ * the ios3ds/ folder is from the same zip as shim.bin, so it is the reference:
+ * if it does not contain our own version string, we are a different build.
+ */
+#define PAYLOAD "0:/luma/payloads/ios3ds.firm"
+
+static u8 scanbuf[4096];
+
+/* 1: SELF contains IOS3DS_VERSION, 0: it does not, -1: no SELF / read error */
+static int self_has_our_version(void)
+{
+    const char *v = IOS3DS_VERSION;
+    UINT vl = 0;
+    while (v[vl]) vl++;
+    if (vl < 8 || vl > 128) return 1;         /* "dev" build: no usable id */
+    FIL f;
+    if (f_open(&f, SELF, FA_READ) != FR_OK) return -1;
+    UINT keep = 0, got = 0;
+    int found = 0;
+    for (;;) {
+        if (f_read(&f, scanbuf + keep, sizeof scanbuf - keep, &got) != FR_OK) { found = -1; break; }
+        UINT n = keep + got;
+        for (UINT i = 0; i + vl <= n && !found; i++) {
+            UINT k = 0;
+            while (k < vl && scanbuf[i + k] == (u8)v[k]) k++;
+            if (k == vl) found = 1;
+        }
+        if (found || got == 0) break;
+        keep = n < vl - 1 ? n : vl - 1;     /* overlap: a match across chunks */
+        for (UINT i = 0; i < keep; i++) scanbuf[i] = scanbuf[n - keep + i];
+    }
+    f_close(&f);
+    return found;
+}
+
+static FRESULT copy_file(const char *from, const char *to)
+{
+    FIL in, out;
+    FRESULT r = f_open(&in, from, FA_READ);
+    if (r != FR_OK) return r;
+    r = f_open(&out, to, FA_WRITE | FA_CREATE_ALWAYS);
+    if (r != FR_OK) { f_close(&in); return r; }
+    UINT got, put;
+    for (;;) {
+        r = f_read(&in, scanbuf, sizeof scanbuf, &got);
+        if (r != FR_OK || got == 0) break;
+        r = f_write(&out, scanbuf, got, &put);
+        if (r == FR_OK && put != got) r = FR_DISK_ERR;
+        if (r != FR_OK) break;
+    }
+    f_close(&in);
+    FRESULT rc = f_close(&out);
+    return r != FR_OK ? r : rc;
+}
+
+bool firm_is_stale(void)
+{
+    int s = self_has_our_version();
+    if (s != 0) {
+        if (s < 0) log_warn("payload check: cannot read %s, skipped\n", SELF);
+        return false;
+    }
+    log_err("payload check: this payload (%s) is not the build in sd:/ios3ds/ios3ds.firm: "
+            "the chainloaded copy is outdated and does not match shim.bin/gpu.bin\n", IOS3DS_VERSION);
+    if (exists(PAYLOAD)) {
+        FRESULT r = copy_file(SELF, PAYLOAD);
+        if (r == FR_OK)
+            log_ok("payload check: copied ios3ds/ios3ds.firm over luma/payloads/ios3ds.firm - power off and boot again\n");
+        else
+            log_err("payload check: updating luma/payloads/ios3ds.firm failed (FRESULT %d): copy "
+                    "ios3ds/ios3ds.firm there by hand\n", r);
+    } else {
+        log_err("payload check: replace the .firm you chainloaded with ios3ds/ios3ds.firm\n");
+    }
+    return true;
+}

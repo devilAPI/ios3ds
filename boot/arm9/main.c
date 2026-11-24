@@ -725,6 +725,11 @@ void a9_main(int argc, char **argv)
         log_ok("SD mounted, logging to sd:/ios3ds/log.txt\n");
         status(7, CON_GREEN, "SD ok");
         firm_swap_restore();            /* launcher (.3dsx) boot: Luma back first */
+        if (firm_is_stale()) {          /* issue #9: old chainload copy vs new shim.bin */
+            status(8, CON_RED, "OUTDATED ios3ds.firm (Luma chainloader)");
+            status(9, CON_RED, "see log: power off, boot again");
+            monitor("outdated payload");
+        }
     }
 
     logp("waiting for ARM11 (stage %s)...\n", stage_name(SHARED->a11_stage));
