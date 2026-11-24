@@ -3568,3 +3568,21 @@ for 7E18, `9af5625e…` for 5H11a). `make test` passes on the starting tree.
   `SOURCE_DATE_EPOCH`) have identical SHA-256:
   `kernel.bin 505f451a…`, `devtree.bin 25b1bd23…`, `fakeio.bin e5fecd66…`,
   `shim.bin e0609de9…`, `gpu.bin 7e696f65…`, `boot.cfg 8d4079cf…`.
+
+### Final 4.x verification for this round
+
+- **[V]** `make test` passes (offline tests plus host harnesses and the stub
+  symbol check).
+- **[V]** Exact fresh-image sequence for the default build:
+  `rm -f build/sd.img && make sdimg && python3 emu/soak.py --cycles 5 --icount 2`
+  printed **Result: PASS** (SpringBoard + input after 70 s, `[sbwarm]` after
+  135 s, home reference after 145 s, five cycles, 0 panic/stall/md0/crash/
+  watchdog/GPU failures).
+- **[V]** Exact documented 4.1 sequence after copying 8B117's published
+  firmware into `build/fw-4.1/staging` (sha1 `97abde620766…` verified):
+  `rm -f build/sd.img && make sdimg IOS=4.1 && IOS3DS_QEMU=/tmp/opencode/qemu-compat2/b/qemu-system-arm python3 emu/soak.py --cycles 5 --icount 2`
+  printed **Result: PASS** (SpringBoard + input after 60 s, `[sbwarm]` after
+  125 s, home reference after 135 s, five cycles, 0 failures).
+- **[V]** No 3.1.3 or 2.2.1 fix is shipped: neither reaches the home screen,
+  so their soaks were not run (a five-cycle soak on a spinner cannot pass).
+  The blocker analysis above is the deliverable of this round.
