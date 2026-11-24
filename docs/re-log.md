@@ -3467,7 +3467,7 @@ worktree's `build/fw-3.1.3/` and `build/fw-2.2.1/` (sha1 `5f4f5c01…` and
   home reference at 130 s (stddev 53.3), five cycles with `home diff 0.0`,
   no failures. `make test` passes before and after the final rebase.
 
-## NEXT. Older-version stall: which thread blocks (round 5, 2026-11-24)
+## 117. Older-version stall: which thread blocks (round 5, 2026-11-24)
 
 Diagnostics only so far; every scratch overlay was reverted and no 4.x
 source, patch set or recipe was changed. Both archived IPSWs were copied
