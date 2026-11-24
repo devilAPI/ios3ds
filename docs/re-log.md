@@ -3355,3 +3355,92 @@ worktree's `build/` (no Apple files are committed).
   patch list. 4.x recipes and boot files are untouched; no Apple file is
   committed. Activation on 2.x remains an open item, but the boot now gets
   substantially further than before.
+
+## NEXT. Older-version round 4: 3.1.3's spinner and 2.2.1's codesign wall (2026-11-24)
+
+Continues §114/§115. Both archived IPSWs were fetched again into this
+worktree's `build/fw-3.1.3/` and `build/fw-2.2.1/` (sha1 `5f4f5c01…` and
+`9af5625e…` verified by `fwprep.py`); nothing Apple-derived is committed. No
+4.x source, patch set or recipe was changed by any experiment below.
+
+### Baselines on current main
+
+- **[V]** 7E18, fresh `make sdimg IOS=3.1.3` image, `--icount 2`, 240 s:
+  `BSD root: md0`, launchd, the full dyld framework set, then a **stable Apple
+  logo + spinner** from t≈30 s to t=230 s (screenshot mean brightness 5.3).
+  2,116 md0 requests / 0 errors; heartbeat PC is the kernel idle loop;
+  no panic, restart or `CODESIGNING` line. The GDB trace (`-s -S`, hardware
+  breakpoints at `_execve` 0xc011d98c, `_proc_exit` 0xc011f188, SpringBoard
+  entry 0x34e8, `-[SpringBoard applicationDidFinishLaunching:]`
+  0xa6f4/return 0xad30) confirms SpringBoard stays up: only two `exit(1)`
+  helpers (fsck/mount) ran, and none of `-[SBLockdownManager init]` (0x6e965),
+  `_setupActivationState` (0x6ec31), `lockdownState` (0x6e451) or
+  `_lockdownChanged` (0x6a2f4) fired. A kernel-only trace in a second run
+  showed the same two exits in the first 13 s and no further process death.
+- **[V]** With `DYLD_PRINT_INITIALIZERS=1`/`DYLD_PRINT_WARNINGS=1` added to
+  7E18's SpringBoard plist, dyld called every initializer through
+  `/System/Library/PrivateFrameworks/MusicLibrary.framework` (last one
+  0x3134ac0c) and printed no warning; the screen still showed the spinner.
+  So the spinner is not an unresolved dyld load or a SpringBoard crash.
+- **[V]** 5H11a with the shipped **stock, signed** liblockdown, fresh image,
+  240 s: dyld loads 79 libraries through
+  `/System/Library/Frameworks/CoreGraphics.framework/Resources/libCGFreetype.A.dylib`,
+  then nothing; the top screen stays on the M1 console (mean 53), 1,522 md0
+  requests / 0 errors, no panic. Removing the compat6 re-sign therefore did
+  get further than the old post-CoreSurface stall, but still produced no UI
+  (this confirms re-log 115's control run).
+
+### 2.2.1: why the in-place liblockdown patches cannot simply be restored
+
+- **[V]** Restoring the six 5H11a liblockdown patches from re-log 114/115
+  (connect/copy_value/table/disconnect/remove/set, all original bytes verified
+  against the extracted dylib's own `LC_SYMTAB`) and refreshing the 14 SHA-1
+  CodeDirectory page slots in the dylib's existing embedded signature (new,
+  recipe-gated `codesign_rehash` step; `LC_CODE_SIGNATURE` at 0xd4c0,
+  CodeDirectory at 0xd4e4, page hashes at 0xd54a) produced **no**
+  `CODESIGNING` faults but dyld stopped again after CoreSurface (only 7
+  `dyld: loaded` lines). The page-hash update, like the `ldid -Hsha1 -S`
+  re-sign in re-log 115, appears to invalidate the signature blob that dyld
+  checks before continuing.
+- **[V]** Leaving the CodeDirectory untouched but patching the code produced
+  126 `dyld: loaded` lines and 100s of `CODESIGNING: vm_fault_enter(0x30891000)
+  … *** INVALID PAGE ***` lines; SpringBoard restarted and the console never
+  became an iOS screen. Replacing `LC_CODE_SIGNATURE` with a zero `LC_UUID`
+  was no better (105 libraries, 108 codesign faults). Both variants were
+  scratch images only.
+- **[V]** Two version-only kernel experiments also failed: making
+  `cs_validate_page` (0xc011b6f0) branch straight to its success path panicked
+  in dyld at user pc 0x2fe01028 before launchd; setting the initial
+  `_cs_validation` word (0xc01f3bb4) to 0 caused 358,301 `CODESIGNING` lines
+  and a SpringBoard restart loop. Both patch-set edits were reverted.
+- **[V]** `/private/var/run/lockdown` is absent from the stock 5H11a rootfs.
+  Creating it via the overlay's `mkdirs` with the stock dylib did not start
+  `lockdownd` (no log line) and left the 79-library console stop unchanged.
+  **[G]** A usable 2.x activation path needs either a real page-signature
+  solution or a dyld-side bypass; byte patches and pseudo-signatures alone
+  are not enough.
+
+### 3.1.3: activation is not the only gate
+
+- **[V]** Scratch variants: allowing the real `lockdown_connect` (no stub) gave
+  the same 98 libraries, `systemShutdown false` and spinner without any
+  `lockdownd` log line; also creating `/private/var/run/lockdown` made it
+  **worse** (three SpringBoard loads, black screen), so both were reverted.
+  Replacing the dyld cache's OpenGLES `AppleMBXDevice` literal at 0x2f91bb8
+  with `IOResources` (4.2.1's EAGL workaround) and adding the 4.2.1
+  `SBNoWatchdogs`/`SBDontLockAfterCrash`-style SpringBoard preferences each
+  left the 98-library boot and the spinner unchanged. All diagnostics were
+  scratch overlays under this worktree's `build/`; the shipped
+  `rootfs/overlay-3.1.3.json` is byte-identical to main.
+- **[G]** The remaining 3.1.3 stop is inside SpringBoard's post-dyld
+  UI bring-up (its app delegate returns, the first CLCD frame is the Apple
+  spinner, but no SBLockdownManager method is called). Further work should
+  trace that path in SpringBoard itself, not add more liblockdown table keys.
+
+### Tree state after the experiments
+
+- **[V]** Every diagnostic edit to `rootfs/overlay-{2.2.1,3.1.3}.json`,
+  `kernel/patchsets/2.2.1.json`, `scripts/mkrootfs.py` and
+  `tests/test_versions.py` was reverted; only this log entry remains on the
+  branch. 4.2.1's kernel/devtree/fakeio/shim/gpu/boot.cfg paths were never
+  touched, and no Apple binary or key is in the commit.
