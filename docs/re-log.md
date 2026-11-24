@@ -3587,7 +3587,7 @@ for 7E18, `9af5625e…` for 5H11a). `make test` passes on the starting tree.
   so their soaks were not run (a five-cycle soak on a spinner cannot pass).
   The blocker analysis above is the deliverable of this round.
 
-## NEXT. Issue #9: Luma chainload of a stale payload vs the .3dsx path (2026-11-25)
+## 118. Issue #9: Luma chainload of a stale payload vs the .3dsx path (2026-11-25)
 
 Old 3DS XL, garbled screen and dead buttons after boot; works only when started
 from the Homebrew Launcher `.3dsx`, fails when chainloaded by Luma.
