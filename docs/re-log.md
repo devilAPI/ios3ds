@@ -3586,3 +3586,68 @@ for 7E18, `9af5625e…` for 5H11a). `make test` passes on the starting tree.
 - **[V]** No 3.1.3 or 2.2.1 fix is shipped: neither reaches the home screen,
   so their soaks were not run (a five-cycle soak on a spinner cannot pass).
   The blocker analysis above is the deliverable of this round.
+
+## NEXT. Issue #9: Luma chainload of a stale payload vs the .3dsx path (2026-11-25)
+
+Old 3DS XL, garbled screen and dead buttons after boot; works only when started
+from the Homebrew Launcher `.3dsx`, fails when chainloaded by Luma.
+
+**Root cause.** The chainloaded payload was an old build. Every failing log
+that Retrow26 attached after "updating to main" (the six logs posted
+2026-11-24, including the `gpu=0` one) starts with
+
+    ios3ds m1-0.3.0-62-g6d963b6-20261121.0001  (M1 loader)
+
+while the one working log (the `.3dsx` boot) starts with
+
+    ios3ds m1-0.4.0-178-gf46d155-20261124.1701  (M1 loader)
+    launcher swap: restoring Luma as sd:/boot.firm
+
+The user updated the `ios3ds/` folder (new `shim.bin`, SHA-256 66C3D09F…,
+new `ios3ds/ios3ds.firm`) but not `luma/payloads/ios3ds.firm`. The launcher
+boots `ios3ds/ios3ds.firm` (new); Luma boots `luma/payloads/ios3ds.firm`
+(old). So a 0.3.0-62 ARM9 monitor and ARM11 stub ran against a 0.4.0 shim and
+gpu.bin. The shared layout changed in between. One concrete example:
+`SHIM_PANIC_REQ` was `0x6C` at 6d963b6 and is `0x6500` since c1ae67b
+(2026-11-21). The old monitor never clears shim+0x6500, so the new shim reads
+whatever RAM held there. In the `gpu=0` log XNU panics with
+"panic requested from the 3DS (SELECT+START)", and the ARM9's
+"[monitor] SELECT+START: asking XNU to panic" line is missing, so nobody
+pressed the buttons and the ARM9 did not ask. Mailboxes and the GPU and input
+protocol have changed the same way, which explains the garbled screen
+(`gpu=1`) and dead input. Hackerman501's first log (also 0.3.0-62) was the
+separate damaged-shim case already handled by d01c35f.
+
+Other differences between the logs come from the old build itself, not from
+the boot path: the CFG9_SDMMCCTL 0200 vs 0248 values, the "unknown key" lines
+for boot.cfg keys that build does not know, and the old Wi-Fi hint "start
+ios3ds once from the Homebrew Launcher". Nothing in the current tree depends
+on state that only the launcher sets up. The launcher's NWM firmware copy only
+affects Wi-Fi.
+
+**Fix.** `boot/arm9/swap.c: firm_is_stale()` runs right after the SD mount
+(after the launcher swap restore). The payload scans `sd:/ios3ds/ios3ds.firm`
+for its own `IOS3DS_VERSION` string. That file comes from the same zip as
+shim.bin/gpu.bin. If the string is missing, the running payload is a different
+build: it copies `ios3ds/ios3ds.firm` over `luma/payloads/ios3ds.firm` when
+that file exists, prints "OUTDATED ios3ds.firm (Luma chainloader)" and stays
+in the monitor without starting XNU. The next boot then runs the matching
+build. Builds named `dev` skip the check. If the file is unreadable, the
+check only logs a warning.
+
+This fix cannot help payloads that are already installed and older than this
+commit. Those users must copy `ios3ds/ios3ds.firm` to
+`luma/payloads/ios3ds.firm` once by hand, or rerun install.py.
+
+**CA fps** (12–17 fps, `[perf] CA: 15 frames … 66 ms` in the working log):
+not changed in this round. Nothing found was both cheap and safe.
+
+- **[V]** `make test` passes; `make shim`: main part 24268/24320, GPU part
+  26304/32768.
+- **[V]** Fresh soak `rm -f build/sd.img && make sdimg && IOS3DS_QEMU=… python3 emu/soak.py --cycles 5 --icount 2` printed **Result: PASS** (five cycles, 0 failures; the payload check passed without a false positive).
+- **[HW]** Still needs a hardware test: (1) with matching files, Luma
+  chainload boots to SpringBoard with working buttons; (2) with an old
+  `luma/payloads/ios3ds.firm`, the new check cannot run from the old payload,
+  so test the opposite case: put this build in `luma/payloads/`, the previous
+  build in `ios3ds/`, and boot via Luma. It must show the OUTDATED message,
+  rewrite the payload and boot on the next power-on.
