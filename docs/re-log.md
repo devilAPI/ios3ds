@@ -3651,7 +3651,7 @@ not changed in this round. Nothing found was both cheap and safe.
   so test the opposite case: put this build in `luma/payloads/`, the previous
   build in `ios3ds/`, and boot via Luma. It must show the OUTDATED message,
   rewrite the payload and boot on the next power-on.
-## NEXT. Older-version round 6: where 3.x/2.x stop drawing (2026-11-25)
+## 119. Older-version round 6: where 3.x/2.x stop drawing (2026-11-25)
 
 Continues §117. Both archived IPSWs were re-downloaded into this worktree's
 `build/fw-*/` (sha1 `5f4f5c01…` / `9af5625e…` verified by `fwprep.py`); no
