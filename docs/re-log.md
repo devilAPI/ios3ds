@@ -3356,7 +3356,7 @@ worktree's `build/` (no Apple files are committed).
   committed. Activation on 2.x remains an open item, but the boot now gets
   substantially further than before.
 
-## NEXT. Older-version round 4: 3.1.3's spinner and 2.2.1's codesign wall (2026-11-24)
+## 116. Older-version round 4: 3.1.3's spinner and 2.2.1's codesign wall (2026-11-24)
 
 Continues §114/§115. Both archived IPSWs were fetched again into this
 worktree's `build/fw-3.1.3/` and `build/fw-2.2.1/` (sha1 `5f4f5c01…` and
