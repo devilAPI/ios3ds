@@ -47,8 +47,8 @@ end-to-end.
 
 | File | Role |
 |---|---|
-| `sdio.c` | Polled TMIO host: CMD5/3/7 enumeration, 4-bit bus, block size 128, CMD52, CMD53 block mode and byte mode (FIFO32). Register usage and command encoding follow dsiwifi `wifi_sdio.twl.c`; every wait is bounded. |
-| `ar6k.c` | State machine, one bounded step per monitor-loop pass: POWER -> BMI -> FWLOAD (one 256-byte chunk per pass) -> BOOT (`hi_board_data_initialized`, 3 s) -> HTC (HTC_READY, 5 s) -> WMI (WMI_READY, 5 s) -> SCAN (10 s) -> AUTH -> UP. Timeouts use the monitor's clock (timers 2+3). After "SDIO up" a FIFO self-test (CMD52 pattern into the function-1 scratch registers, read back with one CMD53) decides between CMD53 block transfers and a CMD52-per-byte fallback for the mailbox. The WMI and data endpoints are the ones the firmware returns in its CONNECT_SERVICE responses. HTC credits from HTC_READY are split per endpoint; each message takes `ceil(padded_len / cred_sz)`, reports in RX trailers return them, a failed SDIO write returns them immediately, data frames stay queued when an endpoint is empty, and only bring-up/WMI control waits for a report, for at most ~20 ms in one monitor step; packets read during that wait go into a 16-entry deferred ring (a full ring stops the drain, nothing is dropped); control messages that still get BUSY wait in an 8-entry FIFO, and EAPOL replies are data frames retried from a one-entry queue. |
+| `sdio.c` | Polled TMIO host: CMD5/3/7 enumeration, 4-bit bus, block size 128, CMD52, CMD53 block mode and byte mode (FIFO32 at `+0x10C` or the `+0x200000` mirror used by dsiwifi's 3DS build). Register usage and command encoding follow dsiwifi `wifi_sdio.twl.c`; every wait is bounded. |
+| `ar6k.c` | State machine, one bounded step per monitor-loop pass: POWER -> BMI -> FWLOAD (one 256-byte chunk per pass) -> BOOT (`hi_board_data_initialized`, 3 s) -> HTC (HTC_READY, 5 s) -> WMI (WMI_READY, 5 s) -> SCAN (10 s) -> AUTH -> UP. Timeouts use the monitor's clock (timers 2+3). After "SDIO up" a FIFO self-test (CMD52 pattern into the function-1 scratch registers, read back with one CMD53 at `+0x10C` and, if that reads zeros or errors, at the `+0x200000` mirror) decides between CMD53 block transfers and a CMD52-per-byte fallback for the mailbox. The WMI and data endpoints are the ones the firmware returns in its CONNECT_SERVICE responses. HTC credits from HTC_READY are split among those endpoints; each message takes `ceil(padded_len / cred_sz)`, reports in RX trailers return them, a failed SDIO write returns them immediately, data frames stay queued when an endpoint is empty, and WMI control waits for a report, for at most ~20 ms in one monitor step; packets read during that wait go into a 16-entry deferred ring (a full ring stops the drain, nothing is dropped); control messages that still get BUSY wait in an 8-entry FIFO, and EAPOL replies are data frames retried from a one-entry queue. HTC's own endpoint 0 (service connects and SETUP_COMPLETE) is **not** charged to that pool: ath6kl sends it from reserved control buffers and excludes `ENDPOINT_0` from credit distribution, and the real Type4 firmware does not return ep0 credits in CONNECT_SERVICE responses. The fixed handshake gets a locally funded ep0 credit instead, never a credit wait; issue #11's New-3DS fix is kept this way. |
 | `wpa2.c` | SHA-1, HMAC, PBKDF2, 802.11i PRF, AES-128, RFC 3394 unwrap, EAPOL-Key 4-way and group handshake (CCMP or WPA v1 TKIP pairwise; CCMP or TKIP group). WPA v1 adds MD5/HMAC-MD5, RC4-drop-256 for Key Data and a 64-byte TKIP PTK. Written from the standards. An EAPOL frame too long for the WPA v1 MIC scratch buffer is rejected with `WPA2_ERR_LONG` instead of comparing uninitialised data. |
 | `wifi_frame.c` | Ethernet II <-> WMI data frames (LLC/SNAP RFC 1042 and bridge-tunnel), and the HTC RX-trailer credit parser (`wifi_htc_credits`). |
 | `wifi_ring.c` | ARM9 half of the mailbox. |
@@ -353,13 +353,13 @@ every new maximum of 20 ms or more, i.e. how long block I/O waited on Wi-Fi.
 | `sdio: RCA ..., CCCR rev .., SD rev .., card caps .., bus interface 82` | CMD3/CMD7, CCCR access, 4-bit switch | stopped at `CMD3`/`CMD7`/`CCCR`: compare with libn3ds `SDIO_init` |
 | `sdio: function 1 ready after N polls`, `sdio: CIS manufacturer 0271 card ....` | function enable; the card is Atheros (the model's card id 0201 is a guess) | not 0271: a different chip revision; still try |
 | `[wifi] SDIO up, chip id 0d000001 (AR6014)` | the diagnostic window at function 1 0x474..0x47C | `(unexpected)`: window addresses differ |
-| `[wifi] TMIO2 32-bit FIFO works` | the FIFO at 0x1012210C from the ARM9 | `FIFO check failed`: CMD52 fallback (slow); try the +0x200000 mirror |
+| `[wifi] TMIO2 32-bit FIFO works` (or `... through the +200000 mirror`) | whether CMD53 block transfers are possible from the ARM9 | `FIFO check failed`: both registers returned zeros/errored; the CMD52 byte path is used, and `[wifi] CMD52 mailbox path: HTC and WMI came up without the 32-bit FIFO` proves it reached WMI |
 | `bmi: target version 2300006f (AR6014 ROM), scratch0 was ..., WLAN_SYSTEM_SLEEP was ...` | warm reset + 100 ms, BMI credits at COUNT_DEC+16 | `BMI_GET_TARGET_ID failed`: longer reset wait, check credit register |
 | `fw: part 1/2/3/4 ... in <ms>`, `fw: BMI_EXECUTE 00927000 ... returned <x>` | BMI write/LZ stream; the stub runs and returns | which part fails; the stub's return value |
 | `boot: hi_board_data_initialized = 1 after <ms>` | the stub/firmware set the flag (model assumption; the model needs 50 ms) | `FAILED in stage boot` + host interest dump: re-send stub data after main (dsiwifi order), section 3 |
-| `htc: HTC_READY ..., <n> bytes: <hex>` | Type4 firmware boots and speaks HTC (model: 8 credits of 1664 bytes) | `FAILED in stage htc`: try `fwmain=1` |
-| `htc: service 0100 -> status 0, endpoint 1, max message ...` (0100..0104) | service connect layout and endpoints (model: 1..5 in order) | a non-zero status: the service is not offered by this firmware. `tx waits for credits on endpoint 0 (0 < 1)` followed by `HTC service setup failed: -5` instead means the *driver* ran out of HTC control credits (issue #11); -5 is `SDIO_ERR_BUSY`, not a firmware error |
-| `htc: endpoint 0 credit not returned: funding 1 for this control message` (at most 6 times: 5 CONNECT_SERVICE + SETUP_COMPLETE) | the firmware does not credit EP0 back between control messages, so the driver funds them locally as dsiwifi does | absent when the firmware/QEMU returns credits; harmless either way |
+| `htc: HTC_READY ..., <n> bytes: <hex>` | Type4 firmware boots and speaks HTC (model: 8 credits of 1664 bytes; real hardware: 10 x 1544) | `FAILED in stage htc`: try `fwmain=1` |
+| `htc: N credits ... endpoint 0 control is not credit-limited` + `htc: service 0100 -> status 0, endpoint 1, max message ...` (0100..0104) | HTC's data-credit pool is only for the connected endpoints; service connect layout and endpoints (model: 1..5 in order) | a non-zero status: the service is not offered by this firmware; `htc: failure credits ep0..5 ...` names the endpoint that ran out |
+| `htc: endpoint 0 credit not returned: funding 1 for this control message` (up to 6: 5 CONNECT_SERVICE + SETUP_COMPLETE) + `htc: <n> endpoint-0 control messages (CMD52/CMD53), 0 data credits charged` + `resp flags ... trailer ...` | ep0 gets its short control handshake from a local refill, never from the WMI/data pool; the response trailers show whether the firmware returned a credit | the old `tx waits for credits on endpoint 0 (0 < 1)` + `HTC service setup failed: -5` was the driver-starvation signature on both consoles (issue #11 and the Old-3DS report); -5 is `SDIO_ERR_BUSY`, not a firmware error |
 | `wmi: WMI_READY ..., <n> bytes: <hex> (MAC, phy capability)` | WMI_READY layout (model: 7 bytes) | longer event: more fields (sw/abi version) we ignore, harmless |
 | `wmi: REG_DOMAIN <hex>` | regulatory domain reported after READY (model: 0) | absent: harmless |
 | `wmi: channel list: N channels, 2.4 GHz mask ....` | the channels the firmware will scan (model: 1-11, mask 0ffe; JPN/EUR consoles should show 1-13 = 3ffe) | `WMI command 000e rejected`: this firmware has no GET_CHANNEL_LIST; harmless |
@@ -380,7 +380,7 @@ every new maximum of 20 ms or more, i.e. how long block I/O waited on Wi-Fi.
 | CMD5: OCR-0 inquiry "not ready", ready at the 2nd try | SDIO spec | `sdio: CMD5 xN` (N, both R4 values) |
 | RCA 1; CCCR/CIS contents; MANFID 0271/card 0201 | SDIO spec, guess | `sdio: RCA`, `sdio: CIS manufacturer` |
 | Chip id 0D000001 through the window at 0x474/0x478/0x47C | GBATEK, ath6kl | `[wifi] SDIO up, chip id` |
-| 32-bit FIFO at +0x10C works from the ARM9 | TMIO1 behaviour | `TMIO2 32-bit FIFO works` / `check failed` |
+| 32-bit FIFO at +0x10C (or the +0x200000 mirror) works from the ARM9 | TMIO1 behaviour / dsiwifi | `TMIO2 32-bit FIFO works` / `check failed` + the two `fifo: ...` diag lines |
 | BMI ROM ready right after the warm reset (we wait 100 ms) | ath6kl | `bmi: target version` |
 | Stub EXECUTE returns at once | guess | `fw: BMI_EXECUTE ... returned ... in <ms>` |
 | Firmware runs 50 ms after BMI_DONE and the stub sets `hi_board_data_initialized` | GBATEK order, guess | `boot: hi_board_data_initialized = 1 after <ms>` or the host interest dump |
@@ -460,7 +460,9 @@ the firmware reports; QEMU's NIC default 52:54:00:12:34:56).
   no beacon loss.
 - **No timing.** TMIO commands finish immediately, CMD5 is ready at the
   second try, the firmware boots in 50 ms. Real SDIO clocks, busy states and
-  FIFO stalls are not modelled.
+  FIFO stalls are not modelled. The board models the FIFO at `+0x10C` only:
+  the `+0x200000` mirror retry fails there, which is what the `nofifo` case
+  exercises.
 - **No interrupts.** Neither the TMIO2 IRQ (GIC 64/65 on the ARM11) nor the
   SDIO card interrupt; the ARM9 polls anyway.
 - **Credits are returned immediately** when the model processes a host message
@@ -487,8 +489,9 @@ byte and the log must show credits used/returned and no `Mbox Full`),
 `open`, `nocfg` (Wi-Fi must stay off and the card unpowered), `nofw`
 (firmware missing: one log line, Wi-Fi off), `wrongpsk` (message 2 MIC
 rejected, AP deauths after 4 tries, no link), psk hint after the third try), `nofifo` (model property
-`fifo32=off`: the driver's FIFO self-test fails and the mailbox runs over
-CMD52), `hidden` (AP only answers a directed probe), `tkip` (WPA2 with a TKIP group
+`fifo32=off`: both FIFO registers fail the self-test and the mailbox runs over
+CMD52; the checks also require the `CMD52 mailbox path` and endpoint-0 diagnostic
+lines), `hidden` (AP only answers a directed probe), `tkip` (WPA2 with a TKIP group
 key, MIC halves swapped), `wpa1` (WPA v1 vendor IE, TKIP pairwise and group,
 HMAC-MD5/RC4 key data), `nwm` (no `wifi-fw.bin`: a synthetic BLZ-compressed
 `nwm.code` with GBATEK's newer pool, cut up by the ARM9 at boot; also checks

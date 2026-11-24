@@ -2460,3 +2460,119 @@ rebuilding all 360 screen columns on every blit.
   later attempts, plus a "clear query + Home" step in the "not home"
   recovery list. The passing runs above use that harness; screenshots and
   reports are in `build/emu/soak-on3/` and `build/emu/soak-off2/`.
+
+## NEXT. Old 3DS: HTC setup died on a credit for endpoint 0 (2026-11-24)
+
+- **Report:** `issue-reports/run-2026-11-24.txt` (Old 3DS, CFG11_SOCINFO 1,
+  build `edf6444`, `diag=1 powersave=0 hp_codec=1`). Wi-Fi was greyed out in
+  Settings. Short excerpts, in order:
+  `[wifi] TMIO2 32-bit FIFO check failed (0, read 00000000, status 07252080): mailbox falls back to CMD52 byte transfers`;
+  `[wifi] HTC ready: 10 credits of 1544 bytes`;
+  `[wifi-diag] ... htc: service 0100 -> status 0, endpoint 1, max message 1538 (1 polls)`;
+  `[wifi-diag] ... htc: tx waits for credits on endpoint 0 (0 < 1)`;
+  `[wifi] HTC services connected: -5 (WMI endpoint 1, data 0/0/0/0)`;
+  `[wifi] HTC service setup failed: -5 (sdio status 04212080)`; `state htc ->
+  failed`. The firmware loaded normally: the same CRC-32s and pool offsets as
+  the last good run (`docs/hwlogs/run29.txt`), `hi_board_data_initialized = 1`
+  after 7 ms there versus 2 ms here.
+
+- **The FIFO line is not the regression.** It is byte-for-byte identical in
+  every working Old-3DS hardware run from run18 through run29, and in the
+  Old 3DS XL / New 2DS XL reports (`issue7-run1.txt`, `n2dsxl-run1.txt`).
+  `r=0, read 00000000, status 07252080` means the CMD53 completed but the
+  32-bit data FIFO at `TMIO2+0x10C` delivered zeros; dsiwifi's 3DS build reads
+  a FIFO mirror at `+0x200000`. All BMI, HTC and WMI traffic on those runs
+  went through the CMD52 byte fallback, so that path itself was already
+  proven on hardware. `fifo_selftest()` now logs both attempts
+  (`fifo: +10c read ...; trying the +200000 mirror` and the mirror result),
+  uses the mirror for CMD53 if it returns the pattern, and otherwise keeps
+  the CMD52 fallback. This is an Old-3DS/TMIO2 question; nothing here depends
+  on the New-3DS model another worker is changing (issue #11).
+
+- **The -5 is a credit for a message that must not need one.** `SDIO_ERR_BUSY`
+  is -5 (`boot/arm9/wifi/sdio.h`). Commit `7d446d5` (HTC credit accounting)
+  made `mbox_send()` charge *every* endpoint below 8, including `PKT_HTC`
+  (endpoint 0), and reserved one HTC_READY credit for it in `credit_init()`.
+  The real Type4 firmware has only one credit for ep0: the first
+  CONNECT_SERVICE consumed it, its response carries no credit report
+  (`resp flags 02 trailer 4` on QEMU carries one; the hardware log never
+  shows an ep0 report), and the second CONNECT_SERVICE waited 20 polls and
+  returned BUSY. The QEMU model returned ep0 credits in every service
+  response, so all Wi-Fi QEMU cases kept passing. Linux ath6kl confirms the
+  intended split: `ath6kl_credit_init()` skips `ENDPOINT_0`, and
+  `ath6kl_htc_mbox_conn_service()` sends CONNECT_SERVICE with the synchronous
+  `ath6kl_htc_tx_issue()` path from reserved control buffers. Credits belong
+  to the WMI/data endpoints only.
+
+- **Fix (minimal, shared driver; overlaps issue #11):** `origin/main` gained
+  commit `273c613` while this branch was in review; it fixed the same -5 on a
+  New 3DS by funding endpoint 0 locally when the firmware does not return a
+  credit. This branch independently reaches the same conclusion from the
+  ath6kl source: `credit_init()` skips `ENDPOINT_0`. The two were merged by
+  keeping the New-3DS refill and its `ep0_refill` counter, but moving that
+  refill *outside* the shared pool:
+  - `boot/arm9/wifi/ar6k.c`: `credit_init()` no longer assigns a pool credit
+    to endpoint 0; `mbox_send()` funds the fixed HTC control handshake
+    locally (at most 5 CONNECT_SERVICE + 1 SETUP_COMPLETE), never waits for a
+    firmware report for it, never counts it in `credit_used`, and keeps
+    WMI/data credits, busy retries and write-failure refunds unchanged.
+    Control sends are counted in `A.htc_ctrl_msgs`.
+  - `boot/arm9/wifi/ar6k.c` + `sdio.c`/`sdio.h`: CMD53's data FIFO can be
+    switched to the `+0x200000` mirror after a failed self-test; if neither
+    register returns the pattern the mailbox stays on CMD52.
+  - Diagnostics: per-service response flags/trailer and resulting credits,
+    the ep0 control-message count and charged-credit total, per-endpoint
+    credits on failure, both FIFO attempts, and a new `[wifi] CMD52 mailbox
+    path: HTC and WMI came up without the 32-bit FIFO` line on WMI_READY.
+  - `tools/ios3ds-wifi/tests/test_host.c`: a scripted HTC_READY plus five
+    CONNECT_SERVICE responses **without** credit trailers drives `on_htc()`
+    in CMD52 byte mode. It reaches state `wmi` with 6 endpoint-0 control
+    messages, 6 local ep0 refills, 0 shared-pool credits charged, 0 waits,
+    ep1=1/ep2=6 credits and the SETUP_COMPLETE request in the CMD52 write
+    stream. Before the fix it stopped on the second service with err -5.
+    A second test exercises all
+    three FIFO outcomes (+0x10C, mirror only, neither). The mocked mailbox
+    now queues messages and reads CMD52 bytes as the card does.
+  - `emu/wifi_test.py`: `ok` and `nofifo` now also require the endpoint-0
+    diagnostic lines; `nofifo` requires the CMD52-to-WMI line.
+
+- **Verification without the console:** after rebasing onto `origin/main`
+  and merging the issue #11 refill, `make test` passes (263 Wi-Fi host checks,
+  0 failed, plus the other host suites). Fresh `build/sd.img` after
+  `make userland`: `python3 emu/wifi_test.py --case ok --port 51437 --icount 2
+  --out build/emu-wifi-ok-final` **PASS** (all checks, HTTP self-test through
+  iOS) and `--case nofifo --port 52741 --icount 2 --out
+  build/emu-wifi-nofifo-final` **PASS** (all checks: FIFO failure, ep0 not
+  charged, CMD52 path reached WMI, 4-way and link up; the log shows six
+  `endpoint 0 credit not returned: funding 1` lines). A fresh-image 5-cycle
+  `python3 emu/soak.py --cycles 5 --icount 2` printed **Result: PASS**.
+  `emu/wifi_test.py --case credit
+  --port 53919 --icount 2 --out build/emu-wifi-credit-final` passed the
+  driver-side checks (0 bad bytes in the
+  4 MiB bulk transfer, no Mbox Full, credits used/reported) but its
+  `model returned credits` check failed: the shared `build/qemu` binary is
+  from 2026-11-22 19:03 and does not contain the newer
+  `HTC credits: consumed ...` model log line that check expects (0 hits in
+  the binary). No QEMU model was rebuilt: `build/qemu` is shared with other
+  worktrees. A branch-private QEMU build was attempted in `build/qemu-local`
+  but QEMU's configure cannot handle the spaces in the HDD mount path
+  (`../configure: 979: /media/devilapi/Secondary: not found`); the partial
+  directory was removed. This check remains unverified with a matching model.
+
+- **Still needs a card run (the fix is NOT hardware-verified):** use the same
+  build with `diag=1`, `powersave=0`, `hp_codec=1` and the user's `nwm.code`.
+  The fix is proven if the log shows up to six
+  `htc: endpoint 0 credit not returned: funding 1 ...` lines and then
+  `htc: <n> endpoint-0 control messages (CMD52), 0 data credits charged, ...,
+  0 waits`, `HTC services connected: 0 (WMI endpoint 1, data 2/3/4/5)`,
+  `WMI ready`, `[wifi-diag] summary:
+  bring-up OK`, the idle line (no `wifi.cfg`), and Settings > Wi-Fi becomes
+  enabled and scans. `[wifi] CMD52 mailbox path: HTC and WMI came up without
+  the 32-bit FIFO` must appear. If the FIFO mirror works instead, the log
+  says `TMIO2 32-bit FIFO works through the +200000 mirror` and the mailbox
+  uses CMD53. If `tx waits for credits on endpoint 0` or `HTC services
+  connected: -5` returns, the two `fifo:` lines plus `htc: failure credits
+  ep0..5 ...` and `resp flags ... trailer ...` show whether some other
+  endpoint or a firmware credit report is involved. If HTC succeeds but
+  Settings still shows no Wi-Fi, the problem moved past this fix (iOS
+  interface/a80211 path, docs/wifi.md section 10).

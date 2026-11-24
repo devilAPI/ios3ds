@@ -206,6 +206,7 @@ def main():
         "ok": [
             ("SDIO up, AR6014", r"\[wifi\] SDIO up, chip id 0d000001"),
             ("FIFO check", r"\[wifi\] TMIO2 32-bit FIFO works"),
+            ("HTC control not charged", r"\[wifi-diag\] .*htc: \d+ endpoint-0 control messages \(CMD53\), 0 data credits charged"),
             ("BMI ROM version", r"\[wifi\] BMI ROM version 2300006f"),
             ("model: firmware running", r"ctr-wifi: .*firmware running"),
             ("WMI ready", r"\[wifi\] WMI ready, MAC"),
@@ -231,6 +232,8 @@ def main():
         ],
         "nofifo": [
             ("FIFO check fails", r"\[wifi\] TMIO2 32-bit FIFO check failed"),
+            ("endpoint 0 not charged", r"\[wifi-diag\] .*htc: \d+ endpoint-0 control messages \(CMD52\), 0 data credits charged"),
+            ("CMD52 path reaches WMI", r"\[wifi\] CMD52 mailbox path: HTC and WMI came up without the 32-bit FIFO"),
             ("model: firmware running", r"ctr-wifi: .*firmware running"),
             ("4-way: message 4 OK", r"ctr-wifi: .*message 4 OK"),
             ("ARM9 link up", r"\[wifi\] link up"),

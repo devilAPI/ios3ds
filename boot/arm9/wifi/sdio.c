@@ -58,8 +58,19 @@
 #define CMD_SDIO    (1u << 14)      /* "secure"/SDIO flag dsiwifi sets on CMD53 */
 
 #define WAIT_LOOPS  2000000u        /* ~0.1 s per command at worst */
+#define FIFO_MIRROR 0x200000u       /* dsiwifi's 3DS ARM11 FIFO mirror */
 
 static u32 last_status, rca;
+/* TMIO1's 32-bit data FIFO is at +0x10C. Every Old-3DS log so far reads
+   zeroes there even though CMD53 reports success, and dsiwifi's 3DS build
+   uses the +0x200000 mirror instead. Keep both addresses selectable so the
+   self-test can try the mirror before giving up and using CMD52. */
+static u32 fifo32_reg = TMIO2 + R_FIFO32;
+u32 sdio_fifo_mirror(int on)
+{
+    fifo32_reg = TMIO2 + (on ? FIFO_MIRROR : 0u) + R_FIFO32;
+    return fifo32_reg;
+}
 static sdio_diag_t D;
 const sdio_diag_t *sdio_diag(void) { return &D; }
 
@@ -99,7 +110,7 @@ static int command(u32 cmd, u32 arg, u8 *rbuf, const u8 *wbuf, u32 len, u32 blkl
         if (left && (cmd & CMD_READ) && (d32 & D32_RXRDY)) {
             mask16(R_STAT1, STAT1_RXRDY, 0);
             for (u32 i = 0; i < blklen; i += 4) {
-                u32 v = *(vu32 *)(TMIO2 + R_FIFO32);
+                u32 v = *(vu32 *)fifo32_reg;
                 rbuf[0] = (u8)v; rbuf[1] = (u8)(v >> 8); rbuf[2] = (u8)(v >> 16); rbuf[3] = (u8)(v >> 24);
                 rbuf += 4;
             }
@@ -108,7 +119,7 @@ static int command(u32 cmd, u32 arg, u8 *rbuf, const u8 *wbuf, u32 len, u32 blkl
         } else if (left && !(cmd & CMD_READ) && (s1 & STAT1_TXRQ)) {    /* as dsiwifi */
             mask16(R_STAT1, STAT1_TXRQ, 0);
             for (u32 i = 0; i < blklen; i += 4) {
-                *(vu32 *)(TMIO2 + R_FIFO32) = (u32)wbuf[0] | (u32)wbuf[1] << 8 | (u32)wbuf[2] << 16 | (u32)wbuf[3] << 24;
+                *(vu32 *)fifo32_reg = (u32)wbuf[0] | (u32)wbuf[1] << 8 | (u32)wbuf[2] << 16 | (u32)wbuf[3] << 24;
                 wbuf += 4;
             }
             left -= blklen;

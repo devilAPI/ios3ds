@@ -128,6 +128,7 @@ static struct {
     u16 ep_max_msg[8];
     u32 cred_sz, cred_pool;
     u32 credit_rpt, credit_ret, credit_used, credit_low, credit_busy;
+    u32 htc_ctrl_msgs;              /* HTC setup messages on endpoint 0 (no data credits) */
     u32 credit_refund;              /* credits returned after a failed mailbox write */
     u32 ep0_refill;                 /* HTC control credits funded locally (issue #11) */
     u32 defer_drop;                 /* packets that could not be queued at all */
@@ -423,10 +424,17 @@ static void credit_init(u32 n, u32 sz)
     A.cred_sz = sz ? sz : 1664;
     A.cred_pool = n;
     A.credit_rpt = A.credit_ret = A.credit_used = A.credit_low = A.credit_busy = 0;
+    A.htc_ctrl_msgs = 0;
     A.credit_refund = A.ep0_refill = A.defer_drop = A.defer_full = A.wmi_busy = A.eapol_busy = 0;
     A.credit_log = 0;
     wmi_queue_clear();
-    credit_assign(0, A.cred_sz);            /* the control endpoint exists already */
+    /* ath6kl's credit_init() skips ENDPOINT_0: HTC control messages (service
+       connects, SETUP_COMPLETE) are sent synchronously from the reserved
+       control buffer, not from the target's data-credit pool. The real
+       Type4 firmware does not put a credit report in CONNECT_SERVICE_RESP,
+       so charging endpoint 0 here starves the second service connect. */
+    DIAG("htc: %u credits of %u bytes for the connected endpoints; endpoint 0 control is not credit-limited",
+         n, A.cred_sz);
 }
 
 /* one RX trailer: records of (id, len, data...); id 1 = credit reports */
@@ -516,22 +524,25 @@ static int mbox_send(u32 type, u32 ack, u32 ctl, const u8 *body, u32 len, int wa
     u32 total = (len + 6 + SDIO_BLOCK - 1) & ~(SDIO_BLOCK - 1);
     u32 need = 0;
     int r = 0, asked = 0;
-    if (type < 8) {
-        need = credit_need(total);
-        if (type == PKT_HTC && A.ep_credits[type] < need) {
-            /* The Type4 firmware on a real New 3DS answers CONNECT_SERVICE
-               (status 0, endpoint 1) but does not credit EP0 back: the next
-               control message waited ~17 ms, failed with SDIO_ERR_BUSY (-5)
-               and left iOS with no Wi-Fi interface or Settings toggle
-               (issue #11). dsiwifi sends all five CONNECT_SERVICE messages
-               plus SETUP_COMPLETE back-to-back, with no credit wait, on the
-               same chip. They are a fixed handful of short control messages,
-               so fund EP0 locally. A firmware/model that does return the
-               credit simply tops EP0 up again. */
-            A.ep_credits[type] = (u8)need;
+    if (type == PKT_HTC) {
+        A.htc_ctrl_msgs++;
+        /* Endpoint 0 is HTC's control channel. ath6kl excludes ENDPOINT_0
+           from credit distribution: CONNECT_SERVICE and SETUP_COMPLETE come
+           from reserved control buffers, not the target's data pool. Type4
+           on real hardware (Old and New 3DS) answers the first service but
+           does not return an ep0 credit, so the next wait failed with -5
+           (issue #11). dsiwifi sends the fixed handshake back-to-back on the
+           same chip. Keep the local funding and its counter from the New-3DS
+           fix, but outside the shared pool: it can never starve WMI/data. */
+        u32 local = credit_need(total);
+        if (A.ep_credits[type] < local) {
+            A.ep_credits[type] = (u8)local;
             A.ep0_refill++;
-            DIAG("htc: endpoint 0 credit not returned: funding %u for this control message", need);
+            DIAG("htc: endpoint 0 credit not returned: funding %u for this control message", local);
         }
+        A.ep_credits[type] -= (u8)local;
+    } else if (type < 8) {
+        need = credit_need(total);
         if (A.ep_credits[type] < need) {
             if (!wait) {
                 A.credit_busy++;
@@ -1021,6 +1032,8 @@ static void on_wmi(const u8 *b, u32 len)
         if (n >= 6) memcpy(A.mac, d, 6);
         log_ok("[wifi] WMI ready, MAC %02x:%02x:%02x:%02x:%02x:%02x\n",
                A.mac[0], A.mac[1], A.mac[2], A.mac[3], A.mac[4], A.mac[5]);
+        if (A.byte_mode)
+            logp("[wifi] CMD52 mailbox path: HTC and WMI came up without the 32-bit FIFO\n");
         DIAG("wmi: WMI_READY %u ms after HTC setup, %u bytes: %s (MAC, phy capability%s)",
              now_ms() - A.t_state, n, hex(d, n), n > 7 ? ", more" : "");
         if (A.diag) {
@@ -1234,9 +1247,11 @@ static void on_htc(const u8 *b, u32 len)
                 if (q[4] != 0 || q[5] == 0 || q[5] > 7) r = -120 - q[4];
                 eid[i] = q[5];
                 u32 maxmsg = got >= 8 ? (u32)q[6] | (u32)q[7] << 8 : A.cred_sz;
+                u8 flags = pkt[1], trailer = pkt[4];
                 credit_assign(q[5], maxmsg);
-                DIAG("htc: service %02x%02x -> status %u, endpoint %u, max message %u (%u polls)",
-                     q[3], q[2], q[4], q[5], maxmsg, t);
+                DIAG("htc: service %02x%02x -> status %u, endpoint %u, max message %u (%u polls), "
+                     "resp flags %02x trailer %u credits ep%u=%u",
+                     q[3], q[2], q[4], q[5], maxmsg, t, flags, trailer, q[5], A.ep_credits[q[5]]);
                 break;
             }
             if (got == 0) waitcycles(3350);             /* nothing, or a credit report */
@@ -1257,10 +1272,17 @@ static void on_htc(const u8 *b, u32 len)
     if (r >= 0) r = f1_w32(F1_INT_STATUS_EN, 0x010300D1);
     logp("[wifi] HTC services connected: %d (WMI endpoint %u, data %u/%u/%u/%u)\n", r,
          eid[0], eid[1], eid[2], eid[3], eid[4]);
+    DIAG("htc: %u endpoint-0 control messages (%s), %u data credits charged, %u reports/%u returned, "
+         "%u waits, %u left in pool", A.htc_ctrl_msgs, A.byte_mode ? "CMD52" : "CMD53",
+         A.credit_used, A.credit_rpt, A.credit_ret, A.credit_busy, A.cred_pool);
     A.state = r < 0 ? NET_ST_FAILED : NET_ST_WMI;
     A.t_state = now_ms();
     A.err = r;
     if (r < 0) {
+        DIAG("htc: failure credits ep0..5 %u/%u/%u/%u/%u/%u, used %u, refunded %u, "
+             "reports %u, waits %u", A.ep_credits[0], A.ep_credits[1], A.ep_credits[2],
+             A.ep_credits[3], A.ep_credits[4], A.ep_credits[5], A.credit_used,
+             A.credit_refund, A.credit_rpt, A.credit_busy);
         A.state = NET_ST_HTC;
         fail(r, "HTC service setup");
     }
@@ -1584,11 +1606,13 @@ static int ar6k_init(const wifi_cfg_t *cfg, u8 mac[6])
     return 0;
 }
 
-/* Unverified on hardware: whether the ARM9 can use TMIO controller 2's 32-bit
-   FIFO at 0x1012210C (dsiwifi's 3DS ARM11 build uses a FIFO mirror at
-   +0x200000 instead). Write a pattern into the function-1 scratch registers
-   with CMD52, read it back with one CMD53; if that fails, move every mailbox
-   transfer to CMD52 (slow, but needs no FIFO). */
+/* Every Old-3DS log so far reads zeroes from TMIO2's 32-bit data FIFO at
+   +0x10C (the CMD53 itself reports success); dsiwifi's 3DS build uses the
+   +0x200000 mirror. Write a pattern into the function-1 scratch registers
+   with CMD52, read it back with one CMD53 at +0x10C, then at the mirror.
+   If neither returns the pattern, move every mailbox transfer to CMD52
+   (slow, but needs no FIFO); that path has carried full Wi-Fi bring-up on
+   hardware since run18. */
 static void fifo_selftest(void)
 {
     static const u8 pat[4] = { 0x5A, 0xC3, 0x0F, 0x96 };
@@ -1596,13 +1620,31 @@ static void fifo_selftest(void)
     int r = 0;
     for (int i = 0; i < 4 && r >= 0; i++) r = sdio_w8(1, F1_SCRATCH0 + i, pat[i]);
     if (r >= 0) r = sdio_read_bytes(1, F1_SCRATCH0, got, 4);
-    A.byte_mode = r < 0 || memcmp(got, pat, 4) != 0;
-    if (A.byte_mode)
-        log_warn("[wifi] TMIO2 32-bit FIFO check failed (%d, read %02x%02x%02x%02x, status %08x): "
-                 "mailbox falls back to CMD52 byte transfers\n", r, got[0], got[1], got[2], got[3],
-                 sdio_last_status());
-    else
+    if (r == 0 && memcmp(got, pat, 4) == 0) {
+        A.byte_mode = 0;
         logp("[wifi] TMIO2 32-bit FIFO works (CMD53 read back the scratch pattern)\n");
+        return;
+    }
+    DIAG("fifo: +10c read %02x%02x%02x%02x (%d, status %08x); trying the +200000 mirror",
+         got[0], got[1], got[2], got[3], r, sdio_last_status());
+    sdio_fifo_mirror(1);                    /* dsiwifi's 3DS ARM11 address */
+    memset(got, 0, sizeof(got));
+    r = 0;
+    for (int i = 0; i < 4 && r >= 0; i++) r = sdio_w8(1, F1_SCRATCH0 + i, pat[i]);
+    if (r >= 0) r = sdio_read_bytes(1, F1_SCRATCH0, got, 4);
+    if (r == 0 && memcmp(got, pat, 4) == 0) {
+        A.byte_mode = 0;
+        logp("[wifi] TMIO2 32-bit FIFO works through the +200000 mirror (CMD53 block transfers)\n");
+        DIAG("fifo: mirror read back %02x%02x%02x%02x: mailbox uses CMD53", got[0], got[1], got[2], got[3]);
+        return;
+    }
+    DIAG("fifo: mirror read %02x%02x%02x%02x (%d, status %08x): no 32-bit FIFO",
+         got[0], got[1], got[2], got[3], r, sdio_last_status());
+    sdio_fifo_mirror(0);
+    A.byte_mode = 1;
+    log_warn("[wifi] TMIO2 32-bit FIFO check failed (%d, read %02x%02x%02x%02x, status %08x): "
+             "mailbox falls back to CMD52 byte transfers\n", r, got[0], got[1], got[2], got[3],
+             sdio_last_status());
 }
 
 static u32 ar6k_step(void)

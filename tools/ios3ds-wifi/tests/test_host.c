@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
 #include "wifi.h"
 #include "wpa2.h"
 
@@ -39,33 +40,46 @@ static int fails, checks;
 static u32 host_wait_cycles;
 void host_waitcycles(u32 n) { host_wait_cycles += n; }
 
-static u8 mock_rx[0x680];
+#define MOCK_Q_MAX 32
+static struct { u8 b[0x680]; u32 len; } mock_q[MOCK_Q_MAX];
+static u32 mock_q_head, mock_q_count, mock_r8_pos;
 static u32 mock_rx_frames, mock_rx_len;
 static int mock_write_err, mock_write_calls;
 static int mock_w8_err, mock_w8_calls;
+static u8 mock_w8_mem[0x4000];              /* CMD52 writes, keyed by register */
+static int mock_fifo_mirror, mock_fifo_ok, mock_mirror_only;
 static u8 mock_tx[0x680];
 static u32 mock_tx_len;
 
 static void mock_reset(void)
 {
-    memset(mock_rx, 0, sizeof(mock_rx));
+    memset(mock_q, 0, sizeof(mock_q));
     memset(mock_tx, 0, sizeof(mock_tx));
+    memset(mock_w8_mem, 0, sizeof(mock_w8_mem));
+    mock_q_head = mock_q_count = mock_r8_pos = 0;
     mock_rx_frames = mock_rx_len = mock_tx_len = 0;
     mock_write_err = mock_write_calls = mock_w8_err = mock_w8_calls = 0;
+    mock_fifo_mirror = mock_fifo_ok = mock_mirror_only = 0;
 }
 
+/* Queue whole mailbox messages: several CONNECT_SERVICE_RESPs can be waiting
+   while on_htc() sends the next request, as on the real card. */
 static void mock_mailbox_frame(u32 ep, const u8 *body, u32 n, const u8 *trailer, u32 tn)
 {
     u32 len = n + tn;
-    memset(mock_rx, 0, sizeof(mock_rx));
-    mock_rx_len = len;
-    mock_rx[0] = (u8)ep;
-    mock_rx[1] = tn ? HTC_FLG_RX_TRAILER : 0;
-    mock_rx[2] = (u8)len;
-    mock_rx[3] = (u8)(len >> 8);
-    mock_rx[4] = (u8)tn;
-    if (n) memcpy(mock_rx + 6, body, n);
-    if (tn) memcpy(mock_rx + 6 + n, trailer, tn);
+    u32 i = (mock_q_head + mock_q_count) % MOCK_Q_MAX;
+    u8 *m = mock_q[i].b;
+    if (mock_q_count >= MOCK_Q_MAX) return;
+    memset(m, 0, sizeof(mock_q[i].b));
+    mock_q[i].len = mock_rx_len = len;
+    m[0] = (u8)ep;
+    m[1] = tn ? HTC_FLG_RX_TRAILER : 0;
+    m[2] = (u8)len;
+    m[3] = (u8)(len >> 8);
+    m[4] = (u8)tn;
+    if (n) memcpy(m + 6, body, n);
+    if (tn) memcpy(m + 6 + n, trailer, tn);
+    mock_q_count++;
     mock_rx_frames++;
 }
 
@@ -78,21 +92,41 @@ int sdio_r8(u32 func, u32 addr)
         u32 la = mock_rx_len << 16;
         return (u8)(la >> (8 * (addr - F1_RX_LOOKAHEAD0)));
     }
+    /* the CMD52 mailbox fallback reads one byte at a time from the window
+       end; the last byte completes the message, as on the card */
+    if (mock_rx_frames && addr >= F1_MBOX0_END - sizeof(mock_q[0].b) && addr < F1_MBOX0_END) {
+        u32 total = (mock_q[mock_q_head].len + 6 + SDIO_BLOCK - 1) & ~(SDIO_BLOCK - 1);
+        if (addr >= F1_MBOX0_END - total && mock_r8_pos < total) {
+            u8 v = mock_q[mock_q_head].b[mock_r8_pos++];
+            if (mock_r8_pos == total) {
+                mock_q_head = (mock_q_head + 1) % MOCK_Q_MAX;
+                mock_q_count--;
+                mock_rx_frames--;
+                mock_r8_pos = 0;
+                mock_rx_len = mock_q_count ? mock_q[mock_q_head].len : 0;
+            }
+            return v;
+        }
+    }
     return 0;
 }
 int sdio_w8(u32 func, u32 addr, u8 val)
 {
-    (void)func; (void)addr; (void)val;
+    (void)func;
     mock_w8_calls++;
+    if (addr < sizeof(mock_w8_mem)) mock_w8_mem[addr] = val;
     return mock_w8_err;
 }
 int sdio_read_blocks(u32 func, u32 addr, u8 *buf, u32 len)
 {
     (void)func; (void)addr;
-    if (!mock_rx_frames || len > sizeof(mock_rx)) return SDIO_ERR_CARD;
+    if (!mock_rx_frames || len > sizeof(mock_q[0].b)) return SDIO_ERR_CARD;
     memset(buf, 0, len);
-    memcpy(buf, mock_rx, len);
+    memcpy(buf, mock_q[mock_q_head].b, len);
+    mock_q_head = (mock_q_head + 1) % MOCK_Q_MAX;
+    mock_q_count--;
     mock_rx_frames--;
+    mock_rx_len = mock_q_count ? mock_q[mock_q_head].len : 0;
     return 0;
 }
 int sdio_write_blocks(u32 func, u32 addr, const u8 *buf, u32 len)
@@ -105,9 +139,15 @@ int sdio_write_blocks(u32 func, u32 addr, const u8 *buf, u32 len)
 }
 int sdio_read_bytes(u32 func, u32 addr, u8 *buf, u32 len)
 {
-    (void)func; (void)addr; (void)buf; (void)len;
+    static const u8 pat[4] = { 0x5A, 0xC3, 0x0F, 0x96 };
+    (void)func; (void)addr;
+    if (len < sizeof(pat)) return SDIO_ERR_ARG;
+    memset(buf, 0, len);
+    if (mock_fifo_ok && (!mock_mirror_only || mock_fifo_mirror))
+        memcpy(buf, pat, sizeof(pat));
     return 0;
 }
+u32 sdio_fifo_mirror(int on) { mock_fifo_mirror = on; return 0; }
 u32 sdio_last_status(void) { return 0; }
 const sdio_diag_t *sdio_diag(void) { static sdio_diag_t d; return &d; }
 int sdio_manfid(u16 *manf, u16 *card) { (void)manf; (void)card; return 0; }
@@ -885,6 +925,58 @@ static void test_ar6k_write_credits(void)
     CHECK(mock_w8_calls > 0);
 }
 
+/* The real Type4 firmware reports 10 credits of 1544 bytes but does not put
+   an endpoint-0 credit report in CONNECT_SERVICE_RESP. ath6kl sends HTC
+   control messages outside the data-credit distribution; the host must not
+   charge them or the second service connect returns SDIO_ERR_BUSY. */
+static void test_ar6k_htc_control_no_credits(void)
+{
+    const u8 ready[] = { 1, 0, 10, 0, 0x08, 0x06, 0x16, 0x00 };
+    u8 resp[10] = { 3, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+
+    memset(&A, 0, sizeof(A));
+    A.byte_mode = 1;                    /* the Old-3DS CMD52 fallback */
+    d_head = d_count = 0;
+    mock_reset();
+    host_wait_cycles = 0;
+    /* on_htc() is handed HTC_READY directly, as pump_body() does: only the
+       service responses are still in the mailbox */
+    for (u32 i = 0; i < 5; i++) {
+        resp[2] = (u8)i; resp[3] = 1; resp[4] = 0; resp[5] = (u8)(i + 1);
+        resp[6] = i == 0 ? 0x02 : 0x00; resp[7] = 0x06;   /* 1538 / 1536 */
+        mock_mailbox_frame(0, resp, sizeof(resp), NULL, 0);  /* no credit trailer */
+    }
+    on_htc(ready, sizeof(ready));
+    CHECK(A.state == NET_ST_WMI);
+    CHECK(A.credit_busy == 0 && A.credit_used == 0 && A.htc_ctrl_msgs == 6);
+    CHECK(A.ep0_refill == 6 && A.ep_credits[0] == 0);
+    CHECK(A.ep_wmi == 1 && A.ep_data == 2);
+    CHECK(A.ep_credits[1] == 1 && A.ep_credits[2] == 6 && A.cred_pool == 0);
+    CHECK(mock_rx_frames == 0 && host_wait_cycles == 0);
+    CHECK(mock_w8_calls > 0 && mock_w8_mem[F1_MBOX0_END - 128 + 6] == HTC_SETUP_COMPLETE);
+}
+
+/* +0x10C reads zero on every Old-3DS run; the +0x200000 mirror may still
+   work. Neither path may be mistaken for a working FIFO. */
+static void test_ar6k_fifo_selftest(void)
+{
+    memset(&A, 0, sizeof(A));
+    mock_reset();
+    mock_fifo_ok = 1;                           /* TMIO1-style FIFO at +0x10C */
+    fifo_selftest();
+    CHECK(A.byte_mode == 0 && mock_fifo_mirror == 0);
+
+    mock_reset();
+    mock_fifo_ok = 1; mock_mirror_only = 1;     /* Old-3DS FIFO mirror */
+    fifo_selftest();
+    CHECK(A.byte_mode == 0 && mock_fifo_mirror == 1);
+
+    mock_reset();                               /* no FIFO: CMD52 fallback */
+    mock_fifo_ok = 0;
+    fifo_selftest();
+    CHECK(A.byte_mode == 1 && mock_fifo_mirror == 0);
+}
+
 static void test_ar6k_defer_ring(void)
 {
     const u8 body[4] = { 9, 8, 7, 6 };
@@ -964,12 +1056,23 @@ static void test_ar6k_wmi_queue(void)
 
 int main(void)
 {
+    /* on_htc() uses the ARM9 timer for its diag timestamps; give the test a
+       page at the register address instead of touching real hardware. */
+    if (mmap((void *)0x10003000, 4096, PROT_READ | PROT_WRITE,
+             MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) == MAP_FAILED ||
+        mmap((void *)0x10147000, 4096, PROT_READ | PROT_WRITE,
+             MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) == MAP_FAILED) {
+        perror("mmap ARM9 register pages");
+        return 1;
+    }
     test_ring();
     test_wlan();
     test_frames();
     test_htc_credits();
     test_ar6k_credits();
     test_ar6k_write_credits();
+    test_ar6k_htc_control_no_credits();
+    test_ar6k_fifo_selftest();
     test_ar6k_wmi_queue();
     test_ar6k_defer_ring();
     test_cfg();

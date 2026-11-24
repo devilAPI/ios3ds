@@ -30,6 +30,10 @@ int sdio_write_blocks(u32 func, u32 addr, const u8 *buf, u32 len);
 /* CMD53, byte mode, incrementing address, one transfer of len (4..512,
    multiple of 4) bytes: used to check that the 32-bit FIFO works. */
 int sdio_read_bytes(u32 func, u32 addr, u8 *buf, u32 len);
+/* Pick the data FIFO used by CMD53: +0x10C, or the +0x200000 mirror that
+   dsiwifi's 3DS build uses. Only the data register moves; command/status
+   stay at TMIO2. Returns the register now in use. */
+u32 sdio_fifo_mirror(int on);
 /* STAT1 | STAT0 << 16 of the last command, for the log. */
 u32 sdio_last_status(void);
 
