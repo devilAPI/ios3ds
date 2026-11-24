@@ -3466,3 +3466,105 @@ worktree's `build/fw-3.1.3/` and `build/fw-2.2.1/` (sha1 `5f4f5c01…` and
   **Result: PASS**: SpringBoard + input after 60 s, `[sbwarm]` at 120 s,
   home reference at 130 s (stddev 53.3), five cycles with `home diff 0.0`,
   no failures. `make test` passes before and after the final rebase.
+
+## NEXT. Older-version stall: which thread blocks (round 5, 2026-11-24)
+
+Diagnostics only so far; every scratch overlay was reverted and no 4.x
+source, patch set or recipe was changed. Both archived IPSWs were copied
+(read-only) from a previous worktree's build artifacts into this worktree's
+`build/fw-*/` and their published sha1 values were rechecked (`5f4f5c01…`
+for 7E18, `9af5625e…` for 5H11a). `make test` passes on the starting tree.
+
+### 3.1.3: SpringBoard is alive and idle in `mach_msg`, but the framebuffer never changes
+
+- **[V]** A fresh 7E18 image (`make sdimg IOS=3.1.3`) booted for 180 s with
+  `--icount 2`. Screenshots at t=60, 120 and 170 s are **pixel-identical**
+  (Apple logo + progress bar, mean brightness ~5.3). The dynamic console log
+  reaches `dyld: loaded` for 97 libraries and `systemShutdown false`, then
+  nothing; md0 stays healthy (2,063 requests / 0 errors) and the heartbeat PC
+  is the kernel idle loop (`kc006991c`). So the stop is not a crash, an md0
+  timeout or a dyld failure: the UI never replaces the boot logo.
+- **[V]** SELECT+START at t≈90 s (`--keys '110:ret-backspace_down,
+  112:ret-backspace_up'`, `emu/run.py`) produced a full XNU thread dump.
+  `launchd` has lockdownd (pid 10), mediaserverd (11), mDNSResponder (12),
+  configd (16), CommCenter (22), notifyd (24), ReportCrash and **SpringBoard
+  (pid 18, 2 threads)** running. Both SpringBoard threads are stopped in user
+  `mach_msg` (`pc 0x33905488`, `lr 0x3390806c`, receive ports `0x1803` and
+  `0x2003`, receive sizes `0x70` and `0x450`). The threads are waiting for
+  messages, not spinning; there is no panic or crash report.
+- **[V]** GDB (`-s -S`, `emu/gdb/rsp.py`) method breakpoints on the 7E18
+  SpringBoard executable show `-[SpringBoard applicationDidFinishLaunching:]`
+  (IMP `0xa6f5`), `-[SBUIController animateAppleDown:]` (`0xbad5`),
+  `-[SBUIController finishLaunching]` (`0xc149`),
+  `-[SpringBoard appleIconViewRemoved]` (`0x58bd`) and
+  `-[SBUIController finishedFadingInButtonBar]` (`0xb015`) are all entered.
+  The Apple-logo-removal path therefore runs; the missing piece is what the
+  compositor draws afterwards. (Repeated identical hits in this trace are an
+  artefact of stepping off hardware breakpoints; they are not process
+  restarts: the console has only one set of dyld lines.) The same dump shows
+  no `-[SBLockdownManager …]` call, confirming re-log 114/115/116: activation
+  state is not the gate here.
+
+### 3.1.3: our PICA200 compositor loads, but SpringBoard then restart-loops
+
+- **[V]** Scratch overlay (not committed): installed the 4.2.1
+  `MBXGLEngine.bundle/MBXGLEngine` from `make userland`, set the 4.2.1
+  SpringBoard CA environment (`IOS3DS_CA=1`, `CA_ENABLE_OGL=1`,
+  `MBX2D_PAGE_FLIP=0`, …), and changed the OpenGLES `AppleMBXDevice` literal
+  in 7E18's dyld cache at file offset `0x2f91bb8`
+  (`AppleMBXDevice\0` -> `IOResources\0\0\0\0`, original bytes verified).
+  This goes beyond re-log 116's string-only experiment: EAGL now loads our
+  bundle, logs `[gl] CA compositor: OpenGL ES on the PICA200` and creates a
+  context (pid 18), and the screen changes from the static Apple logo/bar to
+  a spinner.
+- **[V]** That does not reach the home screen: the same 180 s run has nine
+  `systemShutdown false` markers and GL contexts for pids 18, 41, 55, 65, 79
+  — SpringBoard is relaunching once per dyld pass — and each launch ends with
+  `Iterator had no matching services` / `Failed to open connection to MBX` /
+  `Failed to initialized MBX2D driver (1)`. No crash report is written, so
+  the exits are normal `exit(1)` paths. The overlay was removed again;
+  `rootfs/overlay-3.1.3.json` is byte-identical to main. **[G]** The next
+  step is to find which 3.x-only call in our 4.2.1-linked GL bundle (or the
+  MBX2D fallback it enables) makes SpringBoard exit, not to add more
+  activation patches.
+
+### 2.2.1: SpringBoard is running; a guest job confirms the live launchd set
+
+- **[V]** SELECT+START at t≈110 s on a fresh 5H11a image again reaches
+  `panic()` (`panic requested from the 3DS`), whose task list contains
+  launchd (pid 1), lockdownd (9), mediaserverd (10), configd (15),
+  **SpringBoard (pid 16, 2 threads)**, CommCenter (19) and notifyd (21).
+  The dump double-panics while walking a kernel thread before it prints the
+  SpringBoard thread state, so this run does not identify their wait
+  channels. The console has 274 `dyld: loaded` lines by t=177 s (through
+  WebCore/WebKit, OpenGLES, libSystem and `libCGFreetype`), 1,552 md0
+  requests / 0 errors and a kernel idle heartbeat; there is no panic or
+  first iOS frame.
+- **[V]** A scratch launchd job running `/bin/launchctl list` in the guest
+  wrote the job list into the image: `com.apple.SpringBoard` (pid 18 in that
+  run), `com.apple.mobile.lockdown` (11), `com.apple.mediaserverd` (12),
+  `com.apple.configd` (17), `com.apple.CommCenter` (21) and mDNSResponder
+  are all live. So "a missing daemon" is not the 2.x blocker either.
+- **[V]** Trying to add our own thread dumper exposed two more 2.x dyld ABI
+  differences: `ios-cc`'s `LC_DYLD_INFO_ONLY (0x80000022)` is rejected
+  (`dyld: unknown required load command`), and after replacing it with a
+  non-required command 2.x still refuses the binary because
+  `dyld_stub_binder` is not exported by 5H11a's libSystem. A version-tagged
+  stub-symbol list or a syscall-only tool is needed; no such tool is shipped.
+
+
+### 2.2.1: a 600 s guest run does not become a slow boot
+
+- **[V]** Stock 5H11a image, `--icount 2`, 600 s guest time
+  (`build/emu-221-long/screen_{300,450,590}.png`): the top screen is still
+  the M1 boot console at t=300, 450 and 590 s, with the same dyld tail
+  (`libCGFreetype.A.dylib`), 1,515 md0 requests / 0 errors, and a kernel idle
+  heartbeat. This rules out "dyld is merely slow on a loaded host": after ten
+  minutes of guest time neither SpringBoard's UI nor any iOS frame appears.
+- **[V]** The nine scratch overlays used for the GDB/job-list/GL experiments
+  were all removed; `git diff origin/main -- . ':(exclude)docs/re-log.md'`
+  is empty. The six 4.2.1 boot files generated by this tree and by a clean
+  `git archive origin/main` tree (same staged firmware, same
+  `SOURCE_DATE_EPOCH`) have identical SHA-256:
+  `kernel.bin 505f451a…`, `devtree.bin 25b1bd23…`, `fakeio.bin e5fecd66…`,
+  `shim.bin e0609de9…`, `gpu.bin 7e696f65…`, `boot.cfg 8d4079cf…`.
