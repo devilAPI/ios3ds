@@ -3651,3 +3651,138 @@ not changed in this round. Nothing found was both cheap and safe.
   so test the opposite case: put this build in `luma/payloads/`, the previous
   build in `ios3ds/`, and boot via Luma. It must show the OUTDATED message,
   rewrite the payload and boot on the next power-on.
+## NEXT. Older-version round 6: where 3.x/2.x stop drawing (2026-11-25)
+
+Continues §117. Both archived IPSWs were re-downloaded into this worktree's
+`build/fw-*/` (sha1 `5f4f5c01…` / `9af5625e…` verified by `fwprep.py`); no
+Apple file is committed. All scratch overlays and GDB harnesses live under
+`build/`. `make test` passes on the starting tree.
+
+### 3.1.3: reproducing §117's GL setup, and what actually runs
+
+- **[V]** Installed the 4.2.1 `MBXGLEngine.bundle/MBXGLEngine` from
+  `make userland` into a 7E18 rootfs, wrote the dyld override marker, set the
+  4.2.1 SpringBoard CA variables and patched OpenGLES's
+  `AppleMBXDevice` literal at cache offset `0x2f91bb8` to `IOResources`
+  (all original bytes verified). A fresh 180 s `--icount 2` run stays on the
+  Apple logo/spinner with **one** dyld pass (98 `dyld: loaded` lines, one
+  `systemShutdown false`), **no** `[gl] CA compositor` line, **no** MBX2D
+  failure lines and **no** `exit(1)`. This does not reproduce §117's nine
+  SpringBoard restarts; that scratch build must have changed another 3.x path
+  as well (its overlay was reverted, so it cannot be diffed here).
+- **[V]** Scripted GDB (`emu/gdb/rsp.py`, hardware breakpoints; Thumb methods
+  need the even address) on that image: `-[SpringBoard
+  applicationDidFinishLaunching:]` (0xa6f4),
+  `-[SBUIController finishLaunching]` (0xc148),
+  `-[SBUIController animateAppleDown:]` (0xbad4) and
+  `-[SpringBoard appleIconViewRemoved]` (0x58bc) are all entered, confirming
+  the Apple-logo-removal path runs. No `exit(1)` is taken in this build.
+- **[V]** The same trace with breakpoints on QuartzCore's render-server
+  entry points — `_CARenderServerRegister` (0x31bae980),
+  `_CARenderServerStart` (0x31bae990), `+[CAWindowServer server]`
+  (0x31bf025c), `-[CAWindowServer _detectDisplays]` (0x31bf008c),
+  `CA::WindowServer::Server::Server` (0x31bdf010), `M2Display::M2Display`
+  (0x31bde4f8), `MBXServer::MBXServer` (0x31bddf28),
+  `EAGLServer::EAGLServer` (0x31bda5a0) and QuartzCore's
+  `_mbx2DInitialize` stub (0x31bf65dc) — got **zero** hits in a full boot.
+  So 7E18 SpringBoard's UI never creates a CoreAnimation render server at
+  all; the spinner is the last view it draws, and this is a layer above the
+  MBX2D/EAGL choice.
+
+### 3.1.3: which code calls the MBX2D driver open
+
+- **[V]** 7E18's MBX2D service open is `_mbxConnectionOpen` at VA
+  `0x33364c90` (cache file `0x33364c90`, from the image's own `LC_SYMTAB`).
+  It calls `IOServiceMatching("AppleMBXDevice")` using the literal at VA
+  `0x33365c68`, then `IOMasterPort`, `IOServiceGetMatchingServices`,
+  `IOIteratorNext` and `IOServiceOpen`, and prints `Iterator had no matching
+  services` / `Failed to find an AppleMBXDevice service` /
+  `Failed to open connection to MBX` on the failure paths. OpenGLES's
+  separate copy of the string is at VA `0x32f91bb8` (the one patched in §117).
+- **[V]** QuartzCore's `CA::WindowServer::MBXServer::MBXServer` (`0x31bddd78`)
+  calls `_mbx2DInitialize` and logs `Failed to initialized MBX2D driver (%d).`
+  through `_x_log_warn` (`0x31bf3c90`) when it fails; `_x_log_warn` only logs,
+  it does not exit. `CA::WindowServer::M2Display::new_server` (`0x31bde71c`)
+  picks MBXServer for display kind 1 and EAGLServer for kind 2. Scratch
+  patches that skip `_mbx2DInitialize` (`0x31bdddc4` bne→b), force EAGLServer
+  (`0x31bde754` beq→b), change the ES1 surface literal `L565`→`BGRA`
+  (`0x31bde5e4`) and repoint MBX2D's own string to `IOResources`
+  (`0x3365c68`) all applied cleanly but left the same spinner, one dyld pass
+  and no GL log. **`IOResources` alone does not give MBX2D a user client** on
+  3.x; the 4.2.1 keychain shim intercepts `IOServiceOpen` precisely because
+  the stock service does not hand one out.
+- **[G]** The next 3.x step is to find why UIKit never reaches
+  `+[CAWindowServer server]` / `_CARenderServerStart` (a SpringBoard/UIKit
+  state gate, not activation and not MBX2D), then make that path create the
+  render server before attempting EAGL or MBX2D.
+
+### 2.2.1: method addresses for a UI trace
+
+- **[V]** 5H11a SpringBoard's ObjC method list gives
+  `-[SpringBoard applicationDidFinishLaunching:]` IMP `0x1f781`,
+  `-[SBUIController finishLaunching]` `0xc129`, `-[SBUIController
+  animateAppleDown:]` `0xb4c5` and `-[SpringBoard appleIconViewRemoved]`
+  `0x3685` (all Thumb); libSystem's `_exit` is `0x31463018`.
+  QuartzCore has `_CARenderServerRegister` `0x31e08ebc`,
+  `_CARenderServerStart` `0x31e08c4c`, `+[CAWindowServer server]`
+  `0x31e3ebac`, `CADisplayCoreSurface::CADisplayCoreSurface` `0x31e389d4`
+  (the constructor that calls `_mbx2DInitialize` at `0x31e394bc`), and an
+  `IOMobileFramebufferOpen` stub at `0x31e44154`.
+- **[V]** 2.2.1 has **no on-disk MBXGLEngine.bundle** (unlike 4.2.1); its
+  `AppleMBXDevice` string lives in `MBXConnect.framework/MBXConnect` at file
+  offset `0x1d88`, and OpenGLES's copy at `0x36464`. Patching either dylib
+  invalidates 2.x's per-page signatures (re-log 116), so a 2.x graphics fix
+  cannot be a plain file patch. These are only addresses for the next trace;
+  nothing is shipped in `rootfs/overlay-2.2.1.json`.
+
+### 2.2.1: the `libCGFreetype` console tail is not a dyld stop
+
+- **[V]** Scripted GDB on a fresh stock 5H11a image (`--icount 2`): the
+  2.x SpringBoard method IMPs found above are entered —
+  `-[SpringBoard applicationDidFinishLaunching:]` (`0x1f780`),
+  `-[SBUIController finishLaunching]` (`0xc128`) and
+  `-[SBUIController animateAppleDown:]` (`0xb4c4`). So the dyld log ending at
+  `libCGFreetype.A.dylib` is not a dyld failure: dyld has finished loading
+  what SpringBoard needs, the process is alive and its UI delegate runs.
+- **[V]** The same trace puts **zero** hits on QuartzCore's
+  `_CARenderServerRegister` (`0x31e08ebc`), `_CARenderServerStart`
+  (`0x31e08c4c`), `+[CAWindowServer server]` (`0x31e3ebac`),
+  `CADisplayCoreSurface::CADisplayCoreSurface` (`0x31e389d4`) and
+  `_mbx2DInitialize` (`0x31e44af4`). As on 7E18, the missing piece is a
+  CoreAnimation render server, not activation or a missing daemon; MBX2D and
+  GL are downstream of that. No file patch or userland tool was shipped for
+  2.2.1 in this round.
+
+- **[V]** A final 7E18 GDB trace on the UI-view methods pins the stop more
+  precisely: `-[SpringBoard applicationDidFinishLaunching:]` (`0xa6f4`) and
+  `-[SBUIController finishLaunching]` (`0xc148`) are entered, but
+  `-[SBUIController transition:toView:]` (`0xc0f64`),
+  `-[UIWindow makeKeyAndVisible]` (`0xcd064`),
+  `-[TPLCDView initWithLCDView:]` (`0xbdc88`),
+  `-[SBLockdownManager _setupActivationState]` (`0x6ec30`) and
+  `-[SBLockdownManager lockdownState]` (`0x6e450`) are never called. So
+  SpringBoard keeps its boot LCD view and never promotes a UIWindow to be
+  key/visible; activation is again not the gate. A future fix has to make
+  that LCD-view → UIWindow transition happen (or drive the LCD view
+  directly) before MBX2D/EAGL can matter.
+
+### Verification for this round
+
+- **[V]** `make test` passes (offline tests plus host harnesses and the stub
+  symbol check). No 4.x source, patch set or recipe was modified: the only
+  committed changes are this log and the status lines in
+  `docs/multi-version.md`.
+- **[V]** Exact fresh-image sequence on the default build:
+  `rm -f build/sd.img && make sdimg && python3 emu/soak.py --cycles 5 --icount 2`
+  → **Result: PASS** (SpringBoard + input after 70 s, warm-up after 140 s,
+  home reference after 150 s with stddev 53.6, five app/home cycles, zero
+  panic/stall/md0/log/crash/watchdog/GPU failures).
+- **[V]** Exact documented 4.1 sequence after fetching and staging 8B117
+  (`sha1 97abde620766…` verified by `fwprep.py`):
+  `rm -f build/sd.img && make sdimg IOS=4.1 && python3 emu/soak.py --cycles 5 --icount 2`
+  → **Result: PASS** (SpringBoard + input after 70 s, warm-up after 135 s,
+  home reference after 145 s with stddev 53.3, five cycles, zero failures).
+- **[G]** No 3.1.3 or 2.2.1 fix is shipped and their soaks were not run: both
+  still stop on the boot spinner, so a five-cycle home-screen soak cannot
+  pass. The deliverable is the traced stop point above, plus verified addresses
+  for the next attempt.
