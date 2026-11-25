@@ -108,7 +108,12 @@ typedef struct {
     uint32_t idle_frames;   /* VBlanks skipped because nothing changed: the ARM9
                                counts these as liveness too (the LCDs already
                                hold the current picture) */
-    uint32_t _r6[12];
+    /* per-mode GPU cost (re-log NEXT): completed frames and the sums of their
+       whole-frame and draw-stage times (watchdog ticks, wrapping), so the
+       ARM9 can print 3D and 2D frame costs side by side */
+    uint32_t st_n, st_sum, st_sum_3d;
+    uint32_t fl_n, fl_sum, fl_sum_3d;
+    uint32_t _r6[6];
 } gmbox_t;
 _Static_assert(sizeof(gmbox_t) == 256, "gmbox_t layout");
 

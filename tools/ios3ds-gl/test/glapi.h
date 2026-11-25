@@ -37,6 +37,7 @@
     F(void, glEnable, (GLenum c), (c)) \
     F(void, glEnableClientState, (GLenum a), (a)) \
     F0(void, glFinish) \
+    F0(void, glFlush) \
     F(void, glFramebufferRenderbufferOES, (GLenum t, GLenum a, GLenum rt, GLuint r), (t, a, rt, r)) \
     F(void, glFrustumf, (GLfloat l, GLfloat r, GLfloat b, GLfloat t, GLfloat n, GLfloat f), (l, r, b, t, n, f)) \
     F(void, glGenFramebuffersOES, (GLsizei n, GLuint *o), (n, o)) \

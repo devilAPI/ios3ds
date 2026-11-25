@@ -820,6 +820,7 @@ static void drop_depth(PDepth *d)
 void pica_forget(const void *mem)
 {
     int i;
+    stereo_forget(mem);
     if (!mem || P.state != 1)
         return;
     for (i = 0; i < MAX_TARGETS; i++)
@@ -856,12 +857,12 @@ static PTarget *get_target(const RT *rt)
             return NULL;
         }
         /* With stereo3d=1 the depth class lives in the render target's alpha
-           byte. The GPU's direct present uses that byte for the surface's B
-           channel, so the class map would be lost: use the CPU read-back for
-           this target, which writes BGRA (class in alpha) unchanged. Flag off
-           keeps the direct present path byte-for-byte. */
-        int present = !stereo_enabled() &&
-                      (rt->surface || getenv("IOS3DS_GL_PRESENT_ALL")) && !P.no_present && !(rt->w & 7) && !(rt->h & 7) && rt->pitch == rt->w &&
+           byte. The direct present's swizzle carries the target's alpha into
+           the surface's alpha byte unchanged (gltest's alpha_stamp_check),
+           so the stereo display target keeps the GPU present too; the CPU
+           read-back it used before (re-log 106) cost a 600 KiB copy per
+           frame on the ARM11 (re-log NEXT). */
+        int present = (rt->surface || getenv("IOS3DS_GL_PRESENT_ALL")) && !P.no_present && !(rt->w & 7) && !(rt->h & 7) && rt->pitch == rt->w &&
                       !((uintptr_t)rt->color & 7) && !getenv("IOS3DS_GL_NO_PRESENT");
         t = lru;
         if (t->key) {

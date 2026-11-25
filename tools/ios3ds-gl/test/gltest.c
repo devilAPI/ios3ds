@@ -485,6 +485,50 @@ static void compare(const char *what, const unsigned char *a, const unsigned cha
 /* An offscreen framebuffer: RGBA8 colour + 16-bit depth renderbuffers. */
 static GLuint off_fb;
 
+/* The stereo depth stamp (docs/stereo3d.md) lives in the target's alpha
+   byte and must survive the write-back into the surface: with
+   IOS3DS_GL_PRESENT_ALL=1 that is the GPU's direct present (the path the
+   stereo3d=1 display target now uses), otherwise the CPU read-back. Four
+   bands get an alpha-only "stamp" (colour mask A) over an opaque colour;
+   RGB must be untouched and alpha must read back exactly. */
+static void alpha_stamp_check(const char *backend)
+{
+    static const unsigned char stamp[4] = { 0x33, 0x66, 0x99, 0xCC };
+    unsigned char *px;
+    int band, bad = 0, x, y;
+    glBindFramebufferOES(GL_FRAMEBUFFER, off_fb);
+    glViewport(0, 0, W, H);
+    glDisable(GL_BLEND);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_SCISSOR_TEST);
+    glColorMask(1, 1, 1, 1);
+    glClearColor(0.2f, 0.4f, 0.6f, 1);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glEnable(GL_SCISSOR_TEST);
+    glColorMask(0, 0, 0, 1);
+    for (band = 0; band < 4; band++) {
+        glScissor(band * W / 4, 0, W / 4, H);
+        glClearColor(0, 0, 0, stamp[band] / 255.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+    }
+    glColorMask(1, 1, 1, 1);
+    glDisable(GL_SCISSOR_TEST);
+    px = grab();
+    if (!px)
+        return;
+    for (y = 0; y < H; y += 7)
+        for (x = 0; x < W; x += 5) {
+            const unsigned char *p = px + ((size_t)y * W + x) * 4;
+            int want = stamp[x / (W / 4) < 4 ? x / (W / 4) : 3];
+            if (abs(p[0] - 51) > 2 || abs(p[1] - 102) > 2 || abs(p[2] - 153) > 2 || p[3] != want)
+                bad++;
+        }
+    free(px);
+    printf("gltest: %s stereo alpha stamp through the write-back: %d bad samples %s\n", backend, bad,
+           bad ? "FAIL" : "ok");
+    fails += bad != 0;
+}
+
 static int offscreen(void)
 {
     GLuint fb, rb[2];
@@ -760,6 +804,88 @@ static void arena_churn_check(const char *backend)
     }
 }
 
+
+/* IOS3DS_GLTEST_STEREO=1: a SpringBoard-like home frame through the stereo
+   stamp (stereo.c) on the PICA200 back end. The test-only hook
+   IOS3DS_STEREO_ANY_RT lets the offscreen target stand in for CA's display
+   surface. Checks the class map the GPU mirror reads: wallpaper SA_BG,
+   icons SA_ICONS, dock SA_FRONT, colours untouched by the stamp, and a
+   following app frame (a second opaque full-screen draw) wiped flat. */
+static int stereo_frame_check(void)
+{
+    static const struct { int x, y; unsigned char a; const char *what; } probe[] = {
+        { 5, 200, 0x33, "wallpaper" }, { 60, 150, 0x66, "icon" }, { 200, 300, 0x66, "icon" },
+        { 160, 440, 0x99, "dock" }, { 160, 8, 0x99, "status bar" },
+    };
+    unsigned char px[4];
+    unsigned i;
+    int bad = 0, k;
+    unsigned nb0 = 0, nv0 = 0;
+    setenv("IOS3DS_GL", "pica", 1);
+    setenv("IOS3DS_CA", "1", 1);
+    setenv("IOS3DS_STEREO", "1", 1);
+    setenv("IOS3DS_STEREO_ANY_RT", "1", 1);
+    host_gl_init();
+    if (!offscreen())
+        return 1;
+    glFlush();                          /* end the engine's start-up checks' frame */
+    {
+        extern void stereo_batch_stats(unsigned *batches, unsigned *verts);
+        stereo_batch_stats(&nb0, &nv0);
+    }
+    for (k = 0; k < 2; k++) {
+        glBindFramebufferOES(GL_FRAMEBUFFER, off_fb);
+        glViewport(0, 0, W, H);
+        glMatrixMode(GL_PROJECTION);
+        glLoadIdentity();
+        glOrthof(0, W, 0, H, -1, 1);    /* y = GL row: the classifier's row 0 is the iOS top */
+        glMatrixMode(GL_MODELVIEW);
+        glLoadIdentity();
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_TEXTURE_2D);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+        glEnableClientState(GL_VERTEX_ARRAY);
+        glColor4f(0.2f, 0.3f, 0.4f, 1);
+        quad(0, 0, W, H, 0);                        /* wallpaper */
+        glColor4f(0.5f, 0.5f, 0.5f, 1);
+        for (i = 0; i < 8; i++)                     /* icon grid */
+            quad(40 + (i % 4) * 70, 120 + (i / 4) * 160, 90 + (i % 4) * 70, 190 + (i / 4) * 160, 0);
+        glColor4f(0.7f, 0.7f, 0.7f, 1);
+        quad(10, 400, W - 10, 470, 0);              /* dock */
+        quad(0, 0, W, 20, 0);                       /* status bar */
+        if (k) {
+            glColor4f(1, 1, 1, 1);
+            quad(0, 0, W, H, 0);                    /* an app: covers everything */
+        }
+        glFlush();
+        for (i = 0; i < sizeof probe / sizeof probe[0]; i++) {
+            unsigned char want = k ? 0 : probe[i].a;
+            glReadPixels(probe[i].x, probe[i].y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
+            if (px[3] != want) {
+                printf("gltest: stereo frame %d: %s at %d,%d alpha 0x%02x, want 0x%02x FAIL\n", k, probe[i].what,
+                       probe[i].x, probe[i].y, px[3], want);
+                bad++;
+            }
+        }
+        glReadPixels(60, 150, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
+        if (abs(px[0] - (k ? 255 : 128)) > 2)
+            printf("gltest: stereo frame %d: icon colour %d FAIL\n", k, px[0]), bad++;
+    }
+    {
+        extern void stereo_batch_stats(unsigned *batches, unsigned *verts);
+        unsigned nb = 0, nv = 0;
+        stereo_batch_stats(&nb, &nv);
+        nb -= nb0;
+        nv -= nv0;
+        printf("gltest: stereo stamp: %u batched alpha draws, %u vertices (home frame + wiped app frame) %s\n", nb,
+               nv, nb == 1 && nv == 6 * 11 ? "ok" : "FAIL");
+        bad += !(nb == 1 && nv == 6 * 11);
+    }
+    printf("gltest: stereo %s (%d failed)\n", bad ? "FAIL" : "PASS", bad);
+    return bad != 0;
+}
+
 static void one_pass(const char *backend, const char *ppm, unsigned char *out[2])
 {
     char path[1024];
@@ -783,6 +909,7 @@ static void one_pass(const char *backend, const char *ppm, unsigned char *out[2]
     out[1] = grab();
     rect_texture_check(backend);
     arena_churn_check(backend);
+    alpha_stamp_check(backend);
     pvrtc_check(backend);
     matrix_palette_check(backend);
     es2_check(backend);
@@ -792,6 +919,8 @@ int main(int argc, char **argv)
 {
     char path[1024];
     unsigned char *sw[2], *hw[2];
+    if (getenv("IOS3DS_GLTEST_STEREO"))
+        return stereo_frame_check();
     one_pass("sw", argc > 1 ? argv[1] : NULL, sw);
     if (argc > 1)
         snprintf(path, sizeof path, "%s.pica.ppm", argv[1]);

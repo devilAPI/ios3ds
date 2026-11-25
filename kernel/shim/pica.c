@@ -820,10 +820,14 @@ static void m_after(int st)
     if (st == PM_DONE) {
         /* the ARM9 waits for a frame in the new mode before it moves the
            barrier or gives the screen back to the CPU copy */
+        volatile uint32_t *c = mir.stereo ? &GM->st_n : &GM->fl_n;
         if (mir.stereo)
             GM->st_frames++;
         else
             GM->flat_frames++;
+        c[0]++;                         /* st_n/st_sum/st_sum_3d or fl_* */
+        c[1] += mir.t_frame;
+        c[2] += mir.t_stage[1];
     }
     if (st == PM_TIMEOUT) {
         /* the GPU did not finish: stop mirroring for good; the ARM9 notices

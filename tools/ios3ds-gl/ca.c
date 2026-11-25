@@ -426,10 +426,12 @@ void ca_frame(void)
     /* a new render thread starts its CPU clock at 0: never subtract backwards */
     dcpu = cpu >= cpu0 ? cpu - cpu0 : 0;
     if (stereo_enabled()) {
-        unsigned f, h, fl, stp, wp;
+        unsigned f, h, fl, stp, wp, nb, nv;
         stereo_stats(&f, &h, &fl, &stp, &wp);
-        gl_log("CA stereo3D: %u frames, %u home (stamped), %u flat (wiped), %u stamp passes, %u wipes",
-               f, h, fl, stp, wp);
+        stereo_batch_stats(&nb, &nv);
+        gl_log("CA stereo3D: %u frames, %u home (stamped), %u flat (wiped), %u stamped draws in %u batched "
+               "alpha draws (%u vertices), %u wipes; display written back by the GPU present",
+               f, h, fl, stp, nb, nv, wp);
     }
     gl_log("CA: %llu frames; per frame over the last %u: render thread CPU %llu us, %u.%u command lists, "
            "%u.%u GPU presents (%u.%u via an arena copy), %u.%u CPU read-backs (%u KiB), %u.%u texture uploads (%u KiB); "

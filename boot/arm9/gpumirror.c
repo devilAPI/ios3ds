@@ -343,6 +343,16 @@ void gm_report(u32 now, u32 cpu_blits, u32 cpu_ticks, u32 regs_pa, int mode, boo
         last_rb = rb;
         last_sk = sk;
     }
+    {   /* GPU cost per mirror frame, 3D (two-eye list) vs 2D (flat list) */
+        static u32 l_sn, l_ss, l_s3, l_fn, l_fs, l_f3;
+        u32 sn = gm->st_n - l_sn, fn = gm->fl_n - l_fn;
+        if (sn)
+            logp("[stereo] mirror GPU cost: 3D %u frames, avg %u us (draw %u us); 2D %u frames, avg %u us (draw %u us) "
+                 "in %u s\n", sn, us((gm->st_sum - l_ss) / sn), us((gm->st_sum_3d - l_s3) / sn), fn,
+                 fn ? us((gm->fl_sum - l_fs) / fn) : 0, fn ? us((gm->fl_sum_3d - l_f3) / fn) : 0, secs);
+        l_sn = gm->st_n; l_ss = gm->st_sum; l_s3 = gm->st_sum_3d;
+        l_fn = gm->fl_n; l_fs = gm->fl_sum; l_f3 = gm->fl_sum_3d;
+    }
     logp("[stereo] active path: %s (slider k=%u, %u 3D / %u 2D GPU frames, %u ARM9 eye cols reused)\n",
          gm_stereo_path(), (unsigned)gm->stereo_k, (unsigned)gm->st_frames, (unsigned)gm->flat_frames, sk);
 }

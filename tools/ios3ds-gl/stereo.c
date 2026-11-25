@@ -45,7 +45,7 @@ static int st_log;                  /* diag=1: log the frame structure */
 #define ST_LOG_MAX 12
 static struct { int16_t x0, y0, x1, y1; int8_t cls; } st_log_draws[ST_LOG_MAX];
 static int st_log_n;
-static uint32_t st_log_sig, st_log_last;
+static uint32_t st_log_last;
 
 static int bootargs_has(const char *key)
 {
@@ -60,6 +60,17 @@ static int bootargs_has(const char *key)
         return 0;
     ba[n] = 0;
     return strstr(ba, key) != NULL;
+#endif
+}
+
+/* host test hook (gltest IOS3DS_GLTEST_STEREO): an offscreen target stands
+   in for CA's display surface */
+static int stereo_any_rt(void)
+{
+#ifdef GL_HOST
+    return getenv("IOS3DS_STEREO_ANY_RT") != NULL;
+#else
+    return 0;
 #endif
 }
 
@@ -94,7 +105,7 @@ int stereo_prepare(GC *gc, RT *rt, const Vtx *v, int n)
 
     if (!st_state)
         stereo_init();
-    if (st_state != 2 || !rt->surface || n < 3 || !gc->vp[2] || !gc->vp[3])
+    if (st_state != 2 || !(rt->surface || stereo_any_rt()) || n < 3 || !gc->vp[2] || !gc->vp[3])
         return -1;
     minx = miny = 1e30f;
     maxx = maxy = -1e30f;
@@ -168,40 +179,90 @@ int stereo_tex_opaque(Tex *t)
     return 1;
 }
 
-/* Pass 1 is CoreAnimation's draw; pass 2 stamps the class into the alpha
-   channel of the same pixels (colour mask A only, blending off, no
-   texture: the fragment alpha is the vertex alpha we set). */
-void gl_be_triangles(GC *gc, RT *rt, const Vtx *v, int n, int cls)
+/* The stamp is deferred and batched (re-log NEXT). Pass 1 is CoreAnimation's
+   draw, untouched. Its triangles are recorded here in the target's own
+   window space (one viewport for all of them) with the class as vertex
+   alpha; stereo_end_frame() then draws every stamp of the frame as one
+   alpha-only draw in the same order, or, for a frame that is not the home
+   screen, only the flat wipe. Before, every CA draw was followed by its own
+   alpha-only draw: twice the GPU state changes and command lists per frame,
+   and the stamps were drawn for app frames that were wiped anyway.
+   Draws under a different scissor box start a new segment, so a partial CA
+   update stamps exactly the pixels it drew. */
+#define ST_QMAX 6144                /* vertices per frame before an early flush */
+#define ST_SEGMAX 16
+static Vtx *st_q;
+static int st_qn;
+static struct { int start, on, sc[4]; } st_seg[ST_SEGMAX];
+static int st_nseg;
+static unsigned st_batches, st_bverts;
+
+static void stereo_alpha_draw(GC *gc, const RT *rt, Vtx *q, int n, int scissor_on, const int *sc);
+
+static void stereo_flush_stamps(GC *gc)
 {
     int i;
-    int cm[4], blend, depth_test, u0, u1;
-    float a;
-    Vtx *w = (Vtx *)v;
+    if (!st_qn || !st_have_rt)
+        return;
+    for (i = 0; i < st_nseg; i++) {
+        int end = i + 1 < st_nseg ? st_seg[i + 1].start : st_qn;
+        if (end - st_seg[i].start >= 3)
+            stereo_alpha_draw(gc, &st_rt, st_q + st_seg[i].start, end - st_seg[i].start, st_seg[i].on, st_seg[i].sc);
+    }
+    st_batches++;
+    st_bverts += (unsigned)st_qn;
+    st_qn = 0;
+    st_nseg = 0;
+}
+
+void gl_be_triangles(GC *gc, RT *rt, const Vtx *v, int n, int cls)
+{
+    int i, j, k, sc_on;
+    float a, vw, vh;
 
     gc->be->triangles(gc, rt, v, n);
-    /* The stamp pass keeps pass 1's cull, scissor, depth and alpha-test
-       behaviour so both passes cover the same pixels; only a draw without
-       an alpha test can be stamped safely. */
-    if (st_state != 2 || cls < 0 || n < 3 || gc->alpha_test)
+    /* An alpha-tested draw cannot be stamped by geometry alone (its
+       discarded fragments would be stamped too): left alone, as before. */
+    if (st_state != 2 || cls < 0 || n < 3 || gc->alpha_test || !rt->w || !rt->h)
         return;
+    if (!st_q && !(st_q = malloc(ST_QMAX * sizeof *st_q)))
+        return;
+    if (st_qn + n > ST_QMAX)
+        stereo_flush_stamps(gc);
+    if (n > ST_QMAX)
+        return;
+    sc_on = gc->scissor_on != 0;
+    if (!st_nseg || st_seg[st_nseg - 1].on != sc_on ||
+        (sc_on && memcmp(st_seg[st_nseg - 1].sc, gc->scissor, sizeof gc->scissor))) {
+        if (st_nseg == ST_SEGMAX)
+            stereo_flush_stamps(gc);
+        st_seg[st_nseg].start = st_qn;
+        st_seg[st_nseg].on = sc_on;
+        memcpy(st_seg[st_nseg].sc, gc->scissor, sizeof gc->scissor);
+        st_nseg++;
+    }
     a = (float)stereo_magic(cls) / 255.0f;
-    memcpy(cm, gc->color_mask, sizeof cm);
-    blend = gc->blend;
-    depth_test = gc->depth_test;
-    u0 = gc->tu[0].enabled; u1 = gc->tu[1].enabled;
-    for (i = 0; i < n; i++)
-        w[i].c[3] = a;
-    gc->color_mask[0] = gc->color_mask[1] = gc->color_mask[2] = 0;
-    gc->color_mask[3] = 1;
-    gc->blend = 0;
-    gc->depth_test = 0;
-    gc->tu[0].enabled = 0;
-    gc->tu[1].enabled = 0;
-    gc->be->triangles(gc, rt, w, n);
-    memcpy(gc->color_mask, cm, sizeof cm);
-    gc->blend = blend;
-    gc->depth_test = depth_test;
-    gc->tu[0].enabled = u0; gc->tu[1].enabled = u1;
+    vw = (float)rt->w;
+    vh = (float)rt->h;
+    for (i = 0; i + 2 < n; i += 3) {
+        /* behind the eye (perspective layers): not stamped */
+        if (v[i].w <= 0.0f || v[i + 1].w <= 0.0f || v[i + 2].w <= 0.0f)
+            continue;
+        for (j = 0; j < 3; j++) {
+            const Vtx *s = &v[i + j];
+            Vtx *d = &st_q[st_qn + j];
+            float x = (s->x / s->w * 0.5f + 0.5f) * (float)gc->vp[2] + (float)gc->vp[0];
+            float y = (s->y / s->w * 0.5f + 0.5f) * (float)gc->vp[3] + (float)gc->vp[1];
+            memset(d, 0, sizeof *d);
+            d->x = x / vw * 2.0f - 1.0f;
+            d->y = y / vh * 2.0f - 1.0f;
+            d->w = 1.0f;
+            d->fog = 1.0f;
+            for (k = 0; k < 4; k++)
+                d->c[k] = a;
+        }
+        st_qn += 3;
+    }
 }
 
 /* End of frame (glFlush / SwapNotification): decide whether the class map
@@ -218,11 +279,15 @@ int stereo_end_frame(GC *gc)
     st_frames++;
     if (home) {
         st_home++;
+        stereo_flush_stamps(gc);
     } else if (st_f.phase == STP_FLAT || st_f.draws >= STEREO_MIN_ICONS) {
         st_flat++;
         st_wipes++;
+        st_qn = 0;                  /* the wipe replaces this frame's stamps */
+        st_nseg = 0;
         stereo_wipe(gc, &st_rt);
     } else {
+        stereo_flush_stamps(gc);
         /* A tiny partial CA update (frame 2 in QEMU had two draws) carries no
            information about the frame. Wiping it would erase the class map
            left by the previous home frame on all the untouched pixels. */
@@ -253,28 +318,20 @@ int stereo_end_frame(GC *gc)
     return home ? 0 : 1;
 }
 
-/* Wipe the class map of a frame that is not the home screen: one
-   full-screen quad that writes SA_FLAT into the alpha channel only. */
-static void stereo_wipe(GC *gc, const RT *rt)
+/* One alpha-only draw in the target's window space: colour mask A,
+   no blending, no texture, no depth/alpha test, no culling; the fragment
+   alpha is the vertex alpha. Used for the stamp batches and the wipe. */
+static void stereo_alpha_draw(GC *gc, const RT *rt, Vtx *q, int n, int scissor_on, const int *sc)
 {
-    static const float corner[6][2] = { { -1, -1 }, { 1, -1 }, { 1, 1 }, { -1, -1 }, { 1, 1 }, { -1, 1 } };
-    Vtx q[6];
-    int i, cm[4], blend, alpha_test, depth_test, cull, scissor_on, vp[4];
+    int cm[4], blend, alpha_test, depth_test, cull, s_on, vp[4], scv[4];
     int u0, u1;
 
     memcpy(cm, gc->color_mask, sizeof cm);
     blend = gc->blend; alpha_test = gc->alpha_test; depth_test = gc->depth_test;
-    cull = gc->cull; scissor_on = gc->scissor_on;
-    vp[0] = gc->vp[0]; vp[1] = gc->vp[1]; vp[2] = gc->vp[2]; vp[3] = gc->vp[3];
+    cull = gc->cull; s_on = gc->scissor_on;
+    memcpy(vp, gc->vp, sizeof vp);
+    memcpy(scv, gc->scissor, sizeof scv);
     u0 = gc->tu[0].enabled; u1 = gc->tu[1].enabled;
-    memset(q, 0, sizeof q);
-    for (i = 0; i < 6; i++) {
-        q[i].x = corner[i][0];
-        q[i].y = corner[i][1];
-        q[i].w = 1;
-        q[i].fog = 1;
-        q[i].c[3] = 0;                      /* SA_FLAT */
-    }
     gc->vp[0] = 0;
     gc->vp[1] = 0;
     gc->vp[2] = rt->w;
@@ -285,15 +342,58 @@ static void stereo_wipe(GC *gc, const RT *rt)
     gc->alpha_test = 0;
     gc->depth_test = 0;
     gc->cull = 0;
-    gc->scissor_on = 0;
+    gc->scissor_on = scissor_on;
+    if (scissor_on)
+        memcpy(gc->scissor, sc, sizeof scv);
     gc->tu[0].enabled = 0;
     gc->tu[1].enabled = 0;
-    gc->be->triangles(gc, (RT *)rt, q, 6);
+    gc->be->triangles(gc, (RT *)rt, q, n);
     memcpy(gc->color_mask, cm, sizeof cm);
     gc->blend = blend; gc->alpha_test = alpha_test; gc->depth_test = depth_test;
-    gc->cull = cull; gc->scissor_on = scissor_on;
-    gc->vp[0] = vp[0]; gc->vp[1] = vp[1]; gc->vp[2] = vp[2]; gc->vp[3] = vp[3];
+    gc->cull = cull; gc->scissor_on = s_on;
+    memcpy(gc->vp, vp, sizeof vp);
+    memcpy(gc->scissor, scv, sizeof scv);
     gc->tu[0].enabled = u0; gc->tu[1].enabled = u1;
+}
+
+/* Wipe the class map of a frame that is not the home screen: one
+   full-screen quad that writes SA_FLAT into the alpha channel only. */
+static void stereo_wipe(GC *gc, const RT *rt)
+{
+    static const float corner[6][2] = { { -1, -1 }, { 1, -1 }, { 1, 1 }, { -1, -1 }, { 1, 1 }, { -1, 1 } };
+    Vtx q[6];
+    int i;
+
+    memset(q, 0, sizeof q);
+    for (i = 0; i < 6; i++) {
+        q[i].x = corner[i][0];
+        q[i].y = corner[i][1];
+        q[i].w = 1;
+        q[i].fog = 1;
+        q[i].c[3] = 0;                      /* SA_FLAT */
+    }
+    static const int nosc[4];
+    stereo_alpha_draw(gc, rt, q, 6, 0, nosc);
+}
+
+/* The frame's display target is being freed (CA re-creates its surfaces;
+   the host start-up checks free theirs): its pending stamps or wipe must
+   not be drawn into freed memory at the end of the frame. */
+void stereo_forget(const void *mem)
+{
+    if (st_state == 2 && st_have_rt && mem && st_rt.color == mem) {
+        st_have_rt = 0;
+        st_qn = 0;
+        st_nseg = 0;
+        stereo_frame_begin(&st_f);
+        st_log_n = 0;
+    }
+}
+
+void stereo_batch_stats(unsigned *batches, unsigned *verts)
+{
+    if (batches) *batches = st_batches;
+    if (verts) *verts = st_bverts;
 }
 
 void stereo_stats(unsigned *frames, unsigned *home, unsigned *flat, unsigned *stamps, unsigned *wipes)
