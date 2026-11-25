@@ -5059,3 +5059,55 @@ Worktree `oldwake`; firmware staged from `compat16` into this worktree's
   locking iOS (POWER tap)` → `key 30` → `screen off` → `LCD backlight 0`;
   `c` → `[mcu] shell opened: waking iOS (HOME tap)` → `key 40` →
   `screen on` → `1000/1000`, lock screen on the display.
+
+### 4.1
+
+- **[V]** 8B117 already carries `s5l-perf-nowait`; its mcud/input are the
+  4.x builds (unchanged). Fresh `make sdimg IOS=4.1`, `emu/soak.py --cycles 5
+  --icount 2 --crashlogs` → **Result: PASS** (input after 90 s, five apps,
+  home diff 0.0, lock round passed, 0 restarts/panics/crashes). Lid in QEMU:
+  `[mcu] shell closed: locking iOS (POWER tap)` → `key 30` → `LCD backlight
+  0/1000`; `shell opened: waking iOS (HOME tap)` → `key 40` → `screen on` →
+  `500/1000`. Battery: `IOPMPowerSource registered`.
+
+### Soaks (fresh images, `--icount 2`)
+
+- **[V]** 3.1.3, `--cycles 10 --require-app --crashlogs --targets
+  "47,314;123,226;199,226;275,226;123,50"` → **Result: PASS**: input after
+  60 s, ten apps opened (diffs 53.1–103.0; cycles 5–8 after the first lock
+  and cycle 9 after the 130 s lock), home diff 0.0, lock rounds ended on the
+  home screen, 0 restarts/panics/crashes. Log: two `key 30` →
+  `[power] iOS screen off` → `LCD backlight 0/1000` → `screen on again` →
+  `500/1000`. (An earlier 10-cycle run on an image without the new mcud
+  failed one tap at cycle 7: the swipe round left Spotlight up and the tap
+  never reached the input daemon (no `[input] down` line); not lock-related.)
+- **[V]** 2.2.1, `--sd build/sd221.img --cycles 10 --require-app --crashlogs
+  --targets "275,226;199,226;123,226;47,226;275,50"` → **Result: PASS**:
+  input after 60 s, ten apps opened (52.8–109.0, cycles 5–9 after locks),
+  home diff 0.0, lock rounds fine, 0 restarts/panics/crashes, no crash
+  reports, battery registered.
+- **[V]** 4.2.1: the fresh default build's six hashes equal origin/main's
+  (`kernel 505f451a…`, `devtree 25b1bd23…`, `fakeio e5fecd66…`,
+  `shim a35631eb…`, `gpu 6bdaf617…`, `boot.cfg 8d4079cf…`);
+  `emu/soak.py --cycles 5 --icount 2` → **Result: PASS** (input after 84 s,
+  five cycles, home diff 0.0, lock round passed, 0 restarts/panics/crashes).
+
+### Hardware checklist
+
+- 3.1.3/2.2.1: SELECT (or POWER) locks; HOME wakes to the lock screen; the
+  slide unlocks; an app opens afterwards. `log.txt` should show
+  `[power] iOS screen off` / `screen on again` and `[mcud] iOS brightness
+  ... factor 0.00` / `1.00` around each lock.
+- Settings > Brightness slider: the LCD dims/brightens
+  (`[mcud] iOS brightness X x factor 1.00 -> LCD backlight N/1000`).
+- Lid close → screen off and locked; open → lock screen.
+- 2.2.1: battery level and the charging plug in the status bar; unplug the
+  charger and check `[mcu]`'s flags and the icon follow.
+
+### Not done
+
+- Brightness follows the value SpringBoard saves to its plist (seen after
+  each drag in QEMU); whether the LCD follows during a drag was not checked,
+  and SpringBoard's live value stays inside its own process.
+- 3.1.3's AppleEmbeddedAudio was not checked for the same unconditional
+  store; its battery registration never hit it in any soak.
