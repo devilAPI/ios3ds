@@ -145,6 +145,46 @@
    "new": "00207047",
    "why": "7E18 -[SBAwayController isLocked] -> NO (Thumb IMP 0x1d47d, file 0x1c47c; original push {r4,lr}/ldr r3 verified). -[SBUIController restoreIconList:] (IMP 0xc975) goes straight to frontLocked:animate:automatically: and returns when the away controller is locked, so the icon list is never restored. With this patch SpringBoard advances from the CA-drawn spinner to the Apple-logo/progress-bar (reset) view (re-log 121 scratch, re-log 122); no restart loop or crash with this patch alone. The companion stubs isDeviceLockedOrBlocked -> NO and isMakingEmergencyCall -> NO were tried and caused 3-5 SpringBoard restarts, so they are NOT shipped.",
    "mode": "0755"
+  },
+  {
+   "path": "/System/Library/CoreServices/SpringBoard.app/SpringBoard",
+   "offset": "0x48bc",
+   "orig": "f0b55e465546",
+   "new": "f0b5d5f0d0ef",
+   "why": "7E18 appleIconViewRemoved: push {r4-r7,lr} then BLX ARM trampoline at VA 0xdb860; lr is saved first so the trampoline can call objc_msgSend.",
+   "mode": "0755"
+  },
+  {
+   "path": "/System/Library/CoreServices/SpringBoard.app/SpringBoard",
+   "offset": "0xda860",
+   "orig": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "new": "f04f2de90080a0e10190a0e13c009fe5000090e538109fe5001091e5d158ffeb0040a0e12c109fe5001091e50020a0e30400a0e1cb58ffeb0b60a0e10a50a0e10800a0e10910a0e1f04fbde81eff2fe110cd0e0000a00e00b4a30e0000751000",
+   "why": "7E18 ARM trampoline: calls [[SBUIController sharedInstance] restoreIconList:NO], replays the displaced prologue (push, mov r6,fp, mov r5,sl) and returns to 0x58c2.",
+   "mode": "0755"
+  },
+  {
+   "path": "/System/Library/CoreServices/SpringBoard.app/SpringBoard",
+   "offset": "0xb9b2",
+   "orig": "0fd1",
+   "new": "00bf",
+   "why": "7E18 restoreIconList:: locally ignore isDeviceLockedOrBlocked (nop the early branch), leaving the shared method untouched.",
+   "mode": "0755"
+  },
+  {
+   "path": "/System/Library/CoreServices/SpringBoard.app/SpringBoard",
+   "offset": "0xb9d2",
+   "orig": "09d0",
+   "new": "09e0",
+   "why": "7E18 restoreIconList:: locally ignore isMakingEmergencyCall (beq -> b).",
+   "mode": "0755"
+  },
+  {
+   "path": "/System/Library/CoreServices/SpringBoard.app/SpringBoard",
+   "offset": "0xb9e8",
+   "orig": "01f0deff",
+   "new": "002000bf",
+   "why": "7E18 restoreIconList:: r0=0 in place of the 0x107220/1/2 flag helper (movs r0,#0; nop), so the three restore flags cannot short-circuit the icon-list insert.",
+   "mode": "0755"
   }
  ]
 }

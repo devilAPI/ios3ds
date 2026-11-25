@@ -4113,3 +4113,119 @@ the tree; no 4.x recipe, patch set, shim or GPU file is touched.
   --staging build/fw-3.1.3/staging --no-cydia --no-tlsfix`) boots to the
   Apple/progress reset view described above. No 3.1.3/2.2.1 soak PASS is
   claimed: neither version reaches a home screen.
+
+## NEXT. 3.1.3: call the icon-list restore from a boot method, and why the picture still stops (2026-11-25)
+
+Continues §122. Both archived IPSWs and 8B117 were fetched again into this
+worktree's `build/fw-*/` (sha1 `5f4f5c01…` / `9af5625e…` / `97abde62…`
+verified by `fwprep.py`). All Apple files, images, scratch disassemblers,
+assembler output and GDB logs stay under `build/`; only
+`rootfs/overlay-3.1.3.json`, `tests/test_versions.py`, the 3.1.3 status line in
+`docs/multi-version.md` and this log change in the tree.
+
+### A working 7E18 trampoline (and the branch-encoding trap)
+
+- **[V]** Parsed the executable's ObjC metadata again (`build/fw-3.1.3/objc.py`,
+  scratch): 231 classes, 3262 selectors. `-[SpringBoard
+  applicationDidFinishLaunching:]` IMP `0xa6f5` (file `0x96f4`),
+  `-[SBUIController finishLaunching]` `0xc149`, `-[SBUIController
+  restoreIconList:]` `0xc975`, `-[SpringBoard appleIconViewRemoved]` `0x58bd`,
+  `SBPowerDownController` class `0xe7bf0`. `restoreIconList:`'s first checks
+  are `sharedAwayController` → `isLocked`, `isDeviceLockedOrBlocked`,
+  `isMakingEmergencyCall` (branches `0xc9b2`/`0xc9d2`). Its three-flag helper
+  is the 0x5a-byte Thumb function at `0xe9a8`: it reads bytes at literal
+  addresses `0x107221`, `0x107220`, `0x107222`, and is called from file offsets
+  `0xc9e8` (restoreIconList:), `0xf126` and `0x1c8c0`.
+- **[V]** The trampoline pattern that works: patch the first six bytes of a
+  method whose prologue is `push {r4-r7,lr}; mov r6,fp; mov r5,sl` with
+  `push {r4-r7,lr}; blx <ARM trampoline>`; the push saves the caller's lr
+  *before* BLX overwrites it. The ARM trampoline at VA `0xdb860` (verified
+  zero-filled gap of SpringBoard `__const`, file `0xda860`) pushes r4-r11/lr,
+  saves self/cmd in r8/r9, calls `objc_msgSend` through the verified stub
+  `0xb1bc8` with classref `0xecd10` (`SBUIController`), selrefs `0xea000`
+  (`sharedInstance`) / `0xea3b4` (`restoreIconList:`), replays
+  `mov r6,fp; mov r5,sl`, pops and returns to the instruction after the hook.
+- **[V]** Branch encodings must be assembled at the *final* VA (`.org` plus an
+  expression relative to that VA), not at offset zero: the first two build
+  attempts assembled `blx 0xdb860`/`bl 0xb1bc8` at base 0, so after relocation
+  they branched to unrelated addresses and the hook never ran. The corrected
+  bytes are `f0b5 d5f0 d0ef` (hook at `0x58bc`) and an ARM blob whose two
+  `bl 0xb1bc8` encodings disassemble at `0xdb87c`/`0xdb894`.
+- **[V]** The same trampoline hooked at `applicationDidFinishLaunching:`
+  (`0xa6f4`) or `appleIconViewRemoved` (`0x58bc`) runs without crashes; a
+  no-op trampoline gave one dyld pass (98 `dyld: loaded` lines) and the
+  unchanged Apple/progress picture. A marker written to virtual
+  `0x20845f00`/`0x107500` was not a reliable observation channel in this
+  harness (HMP virtual reads only work on the CPU whose ASID owns the page,
+  and writing those pages caused SpringBoard restarts), so the marker was
+  dropped from the shipped hook.
+
+### Shipped: bypass the three gates locally, call restoreIconList: from appleIconViewRemoved
+
+- **[V]** Five version-only patches in `rootfs/overlay-3.1.3.json`: the hook at
+  file `0x48bc`, the ARM trampoline at `0xda860`, and three byte patches inside
+  `restoreIconList:` — file `0xb9b2` `bne`→`nop` (ignore
+  `isDeviceLockedOrBlocked`), `0xb9d2` `beq`→`b` (ignore
+  `isMakingEmergencyCall`), and `0xb9e8` replace the `0xe9a8` call with
+  `movs r0,#0; nop` (all three `0x107220/1/2` flags look clear). The two
+  SBAwayController queries are **not** stubbed globally, as §122's restarts
+  warned. All original bytes were verified in the extracted 7E18 executable;
+  `tests/test_versions.py` expects the 17-patch 3.1.3 list.
+- **[V]** Fresh 3.1.3 image (`python3 scripts/mksd.py --image
+  build/sd313-ship.img --ios 3.1.3 --staging build/fw-3.1.3/staging
+  --no-cydia --no-tlsfix`) booted for 300 s at `--icount 2` with screenshots
+  at 60/120/180/240/290 s: 98 dyld lines (one SpringBoard pass), 0 crashes,
+  md0 0 errors, and the Apple-logo/progress-bar frame unchanged. The call
+  therefore happens and the flags are cleared, but the boot LCD view is still
+  not replaced. **No 3.1.3 home-screen soak PASS is claimed.**
+
+### Rejected experiments (all reverted before the shipped patch was added)
+
+- **[V]** Stubbing `-[SBSyncController resetState]` and `restoreState` to 0
+  (`0x6ea84`/`0x6ea60`) gave 490 dyld lines (3–5 SpringBoard restarts).
+  No-oping `-[SBAwayView updateUIForResetState:]`/`updateUIForRestorationState:`
+  (`0x35150`/`0x35244`) or skipping the reset-state store in
+  `beginResetting:` (`0x6ec60` `strb r2,[r0,r3]`→`nop`) stayed stable but did
+  not change the picture. `SBResetManager beginReset`/`SBResetView
+  _resetStarted:` no-ops were already tried in §122.
+- **[V]** `[[SBAwayController sharedAwayController] unlockWithSound:NO]` from
+  `appleIconViewRemoved` (classref `0xecd14`, selref `0xe9f90`) was stable but
+  left the picture unchanged; calling `-[SBLockdownManager
+  _setupActivationState]` (classref `0xed110`, selref `0xebcbc`) from either
+  boot method caused 6 or 4 SpringBoard restarts.
+- **[V]** Calling `_CARenderServerStart` (`0x31bae990`, via `ldr r3; blx r3`
+  because the cache VA is beyond ARM `bl` range) plus `restoreIconList:NO`
+  from `appleIconViewRemoved` briefly replaced the Apple/progress frame with
+  the small spinner and printed `Error performing migration.`; a 300 s rerun
+  had 392 dyld lines (4 passes), so it is unstable and is not shipped.
+- **[G]** The remaining gate is above the icon list and the reset flags: the
+  boot LCD view is never swapped for the icon view, and a plain
+  `restoreIconList:` call does not change which surface the ARM9 copies to the
+  LCD. Next step: find the 3.x view-swap call site (or make the EAGL render
+  server draw into the LCD framebuffer), then re-check the home-screen soak.
+
+### 2.2.1
+
+- **[V]** 5H11a was staged again and its overlay inspected: it still carries
+  no file patches and no `resign` map (re-log 115 showed that even a
+  no-byte-change `ldid -Hsha1` re-sign stops dyld after CoreSurface), so the
+  per-page signature-safe re-sign mentioned in §122 is **not implemented**.
+  No 2.x code changed this round.
+
+### Verification of this round's tree
+
+- **[V]** `make userland` and `make test`: 94 offline tests + 8 host tests,
+  all host harnesses, stub-symbol and conflict-marker checks pass.
+- **[V]** Fresh default build (`make userland`, `rm -f build/sd.img`,
+  `make sdimg`) reproduced the six 4.2.1 boot hashes from §122 exactly:
+  `kernel 505f451a…`, `devtree 25b1bd23…`, `fakeio e5fecd66…`,
+  `shim e0609de9…`, `gpu 7e696f65…`, `boot.cfg 8d4079cf…`.
+- **[V]** Exact fresh-image sequence
+  `rm -f build/sd.img && make sdimg && python3 emu/soak.py --cycles 5 --icount 2`
+  → **Result: PASS** (SpringBoard + input after 70 s, five app/home cycles,
+  no "not home after Home", zero panic/stall/md0/log/crash/watchdog/GPU
+  failures).
+- **[V]** Exact documented 4.1 sequence after staging 8B117
+  (`sha1 97abde62…` verified): `rm -f build/sd.img && make sdimg IOS=4.1 &&
+  python3 emu/soak.py --cycles 5 --icount 2` → **Result: PASS** (five cycles,
+  zero failures).
