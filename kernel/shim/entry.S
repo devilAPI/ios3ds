@@ -759,7 +759,14 @@ shim_irq_resume:
     ldr r1, irq_save1
     ldr r2, irq_save2
     sub lr, lr, #4
+.if IOS3DS_KPI_KERNEL_IRQ_SPSR
+    @ 2.2.1/3.1.3 _fleh_irq reads the interrupted mode from SPSR: replaying
+    @ 4.x's CPSR read made every injected CLCD frame IRQ that hit user mode
+    @ look like a kernel-mode interrupt (SpringBoard died at pc 0xc00684c0)
+    mrs sp, spsr
+.else
     mrs sp, apsr
+.endif
     ldr pc, =KERNEL_IRQ_CONT
 
 5:  @ anything else

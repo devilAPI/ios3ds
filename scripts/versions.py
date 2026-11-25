@@ -29,7 +29,7 @@ VERSIONS = {
             "patch_set": None, "overlay": None, "status": "inventory only"},
     "2.2.1": {"build": "5H11a", "ipsw": "iPod2,1_2.2.1_5H11a_Restore.ipsw",
               "sha1": "9af5625ea34acdd8abeb6fce71a72651d0c815d5", "ba_version": 3,
-              "virt_base": 0xC0000000, "irq_cont": 0xC006540C,
+              "virt_base": 0xC0000000, "irq_cont": 0xC006540C, "irq_spsr": True,
               "dt_delete": ["arm-io/usb-otg"],
               "patch_set": "kernel/patchsets/2.2.1.json", "overlay": "rootfs/overlay-2.2.1.json",
               "status": "experimental: Darwin 9, no dyld cache; see docs/multi-version.md"},
@@ -51,7 +51,7 @@ VERSIONS = {
               # (archive.org/ipod-touch-2g-ipsw). Its keys decrypt the kernel,
               # device tree and HFS+ rootfs, so it is the genuine restore file.
               "sha1": "5f4f5c01eda2f811f73167e7d1f82dbeed82367b", "ba_version": 5,
-              "virt_base": 0xC0000000, "irq_cont": 0xC0068458,
+              "virt_base": 0xC0000000, "irq_cont": 0xC0068458, "irq_spsr": True,
               "patch_set": "kernel/patchsets/3.1.3.json", "overlay": "rootfs/overlay-3.1.3.json",
               "status": "experimental: Darwin 10.0, archived IPSW; see docs/multi-version.md"},
     "4.0": {"build": "8A293", "ipsw": "iPod2,1_4.0_8A293_Restore.ipsw",

@@ -130,6 +130,10 @@ def resolve(staging):
     for macro, (fallback, overrides) in LITERALS.items():
         out[macro] = overrides.get(build, fallback)
     out["VIRT_BASE"], out["KERNEL_IRQ_CONT"] = layout_consts(staging)
+    import versions
+    info = next((v for v in versions.VERSIONS.values() if v["build"] == build), {})
+    if info.get("irq_spsr"):
+        out["KERNEL_IRQ_SPSR"] = 1
     return out
 
 

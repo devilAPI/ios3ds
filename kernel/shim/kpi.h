@@ -192,6 +192,11 @@
 #ifndef IOS3DS_KPI_VIRT_BASE
 #define IOS3DS_KPI_VIRT_BASE 0x80000000
 #endif
+/* 1: the kernel's _fleh_irq starts "sub lr,lr,#4; mrs sp,spsr" (Darwin 9/10:
+   2.2.1, 3.1.3) instead of 4.x's "mrs sp,cpsr"; the shim replays it */
+#ifndef IOS3DS_KPI_KERNEL_IRQ_SPSR
+#define IOS3DS_KPI_KERNEL_IRQ_SPSR 0
+#endif
 #ifndef IOS3DS_KPI_KERNEL_IRQ_CONT
 #define IOS3DS_KPI_KERNEL_IRQ_CONT 0x80066494
 #endif
