@@ -4230,7 +4230,7 @@ assembler output and GDB logs stay under `build/`; only
   python3 emu/soak.py --cycles 5 --icount 2` → **Result: PASS** (five cycles,
   zero failures).
 
-## NEXT. 3.1.3: the icon list is not off-screen — dump every candidate surface, then trace the two boot views (2026-11-25)
+## 124. 3.1.3: the icon list is not off-screen — dump every candidate surface, then trace the two boot views (2026-11-25)
 
 Continues §123. The archived 7E18 IPSW was fetched again into this worktree's
 `build/fw-3.1.3/` (sha1 `5f4f5c01…` verified by `fwprep.py`), and 8B117 was
