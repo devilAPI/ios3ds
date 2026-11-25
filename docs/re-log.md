@@ -5227,3 +5227,17 @@ and 2.2.1.
   WiFiManager …)`, `[wifid] en0 configured by configd`. Everything below the
   mailbox is the shared ARM9 driver (§103 for the HTC credit refill).
 - 4.1: the same lines as 4.2.1 (§52).
+
+### Verification
+
+- **[V]** 4.2.1 hashes of a fresh default build equal origin/main's (built
+  from `git archive origin/main`): kernel `505f451a…`, devtree `25b1bd23…`,
+  fakeio `e5fecd66…`, shim `a35631eb…`, gpu `6bdaf617…`, boot.cfg
+  `8d4079cf…`.
+- **[V]** Fresh-image soaks, `--cycles 5 --icount 2` (3.1.3 and 2.2.1 with
+  `--require-app` and the §128/§129 targets): **3.1.3 PASS, 2.2.1 PASS,
+  4.1 PASS, 4.2.1 PASS**.
+- **[V]** 4.2.1 with the changed `ios3ds-a80211.dylib`: `emu/wifi_ui_test.py`
+  (default options) **8/8 PASS** (a first run tapped the wrong network while
+  Settings was still drawing; the rerun passed). `make test` passes (the
+  three new CoreFoundation imports are in `scripts/ios-sdk-symbols.json`).
