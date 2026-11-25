@@ -73,8 +73,16 @@ IOHIDEventRef IOHIDEventCreateDigitizerFingerEvent(const void *allocator, uint64
 IOHIDEventRef IOHIDEventCreateKeyboardEvent(const void *allocator, uint64_t timeStamp,
         uint32_t usagePage, uint32_t usage, int down, uint32_t options);
 void IOHIDEventAppendEvent(IOHIDEventRef parent, IOHIDEventRef child);
+#ifdef INPUT_IOS3
+/* iOS 3.x (7E18): IOKit has no IOHIDEventSystemClient API and SpringBoard
+   serves no com.apple.iohideventsystem; every event already goes as a
+   GSEvent to SpringBoard's PurpleSystemEventPort, so the client calls are
+   no-ops and the connection check watches that port instead (re-log NEXT). */
+#define IOHIDEventSystemClientDispatchEvent(c, e) ((void)(c), (void)(e))
+#else
 IOHIDEventSystemClientRef IOHIDEventSystemClientCreate(const void *allocator);
 void IOHIDEventSystemClientDispatchEvent(IOHIDEventSystemClientRef client, IOHIDEventRef event);
+#endif
 void CFRelease(const void *cf);
 typedef const struct __CFString *CFStringRef;
 unsigned char CFStringGetCString(CFStringRef s, char *buf, long size, uint32_t encoding);
@@ -523,10 +531,17 @@ static void apply(const insample_t *prev, const insample_t *cur)
     }
 }
 
+#ifdef INPUT_IOS3
+static mach_port_t purple_port;
+#endif
 static int client_alive(void)
 {
     unsigned type = 0;
+#ifdef INPUT_IOS3
+    mach_port_t p = purple_port;
+#else
     mach_port_t p = CLIENT_PORT(client);
+#endif
     if (!p) return 0;
     if (mach_port_type(mach_task_self_, p, &type) != 0) return 0;
     return !(type & MACH_PORT_TYPE_DEAD_NAME);
@@ -563,6 +578,19 @@ int main(int argc, char **argv)
         sleep(10);
     }
 
+#ifdef INPUT_IOS3
+    /* SpringBoard checks in PurpleSystemEventPort once its event loop runs */
+    while (bootstrap_look_up(bootstrap_port, "PurpleSystemEventPort", &svc) != 0)
+        sleep(1);
+    purple_port = svc;
+    gs_load();
+    if (!gs_send_system) {
+        say("[input] GraphicsServices GSSendSystemEvent missing; retrying");
+        sleep(2);
+        return 1;
+    }
+    say("[input] connected to SpringBoard's PurpleSystemEventPort (pid %d)", getpid());
+#else
     /* SpringBoard's launchd job owns the service; wait until it is known */
     while (bootstrap_look_up(bootstrap_port, "com.apple.iohideventsystem", &svc) != 0)
         sleep(1);
@@ -579,6 +607,7 @@ int main(int argc, char **argv)
        SpringBoard restart and an input-daemon crash otherwise print the same
        line (re-log 100). */
     say("[input] connected to SpringBoard's HID event system (pid %d)", getpid());
+#endif
 
     memset(&state, 0, sizeof state);
     for (idle = 0;; idle++) {

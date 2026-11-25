@@ -95,15 +95,15 @@ class TestVersions(unittest.TestCase):
                     # Symbol-relocated 7E18 liblockdown activation patches,
                     # plus the three extra lockdown functions SpringBoard
                     # calls with the fake handle (remove/set/disconnect),
-                    # the tethered/display-kind gates, and the SBUIController
-                    # init patch that sends makeKeyAndVisible to its window.
+                    # the tethered/display-kind gates and the OpenGLES engine
+                    # match string. The SpringBoard lock/icon-list/key-window
+                    # patches of re-log 121-123 are gone: they only worked
+                    # around DataMigrator (re-log NEXT).
                     self.assertEqual([fp["offset"] for fp in recipe["file_patches"]],
                                      ["0x176a008", "0x1767600", "0x176a358",
                                       "0x176a3dc", "0x1769eb0", "0x176a1c4",
                                       "0x176a210", "0x176a260",
-                                      "0x95760", "0x1bde74c", "0xd478", "0x1c47c",
-                                      "0x48bc", "0xda860", "0xb9b2", "0xb9d2",
-                                      "0xb9e8", "0x2f91bb8"])
+                                      "0x95760", "0x1bde74c", "0x2f91bb8"])
                     # SpringBoard skips DataMigrator only when this matches
                     # the running build (re-log NEXT).
                     self.assertIn("<key>SBLastSystemVersion</key>\n\t<string>7E18</string>",
@@ -121,10 +121,14 @@ class TestVersions(unittest.TestCase):
                     self.assertEqual(list(recipe["plist_set"]),
                                      ["/System/Library/LaunchDaemons/com.apple.SpringBoard.plist"])
                 else:
-                    # only the 7E18 (-DGL_IOS3) build of our GL engine
+                    # only the 7E18 builds (-DGL_IOS3, -DINPUT_IOS3) of our
+                    # GL engine and input daemon
                     self.assertEqual(recipe["add"], {
                         "build/rootfs-add/ios3/MBXGLEngine":
-                        "/System/Library/Frameworks/OpenGLES.framework/MBXGLEngine.bundle/MBXGLEngine"})
+                        "/System/Library/Frameworks/OpenGLES.framework/MBXGLEngine.bundle/MBXGLEngine",
+                        "build/rootfs-add/ios3/ios3ds-input": "/usr/libexec/ios3ds-input",
+                        "tools/ios3ds-input/daemon/com.ios3ds.input.plist":
+                        "/System/Library/LaunchDaemons/com.ios3ds.input.plist"})
                     self.assertEqual(list(recipe["plist_set"]),
                                      ["/System/Library/LaunchDaemons/com.apple.SpringBoard.plist"])
                     self.assertEqual(recipe["plist_set"][
