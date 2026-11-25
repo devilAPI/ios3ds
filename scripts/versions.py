@@ -64,14 +64,10 @@ VERSIONS = {
               # no +23.65 dB like 4.2.1's N81 route, so the shim passes the
               # 3DS mic at unity (QEMU: 1000 -> 46.6 with 4.2.1's 2151)
               "mic_gain_q15": 32768,
-              # 7E18's EAGLServer::renderer() finds no GL display context, so
-              # CoreAnimation composites in software and swaps through
-              # IOMobileFramebuffer; our GL engine never presents, and the
-              # PICA200 mirror (which only copies after a GL present) would
-              # freeze the first frame. The ARM9 copies every frame instead.
-              "boot_cfg": {"gpu_mirror": ("0", "CoreAnimation composites in software (no GL "
-                                          "present marks a new frame): the ARM9 copies the "
-                                          "screen, re-log 128")},
+              # CoreAnimation composites through our GL engine on 3.1.3 since
+              # the EAGLServer API patch (rootfs/overlay-3.1.3.json, re-log
+              # NEXT): GL presents mark new frames, so the PICA200 mirror
+              # (the default gpu_mirror=1) works as on 4.2.1. No override.
               "patch_set": "kernel/patchsets/3.1.3.json", "overlay": "rootfs/overlay-3.1.3.json",
               "status": "experimental: Darwin 10.0, archived IPSW; see docs/multi-version.md"},
     "4.0": {"build": "8A293", "ipsw": "iPod2,1_4.0_8A293_Restore.ipsw",

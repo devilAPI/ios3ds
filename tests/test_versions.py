@@ -62,7 +62,10 @@ class TestVersions(unittest.TestCase):
         """Only older versions override boot.cfg lines; 4.2.1/4.1 have none."""
         self.assertNotIn("boot_cfg", versions.get())
         self.assertNotIn("boot_cfg", versions.get("4.1"))
-        self.assertEqual(versions.get("3.1.3")["boot_cfg"]["gpu_mirror"][0], "0")
+        # 3.1.3's CoreAnimation presents through the GL engine (EAGLServer
+        # API patch), so only 2.2.1 still needs the ARM9 copy
+        self.assertNotIn("boot_cfg", versions.get("3.1.3"))
+        self.assertEqual(versions.get("2.2.1")["boot_cfg"]["gpu_mirror"][0], "0")
         for v in versions.VERSIONS:
             for key, (val, why) in versions.get(v).get("boot_cfg", {}).items():
                 self.assertRegex(key, r"^[a-z0-9_]+$")
@@ -116,7 +119,7 @@ class TestVersions(unittest.TestCase):
                                      ["0x176a008", "0x1767600", "0x176a358",
                                       "0x176a3dc", "0x1769eb0", "0x176a1c4",
                                       "0x176a210", "0x176a260",
-                                      "0x95760", "0x1bde74c", "0x2f91bb8",
+                                      "0x95760", "0x1bde74c", "0x1bde788", "0x2f91bb8",
                                       "0xfa800"])  # VirtualAudio N72/N82 swap (mic)
                     # SpringBoard skips DataMigrator only when this matches
                     # the running build (re-log 125).
@@ -153,7 +156,14 @@ class TestVersions(unittest.TestCase):
                         "build/rootfs-add/ios2/ios3ds-mcud": "/usr/libexec/ios3ds-mcud",
                         "tools/ios3ds-mcu/daemon/com.ios3ds.mcud.plist":
                         "/System/Library/LaunchDaemons/com.ios3ds.mcud.plist",
-                        "build/rootfs-add/ios2/ios3ds-tone": "/usr/libexec/ios3ds-tone"})
+                        "build/rootfs-add/ios2/ios3ds-tone": "/usr/libexec/ios3ds-tone",
+                        # fake GPS: applog hooks, the tool, the gated test job
+                        "build/rootfs-add/ios2/ios3ds-applog.dylib": "/usr/lib/ios3ds-applog.dylib",
+                        "build/rootfs-add/ios2/ios3ds-diag": "/usr/libexec/ios3ds-diag",
+                        "build/rootfs-add/ios2/ios3ds-gps": "/usr/bin/ios3ds-gps",
+                        "build/rootfs-add/ios2/ios3ds-gpstest": "/usr/libexec/ios3ds-gpstest",
+                        "tools/ios3ds-gps/com.ios3ds.gpstest.plist":
+                        "/System/Library/LaunchDaemons/com.ios3ds.gpstest.plist"})
                     self.assertEqual(list(recipe["plist_set"]),
                                      ["/System/Library/LaunchDaemons/com.apple.SpringBoard.plist"])
                     env = recipe["plist_set"]["/System/Library/LaunchDaemons/com.apple.SpringBoard.plist"][
@@ -181,7 +191,13 @@ class TestVersions(unittest.TestCase):
                         "/System/Library/LaunchDaemons/com.ios3ds.wifi.plist",
                         "build/rootfs-add/usr/libexec/ios3ds-diag": "/usr/libexec/ios3ds-diag",
                         "tools/ios3ds-diag/com.ios3ds.urltest.plist":
-                        "/System/Library/LaunchDaemons/com.ios3ds.urltest.plist"})
+                        "/System/Library/LaunchDaemons/com.ios3ds.urltest.plist",
+                        # fake GPS: applog hooks, the tool, the gated test job
+                        "build/rootfs-add/usr/lib/ios3ds-applog.dylib": "/usr/lib/ios3ds-applog.dylib",
+                        "build/rootfs-add/usr/bin/ios3ds-gps": "/usr/bin/ios3ds-gps",
+                        "build/rootfs-add/usr/libexec/ios3ds-gpstest": "/usr/libexec/ios3ds-gpstest",
+                        "tools/ios3ds-gps/com.ios3ds.gpstest.plist":
+                        "/System/Library/LaunchDaemons/com.ios3ds.gpstest.plist"})
                     self.assertEqual(recipe["plist_merge"], {
                         "/System/Library/LaunchDaemons/com.apple.configd.plist": {
                             "EnvironmentVariables": {"DYLD_INSERT_LIBRARIES": "/usr/lib/ios3ds-a80211.dylib"}}})

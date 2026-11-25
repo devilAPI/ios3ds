@@ -59,6 +59,12 @@ def main():
     ap.add_argument("--boot-timeout", type=float, default=1200)
     ap.add_argument("--slider3d", type=int, default=-1,
                     help="set the 3D slider (QOM mcu-3d-slider, e.g. 255) after boot, for stereo3d=1 images")
+    ap.add_argument("--open", default="",
+                    help="X,Y: time opening the app icon at this iOS point (closed with Home) instead of "
+                         "the Utilities folder; for 3.x/2.x, which have no folders")
+    ap.add_argument("--home-max-stddev", type=float, default=70,
+                    help="greyscale stddev below which a stable frame counts as the home screen "
+                         "(3.x/2.x home screens have a black wallpaper, ~86: use 100)")
     ap.add_argument("--settle-limit", type=float, default=45,
                     help="seconds an open/close has to settle before it counts as failed")
     a = ap.parse_args()
@@ -151,7 +157,7 @@ def main():
             # screen. Taking it as the reference made every folder close look
             # like a timeout (2026-11-24).
             stable_home = (prev is not None and mean(im) > 20 and
-                           ImageStat.Stat(grey(im)).stddev[0] < 70 and diff(im, prev) < 1.0)
+                           ImageStat.Stat(grey(im)).stddev[0] < a.home_max_stddev and diff(im, prev) < 1.0)
             if stable_home:
                 home_ref = im
                 break
@@ -161,13 +167,14 @@ def main():
         log("no stable home screen; aborting (boot %s)" % booted)
     else:
         # wait for the folder warm-up so every measurement is the steady state
-        while time.time() - t0 < 120 and "sbwarm" not in read_log(a.sd):
+        while not a.open and time.time() - t0 < 120 and "sbwarm" not in read_log(a.sd):
             time.sleep(5)
 
         for i in range(a.runs):
             r = {"run": i}
-            log("run %d: opening the Utilities folder" % i)
-            tap(*UTILITIES)
+            target = tuple(int(v) for v in a.open.split(",")) if a.open else UTILITIES
+            log("run %d: opening %s" % (i, "the app at %d,%d" % target if a.open else "the Utilities folder"))
+            tap(*target)
             _, r["open_s"] = wait_for("r%02d_open" % i, True, a.settle_limit)
             r["open_settled"] = diff(shot("r%02d_open_final" % i), home_ref) > 12
             log("run %d: folder open in %.1f s" % (i, r["open_s"]))

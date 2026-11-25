@@ -814,7 +814,7 @@ All items below were ported or shown unnecessary; kept for the history.
 |---|---|---|
 | 4.2.1 (8C148) | home screen, apps, input, Cydia/TLSFix | **PASS** (5 cycles) |
 | 4.1 (8B117) | home screen, apps, input, Cydia/TLSFix (APT against the local repo, Cydia opens); all re-log 101/111 open items resolved (re-log 131, iOS 4.1 completeness) | **PASS**, 10 cycles with `--require-app` |
-| 3.1.3 (7E18) | **home screen, apps open and render, clock runs, taps and buttons.** DataMigrator skipped (`SBLastSystemVersion`), shim `mrs sp,spsr` IRQ replay, 822-slot GL dispatch, GSEvent input daemon; CoreAnimation composites in software and the ARM9 copies the screen (`gpu_mirror=0`, re-log 128) | **PASS**, 10 cycles with `--require-app` (every tap opened an app) |
+| 3.1.3 (7E18) | **home screen, apps open and render, clock runs, taps and buttons.** DataMigrator skipped (`SBLastSystemVersion`), shim `mrs sp,spsr` IRQ replay, 822-slot GL dispatch, GSEvent input daemon; CoreAnimation composites on the PICA200 with the GPU mirror on (re-log NEXT; was software + ARM9 copy, re-log 128) | **PASS**, 10 cycles with `--require-app` (every tap opened an app) |
 | 2.2.1 (5H11a) | **home screen, apps open and render, taps and buttons.** Kernel `cs-invalid-page-allow`, fixed liblockdown stubs, `CA_ENABLE_MBX2D=0`, 2.x tool ABI (classic binding, r9, 48-byte GSEvents) | **PASS**, 10 cycles with `--require-app` |
 
 Driver matrix (QEMU-verified unless marked [G]; "off" = cleanly not installed
@@ -823,23 +823,22 @@ or not registered, with the reason):
 | Driver | 3.1.3 | 2.2.1 |
 |---|---|---|
 | Touch + Home/Power/volume buttons | works: `ios3ds-input -DINPUT_IOS3`, GSEvents to PurpleSystemEventPort | works: `-DINPUT_IOS2` (48-byte records), 2.x link |
-| Display | works: software CA, ARM9 CPU copy every frame | works: same |
-| GPU (PICA200) | mirror off (no GL present marks CA frames); `MBXGLEngine -DGL_IOS3` installed for EAGL apps [G: no EAGL app tested]; CA's own GL path unused (`EAGLServer::renderer()` gets no context) | off: 2.x OpenGLES talks to MBX directly, no engine bundle; MBX2D disabled |
+| Display | works: CA composites on the PICA200, GPU mirror (`gpu_mirror=1`) | works: software CA, ARM9 CPU copy every frame |
+| GPU (PICA200) | works: CoreAnimation renders through `MBXGLEngine -DGL_IOS3` (QuartzCore `new_server` asked EAGL for API 2, which 7E18 OpenGLES never gives the MBX engine; patched to API 1), mirror on, `[gl] CA compositor: OpenGL ES on the PICA200`; slower than the software path in QEMU, [G] faster on hardware is expected, not measured; after Home the icon fly-in's last frame often needs a second Home/touch to show | off: 2.x OpenGLES.framework *is* the IMG MBX driver (no engine bundle); a GL engine means replacing the framework (EAGL classes + ~214 GLES/IMGegl exports) with one built on the ios3ds GL core: possible, not done |
 | Battery | works: shim IOPMPowerSource, refreshed by mcud polling | works: shim IOPMPowerSource; kernel patch `audio-pm-msg-no-store` (AppleEmbeddedAudio's PM handler zeroed IOPMrootDomain's retain count) and the Darwin 9 vtable bias (`IOS3DS_KPI_VT_BIAS`); level + charging in the status bar and on the lock screen |
 | Volume slider | works: mcud `-DMCU_OLD` → AVSystemController | works (same) |
 | No-sleep assertion | works: mcud | works: mcud |
 | Lid (shell close/open) | works: close = Lock (POWER tap) + LCDs off, open = Home tap + LCDs on (needs the mcud backlight above) | works: same |
 | Lock / auto-lock | works: kernel patch `s5l-perf-nowait` (the clock controller's performance-state wait blocked the CLCD wake); SELECT/POWER lock, Home wakes, slide unlocks; SpringBoard's default auto-lock | works: same (5H11a patch at 0xc05e2b40) |
 | Brightness | works: mcud `-DMCU_OLD` reads `SBBacklightLevel2` (Settings slider) from mobile's springboard plist, factor 0 while the screen is off; auto-brightness (New 3DS camera ALS) on top | works: same |
-| Accelerometer / gyro | off: needs IOHIDEventSystemClient (4.x) / CoreMotion (4.x); iPod2,1 3.x has no gyro API | off: same |
+| Accelerometer / gyro | accelerometer works (Apple's AppleLIS302DL on the emulated LIS302DL, as 4.2.1): SpringBoard orientation 0→1→4, Safari turns to landscape. Gyro: n/a (no CoreMotion before 4.0) | accelerometer off: 5H11a's AppleLIS302DL never sends an I2C transfer (no probe of reg 0x0f), not traced. Gyro: n/a |
 | Audio | works in QEMU: speaker output (UI sounds, `ios3ds-tone`; DMA TC IRQs injected through the version's IRQ path), volume → CSND, mic input via the VirtualAudio N82-slot swap at unity gain (re-log 130); [G] real sound, headphones, keyboard click; test song not shown (4.x library format) | works in QEMU: mediaserverd runs and reaches IOAudio/I2C, `ios3ds-tone` output streams with TC IRQs and a 5999-peak CSND WAV (re-log 134). No mic route: the 0x9a358 product swap breaks category activation and was removed; headset-jack emulation still reports no input. [G] real sound |
 | Wi-Fi (`ios3ds-wifid`/a80211) | works: Settings toggle/scan/WPA2 join/DHCP, auto-join from the keychain, status-bar bars, Safari loads pages (first cold-start page fails, later ones load); shim mailbox VA from the KPI base, 3.x event device + 144-byte scan results (re-log 133) [G] | off: no IOUserEthernet in 5H11a and a dynamic Apple80211.framework (Aeropuerto); needs a kernel ifnet (re-log 133) |
-| Camera (`vcd`) | off: iPod2,1 has no camera stack before 4.x | off: same |
-| GPS | off: 4.x CoreLocation hooks | off: same |
+| Camera (`vcd`) | n/a: iPod2,1 7E18 has no Camera.app and no MediaCapture plugin (Camera.framework/Celestial capture code exists but has no driver to bind); a 3DS camera here means a new capture stack, not a driver | n/a: same |
+| GPS | partial: `ios3ds-applog` hooks work on 3.x (2.0 `CLLocation` initializer, instance `-locationServicesEnabled`): `ios3ds-gpstest` gets 52.52,13.405 at 1 Hz. Stock apps do not load applog yet (SBGuardMalloc does not reach them); no `/bin/sh`, so `ios3ds-gps set` from gpstest fails | partial: same, with 2.x builds (dylib glue `-DDYLD2_DYLIB`) |
 | Cydia / TLSFix | Cydia 1.1.30 + APT/dpkg installed and Cydia opens [V]; TLSFix left out (needs Substrate via ios3ds-applog, not installed on 3.x); refresh untested (Wi-Fi works on 3.1.3 since re-log 133, refresh not tried) | off: Cydia 1.1.30/APT binaries use LC_DYLD_INFO_ONLY, which 2.x dyld cannot load (icon appeared, tap launched nothing) |
 
 4.1 (8B117) Wi-Fi: works with the 4.2.1 tools unchanged (wifi_test 20/20,
-Settings join 8/8, Safari loads pages; re-log 133).
 
 The 4.2.1 and 4.1 builds are unchanged by all of this: every older-version
 switch is either in `rootfs/overlay-*.json`, `kernel/patchsets/*.json`, or a

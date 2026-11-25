@@ -102,9 +102,14 @@ int main(int argc, char **argv)
     id delegate = x_msgSend(x_msgSend(ns, x_sel("alloc")), x_sel("init"));
     fprintf(out, "[gpstest] manager %p, delegate %p\n", mgr, delegate);
     x_msgSend(mgr, x_sel("setDelegate:"), delegate);
-    fprintf(out, "[gpstest] services=%d authorization=%d\n",
-            (int)(uintptr_t)x_msgSend(mgrClass, x_sel("locationServicesEnabled")),
-            (int)(uintptr_t)x_msgSend(mgrClass, x_sel("authorizationStatus")));
+    /* 4.x: class methods; 2.x/3.x: -locationServicesEnabled only, no
+       authorization status (reported as -1) */
+    SEL se = x_sel("locationServicesEnabled"), au = x_sel("authorizationStatus");
+    SEL rts = x_sel("respondsToSelector:");
+    int services = (char)(uintptr_t)x_msgSend(mgrClass, rts, se)
+        ? (char)(uintptr_t)x_msgSend(mgrClass, se) : (char)(uintptr_t)x_msgSend(mgr, se);
+    int auth = (char)(uintptr_t)x_msgSend(mgrClass, rts, au) ? (int)(uintptr_t)x_msgSend(mgrClass, au) : -1;
+    fprintf(out, "[gpstest] services=%d authorization=%d\n", services, auth);
     fprintf(out, "[gpstest] calling startUpdatingLocation\n");
     x_msgSend(mgr, x_sel("startUpdatingLocation"));
     fprintf(out, "[gpstest] updates started\n");

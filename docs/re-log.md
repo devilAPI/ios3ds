@@ -5362,3 +5362,123 @@ and 2.2.1.
   frames, peak 13273 (a boot UI sound overlaps the first tone), 264,089
   non-silent frames. A final `ios3ds-tone rec` on the same tree still logs
   `input available 0, route "Speaker"` with no `rx start`.
+## NEXT. Sensors, camera, GPS and GPU on 3.1.3, 2.2.1 and 4.1 (2026-11-25)
+
+Firmware staged from compat16 into this worktree's `build/fw-*`. 7E18 code read
+from its dyld shared cache (symbols kept in the 3.x cache) with
+`llvm-objdump-18`; all VAs below are 7E18 cache addresses.
+
+### GPU: why CoreAnimation got no GL context on 3.1.3
+
+- **[V]** `EAGLServer::renderer()` (0x31bda370) returns its cached renderer,
+  else, while `enable_ogl` (0x382e7d85, set from `CA_ENABLE_OGL`, default 1)
+  is on, calls `Display::eagl_context(api)` → `CAEAGLContextCreate` →
+  `[[EAGLContext alloc] initWithAPI:api properties:]`. `api` is the third
+  constructor argument, which `M2Display::new_server` (0x31bde71c) passes as
+  the display kind: 2 (re-log 120 forces the kind to 2 to get an EAGLServer).
+- **[V]** 7E18 `-[EAGLSharegroup initWithAPI:require_acceleration:]`
+  (0x32f80a98) only tries the MBX engine bundle (ours, `-DGL_IOS3`) when the
+  API is 1 (`cmp r8,#1` at 0x32f80bd0). So every frame asked for an ES2
+  context that no plugin provides, got nil, and fell back to `sw_renderer()`.
+  CA's 3.x OGL renderer is `CA::OGL::GLESContext` only (no GLES2 classes).
+- **[V]** Fix: cache offset 0x1bde788 `mov r3,r4` → `mov r3,#1`
+  (rootfs/overlay-3.1.3.json, original bytes verified). The log now shows
+  `[gl] context created (pid 21)`, `first BindCoreSurface`, `first
+  SwapNotification`, `[gl] CA scene check ... 6 of 9216 pixels differ` and
+  `[gl] CA compositor: OpenGL ES on the PICA200`. `versions.py` drops the
+  3.1.3 `gpu_mirror=0` override (2.2.1 keeps it); `[gpu] display mirror
+  ACTIVE`, `mirror: 120 frames in 30 s` while animating.
+- **[V]** First soak with it: kernel panic `fault_addr=0x83070000` in the
+  shim right after `[gl] pica: surface ... not physically contiguous: the GPU
+  writes it through an arena copy` (CA's second surface after Home).
+  `PICA_OP_SCATTER`'s `p_map_pa` hard-coded 4.x's linear-map offset
+  0x60000000; on Darwin 10 (virt base 0xC0000000) it is 0xA0000000. Now
+  `IOS3DS_KPI_VIRT_BASE - 0x20000000`, which is the same constant on 4.2.1
+  (gpu.bin hash unchanged).
+- **[V]** Performance, `emu/perf.py --runs 3 --icount 2 --open 123,226
+  --home-max-stddev 100` (new options: tap an app instead of the Utilities
+  folder, and accept the black 3.x wallpaper as home), Notes open/close:
+  software CA + ARM9 copy (main): open 4.1 / 6.1 / 6.1 s, close 15.0 / 4.0 /
+  4.0 s, boot 88 s. PICA200 CA + mirror: open 46.4 / 10.1 / 14.2 s, close
+  46.5 / 20.2 / 20.2 s (first run includes the GPU bring-up), CA frame
+  histogram 25 frames/s, 40 ms average while animating. **In QEMU the GPU
+  path is slower**: the PICA200 model and the mirror's read-out (~10 ms per
+  frame) run on the host CPU, while the software compositor is plain TCG
+  code. On hardware the 4.2.1 data (re-log 77ff.) says the GPU path is the
+  faster one, but 3.1.3 on hardware was not measured. **[G]** checklist:
+  boot 3.1.3 with `gpu_diag=1`, open/close Notes 5×, look for `[gl] CA
+  compositor: OpenGL ES on the PICA200`, `[perf] CA:` lines and `[gpu]
+  mirror: N frames`; if it is slower than before, set `gpu_mirror=0` and
+  `CA_ENABLE_OGL=0` (SpringBoard plist) to get the old path back.
+- **2.2.1 GL engine:** 5H11a's OpenGLES.framework *is* the IMG MBX driver
+  (`IMGegl*`, `mbx_service`, 214 exports, no engine bundle), and QuartzCore
+  links it plus MBX2D directly. A PICA200 engine there means replacing the
+  framework with our own EAGL classes and GLES1 exports on the ios3ds GL core
+  (2.x ABI, r9, classic binding). Possible, not attempted this round; 2.2.1
+  stays software CA + ARM9 copy.
+
+### Accelerometer / gyro
+
+- **[V]** 3.1.3 already worked: 7E18's AppleLIS302DL probes the shim's
+  emulated LIS302DL (`ios3ds-mcu: accelerometer read reg 0x0f`, `powered on
+  by AppleLIS302DL (CTRL_REG1 0x47)`), SpringBoard's orientation goes
+  0→1→4 with `mcu-orient`, and Safari's page turns to landscape (QEMU
+  screenshot). The driver matrix said "off" only because the 4.x
+  client-side route does not exist; the kernel route is the shipping one.
+- **[V]** 4.1: same (`read reg 0x0f`, orientation 0→3, Safari bookmarks in
+  landscape). Gyro off on 4.1: the `gyro-usage`/`gyro-dispatch` vtable
+  patches were never relocated to 8B117 (`[gyrotest] gyroAvailable 0`).
+- **[V]** 2.2.1: no transfer to the accelerometer address ever reaches the
+  shim (only the audio codecs at 2b80/2c00), although the node and
+  AppleLIS302DL exist in 5H11a. Not traced (next: breakpoint the kext's
+  start/probe). Gyro: no CoreMotion before 4.0 on any version → n/a.
+
+### Camera
+
+- **[V]** n/a on 3.1.3 and 2.2.1: no Camera.app, no MediaCapture plugin
+  (our `vcd` is a 4.x MediaCapture plugin); 7E18 has Camera.framework and
+  Celestial capture code, but no driver interface we could bind without
+  writing a whole capture stack. UIImagePickerController reports no camera,
+  which is honest for an iPod2,1 of that era. 4.1: the ARM9/kernel side comes
+  up (`[cam] ... chip id 2280` ×3); Camera.app not exercised this round.
+
+### GPS
+
+- **[V]** applog's CoreLocation hooks run on 3.x/2.x: instance
+  `-locationServicesEnabled` is hooked too, and `CLLocation` is built with the
+  2.0 initializer when the 4.2 one is missing. `ios3ds-gpstest` (3.1.3, 2.2.1
+  with 2.x builds, and 4.1): `services=1 authorization=-1`, a `delegate:` and
+  `location:` 52.520000,13.405000 / 50 m every second.
+- **[V]** 2.x builds of applog (dylib), diag, gps and gpstest:
+  `tools/common/dyld2_glue.S -DDYLD2_DYLIB` reaches the image header through a
+  rebased `__DATA` word (a dylib can slide); executables keep the old glue
+  (ios3ds-mcud 2.x binary unchanged).
+- **[V]** Not done: stock apps on 3.x/2.x do not get applog. 7E18's
+  `_addInternalDebugVariablesToEnvironment` (0x19461) reads `SBGuardMalloc`
+  (no `SBGuardMallocAlways` before 4.x) and removes it after one use; even with
+  that `removeObjectForKey:` nopped, `diag=1` showed no `[applog]` line from
+  MobileMaps, so the insertion was dropped again. `ios3ds-gps set` from
+  gpstest fails on 3.x/2.x because there is no `/bin/sh` for `system()`.
+
+### Verification
+
+- 4.2.1 default build hashes (identical to before this branch): kernel
+  `505f451a…`, devtree `25b1bd23…`, fakeio `e5fecd66…`, shim `a35631eb…`,
+  gpu `6bdaf617…`, boot.cfg `8d4079cf…`.
+- 3.1.3 soak with the GPU path (`--cycles 5 --require-app --crashlogs`):
+  first run FAIL (the panic above), after the shim fix **PASS** (0 panics,
+  every tap opened an app, cycles 1 and 3 needed a second Home).
+- Final fresh-image soaks (`--cycles 5 --icount 2`; old versions with
+  `--require-app --crashlogs`): **2.2.1 PASS** (0 restarts, every tap opened
+  an app, home diff 0.0), **3.1.3 PASS** (0 panics, 0 restarts, every tap
+  opened an app; a mediaserverd crash report, as with the audio DMA
+  failures), **4.2.1 PASS** (0 restarts, home after every Home).
+- **Open on 3.1.3 with the GPU path:** after Home from an app the first frame
+  that settles is the home screen with most icons missing/dark (the icon
+  fly-in's last frame is not what the mirror shows); a second Home (or any
+  touch) redraws it. Every 3.1.3 cycle in the final soak needed that second
+  Home; with software CA (re-log 128) the first Home was enough. Next: check
+  whether CA's final post-animation frame is presented through the engine
+  (`SwapNotification` count) and whether the mirror drops the last
+  `m_dirty` (it runs every 2nd VBlank). **[G]** on hardware: log `[gpu] mirror`
+  counts after Home and a photo of the home screen 2 s after Home.

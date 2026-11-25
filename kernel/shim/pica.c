@@ -175,7 +175,7 @@ static void *p_map_pa(uint32_t pa, uint32_t len)
 {
     if (pa < 0x20000000u || pa + len > 0x20000000u + FCRAM_N3DS_SIZE)
         return 0;
-    return (void *)(pa + 0x60000000u);
+    return (void *)(pa + (IOS3DS_KPI_VIRT_BASE - 0x20000000u));   /* XNU linear map */
 }
 static void p_cache_user(uint32_t va, uint32_t len)
 {

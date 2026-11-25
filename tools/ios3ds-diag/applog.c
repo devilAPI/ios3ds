@@ -653,14 +653,20 @@ static id gps_make_location(void)
 
     SEL allocSel = p_sel("alloc");
     SEL initSel = p_sel("initWithCoordinate:altitude:horizontalAccuracy:verticalAccuracy:course:speed:timestamp:");
+    /* iOS 2.x/3.x have only the 2.0 initializer (no course/speed) */
+    SEL oldSel = p_sel("initWithCoordinate:altitude:horizontalAccuracy:verticalAccuracy:timestamp:");
+    int full = (char)(uintptr_t)p_msgSend(locCls, p_sel("instancesRespondToSelector:"), initSel) != 0;
     id obj = p_msgSend(locCls, allocSel);
     typedef struct { double latitude; double longitude; } Coord;
     Coord coord = { gps_lat, gps_lon };
     /* -date would autorelease; there is no run-loop pool inside a timer
        callback, so make our own date and release it after the init. */
     id date = p_msgSend(p_msgSend(nsDate, p_sel("alloc")), p_sel("init"));
-    id loc = ((id (*)(id, SEL, Coord, double, double, double, double, double, id))p_msgSend)(
-        obj, initSel, coord, 0.0, gps_acc, gps_acc, -1.0, -1.0, date);
+    id loc = full
+        ? ((id (*)(id, SEL, Coord, double, double, double, double, double, id))p_msgSend)(
+              obj, initSel, coord, 0.0, gps_acc, gps_acc, -1.0, -1.0, date)
+        : ((id (*)(id, SEL, Coord, double, double, double, id))p_msgSend)(
+              obj, oldSel, coord, 0.0, gps_acc, gps_acc, date);
     p_msgSend(date, p_sel("release"));
     if (!loc) p_msgSend(obj, p_sel("release"));
     return loc;
@@ -736,6 +742,7 @@ static void gps_start_timer(void)
 
 static IMP gps_orig_locationServicesEnabled = NULL;
 static IMP gps_orig_authorizationStatus = NULL;
+static IMP gps_orig_instLocationServicesEnabled = NULL;   /* 2.x/3.x: an instance method */
 static IMP gps_orig_location = NULL;
 static IMP gps_orig_startUpdating = NULL;
 static IMP gps_orig_stopUpdating = NULL;
@@ -745,6 +752,14 @@ static char gps_hook_locationServicesEnabled(id self, SEL cmd)
     if (gps_enabled) return 1;
     if (gps_orig_locationServicesEnabled)
         return ((char (*)(id, SEL))gps_orig_locationServicesEnabled)(self, cmd);
+    return 0;
+}
+
+static char gps_hook_instLocationServicesEnabled(id self, SEL cmd)
+{
+    if (gps_enabled) return 1;
+    if (gps_orig_instLocationServicesEnabled)
+        return ((char (*)(id, SEL))gps_orig_instLocationServicesEnabled)(self, cmd);
     return 0;
 }
 
@@ -810,6 +825,8 @@ static void gps_install_hooks(void)
     if (m) gps_orig_locationServicesEnabled = p_method_setImplementation(m, (IMP)gps_hook_locationServicesEnabled);
     m = p_class_getClassMethod(cls, p_sel("authorizationStatus"));
     if (m) gps_orig_authorizationStatus = p_method_setImplementation(m, (IMP)gps_hook_authorizationStatus);
+    m = p_class_getInstanceMethod(cls, p_sel("locationServicesEnabled"));
+    if (m) gps_orig_instLocationServicesEnabled = p_method_setImplementation(m, (IMP)gps_hook_instLocationServicesEnabled);
     m = p_class_getInstanceMethod(cls, p_sel("location"));
     if (m) gps_orig_location = p_method_setImplementation(m, (IMP)gps_hook_location);
     m = p_class_getInstanceMethod(cls, p_sel("startUpdatingLocation"));
