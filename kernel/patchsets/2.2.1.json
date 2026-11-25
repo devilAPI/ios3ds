@@ -106,5 +106,12 @@
   "new": "65e0",
   "why": "5H11a commpage_set_timestamp: beq -> b",
   "va": "0xc006978c"
+ },
+ {
+  "name": "cs-invalid-page-allow",
+  "orig": "b0b502af",
+  "new": "00207047",
+  "why": "5H11a cs_invalid_page (Thumb, called from vm_fault_enter at 0xc003c50e for a tainted page or an executable page without a validated hash) -> return 0 (movs r0,#0; bx lr). The page is mapped and the process is neither killed (CS_KILL) nor refused (CS_HARD), so byte-patched Apple dylibs keep their stock signature blob and still load (the blob itself stays valid; only the patched pages miss their hash). Re-log 116 showed that re-signing breaks dyld and that patched pages killed SpringBoard; this is the 2.x equivalent of the cs_enforcement_disable boot-arg, which xnu-1228 does not have.",
+  "va": "0xc01046f6"
  }
 ]

@@ -73,15 +73,30 @@ void CFRelease(CFTypeRef cf);
 #define kCFNumberFloatType    12
 #define kCFNumberIntType      3
 
-IOHIDEventSystemClientRef IOHIDEventSystemClientCreate(const void *allocator);
 int IOPMAssertionCreateWithName(CFStringRef type, uint32_t level, CFStringRef name, uint32_t *id);
 #define kIOPMAssertionLevelOn 255
+#ifdef MCU_OLD
+/* iOS 2.x/3.x (-DMCU_OLD): IOKit has no IOHIDEventSystemClient API and
+   SpringBoard serves no com.apple.iohideventsystem, so there is never a
+   client: no brightness properties to read and no accelerometer events to
+   send. Battery (the sysctl read refreshes the shim's IOPMPowerSource), the
+   volume slider (Celestial's AVSystemController) and the no-sleep assertion
+   still work (re-log NEXT). */
+#define IOHIDEventSystemClientCreate(a) ((IOHIDEventSystemClientRef)0)
+#define IOHIDEventSystemClientCopyProperty(c, k) ((void)(c), (void)(k), (CFTypeRef)0)
+#define IOHIDEventSystemClientDispatchEvent(c, e) ((void)(c), (void)(e))
+#define IOHIDEventCreateAccelerometerEvent(a, t, x, y, z, o) ((void)(x), (void)(y), (void)(z), (IOHIDEventRef)0)
+#define SB_UP 1
+#else
+IOHIDEventSystemClientRef IOHIDEventSystemClientCreate(const void *allocator);
 CFTypeRef IOHIDEventSystemClientCopyProperty(IOHIDEventSystemClientRef client, CFStringRef key);
 void IOHIDEventSystemClientDispatchEvent(IOHIDEventSystemClientRef client, IOHIDEventRef event);
 /* 0x337faca4 in the 4.2.1 dyld cache: (alloc r0, timestamp r1:r2, x r3,
    y [sp], z [sp+4], options [sp+8]) -> the common 3-axis creator, type 13 */
 IOHIDEventRef IOHIDEventCreateAccelerometerEvent(const void *allocator, uint64_t timeStamp,
         float x, float y, float z, uint32_t options);
+#define SB_UP client
+#endif
 
 /* ---- Objective-C (AVSystemController lives in Celestial.framework) ------- */
 typedef void *id;
@@ -323,6 +338,21 @@ int main(int argc, char **argv)
             }
         }
 
+#ifdef MCU_OLD
+        /* no HID client to wait for: take the no-sleep assertion once */
+        if (!opt_sleepok && !sleep_assertion && (loops % 20) == 0) {
+            static CFStringRef k_idle, k_why;
+            uint32_t aid = 0;
+            int r;
+            if (!k_idle) k_idle = CFStringCreateWithCString(0, "NoIdleSleepAssertion", kCFStringEncodingUTF8);
+            if (!k_why) k_why = CFStringCreateWithCString(0, "ios3ds: no wake source for system sleep",
+                                                          kCFStringEncodingUTF8);
+            r = IOPMAssertionCreateWithName(k_idle, kIOPMAssertionLevelOn, k_why, &aid);
+            if (!r) sleep_assertion = 1;
+            if (!r || loops == 0)
+                say("[mcud] NoIdleSleepAssertion %s (0x%x, id %u)", r ? "FAILED" : "held", (unsigned)r, (unsigned)aid);
+        }
+#endif
         /* volume slider: absolute, 0..63 -> 0..1; move iOS only when the
            slider moved (by 2 raw steps or to an end), so iOS' own buttons
            (L/R) keep working in between */
@@ -332,7 +362,7 @@ int main(int argc, char **argv)
                 vol_last = v;
                 vol_pending = 1;
             }
-            if (vol_pending && client) {
+            if (vol_pending && SB_UP) {
                 float f = v / 63.0f;
                 if (volume_set(f)) {
                     vol_pending = 0;

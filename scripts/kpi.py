@@ -134,6 +134,8 @@ def resolve(staging):
     info = next((v for v in versions.VERSIONS.values() if v["build"] == build), {})
     if info.get("irq_spsr"):
         out["KERNEL_IRQ_SPSR"] = 1
+    if info.get("no_battery_ps"):
+        out["MCU_NO_PMPS"] = 1
     return out
 
 

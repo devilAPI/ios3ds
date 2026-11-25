@@ -235,11 +235,23 @@ static void send_touch(float nx, float ny, int touch, uint32_t mask)
 typedef struct {
     int32_t type, subtype;
     float x, y, wx, wy;
+#ifndef INPUT_IOS2
     uint32_t context;
+#endif
     uint32_t ts_lo, ts_hi;          /* uint64 timestamp, 4-byte aligned on armv6 */
     uint32_t window, flags, pid, info_size;
 } gsrec_t;
+#ifdef INPUT_IOS2
+/* 5H11a GraphicsServices: no context word, so the record is 48 bytes:
+   timestamp at +0x18 (GSEventGetTimestamp), infoSize at +0x2c (_GSSendEvent
+   sizes the message as infoSize + 0x30 + 24), hand info at +0x30
+   (GSEventGetHandInfo), path infos at +0x54 (re-log NEXT). */
+_Static_assert(sizeof(gsrec_t) == 48, "GSEventRecord (iOS 2)");
+#define GSREC_SIZE 48
+#else
 _Static_assert(sizeof(gsrec_t) == 52, "GSEventRecord (iOS 4)");
+#define GSREC_SIZE 52
+#endif
 
 static int gs_type(uint32_t usage)
 {
@@ -273,7 +285,7 @@ typedef struct {
         uint32_t window;
     } path;
 } gstouch_t;
-_Static_assert(sizeof(gstouch_t) == 52 + 0x24 + 0x18, "GS hand event");
+_Static_assert(sizeof(gstouch_t) == GSREC_SIZE + 0x24 + 0x18, "GS hand event");
 
 static void (*gs_send_event)(gsrec_t *, mach_port_t);
 static mach_port_t (*gs_named_port)(const char *);

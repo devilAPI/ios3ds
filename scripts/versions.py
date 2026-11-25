@@ -31,6 +31,14 @@ VERSIONS = {
               "sha1": "9af5625ea34acdd8abeb6fce71a72651d0c815d5", "ba_version": 3,
               "virt_base": 0xC0000000, "irq_cont": 0xC006540C, "irq_spsr": True,
               "dt_delete": ["arm-io/usb-otg"],
+              # the shim's IOPMPowerSource made 5H11a IOPanic in
+              # IORegistryEntry::free (freed while attached) on the first
+              # registry match after it registered: no battery service
+              "no_battery_ps": True,
+              # no GL engine on 2.x: CoreAnimation composites in software and
+              # nothing marks a new frame for the PICA200 mirror (see 3.1.3)
+              "boot_cfg": {"gpu_mirror": ("0", "CoreAnimation composites in software (no GL "
+                                          "engine on 2.x): the ARM9 copies the screen, re-log NEXT")},
               "patch_set": "kernel/patchsets/2.2.1.json", "overlay": "rootfs/overlay-2.2.1.json",
               "status": "experimental: Darwin 9, no dyld cache; see docs/multi-version.md"},
     "3.0": {"build": "7A341", "ipsw": "iPod2,1_3.0_7A341_Restore.ipsw", "sha1": None,

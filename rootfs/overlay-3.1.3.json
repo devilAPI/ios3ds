@@ -43,13 +43,17 @@
   "_replace": true,
   "build/rootfs-add/ios3/MBXGLEngine": "/System/Library/Frameworks/OpenGLES.framework/MBXGLEngine.bundle/MBXGLEngine",
   "build/rootfs-add/ios3/ios3ds-input": "/usr/libexec/ios3ds-input",
-  "tools/ios3ds-input/daemon/com.ios3ds.input.plist": "/System/Library/LaunchDaemons/com.ios3ds.input.plist"
+  "tools/ios3ds-input/daemon/com.ios3ds.input.plist": "/System/Library/LaunchDaemons/com.ios3ds.input.plist",
+  "build/rootfs-add/ios3/ios3ds-mcud": "/usr/libexec/ios3ds-mcud",
+  "tools/ios3ds-mcu/daemon/com.ios3ds.mcud.plist": "/System/Library/LaunchDaemons/com.ios3ds.mcud.plist"
  },
  "chmod": {
   "_replace": true,
   "/System/Library/Frameworks/OpenGLES.framework/MBXGLEngine.bundle/MBXGLEngine": "0755",
   "/usr/libexec/ios3ds-input": "0755",
-  "/System/Library/LaunchDaemons/com.ios3ds.input.plist": "0644"
+  "/System/Library/LaunchDaemons/com.ios3ds.input.plist": "0644",
+  "/usr/libexec/ios3ds-mcud": "0755",
+  "/System/Library/LaunchDaemons/com.ios3ds.mcud.plist": "0644"
  },
  "cydia_plist_write": {
   "_replace": true

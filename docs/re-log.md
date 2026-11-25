@@ -4661,3 +4661,64 @@ worktree's `build/fw-{3.1.3,2.2.1,4.1}/` (Apple files stay under `build/`).
   `build/emu-s2/`, not committed); the fifth tap came after the page-swipe
   round and landed on Spotlight's search page (also a rendered, non-home
   frame, left with Home).
+
+## NEXT. 2.2.1 reaches its home screen, opens apps and passes a soak (2026-11-25)
+
+Fresh `build/sd221.img` images (`scripts/mksd.py --ios 2.2.1`) traced with
+hardware breakpoints on QEMU's gdbstub (private port); `exception_triage`
+(0xc001b6a0) with the user state read from the current thread
+(`[0xc0208d5c] + 0x1cc`, the layout `fleh_dataabt` stores) named every crash.
+
+- **[V]** **Code signing.** 5H11a `vm_fault_enter` calls `cs_invalid_page`
+  (0xc01046f6, Thumb) for tainted/unvalidated executable pages; with CS_KILL
+  it kills the process. New 2.2.1 kernel patch `cs-invalid-page-allow`
+  (`movs r0,#0; bx lr`): patched Apple dylibs keep their stock signature blob
+  and load (re-signing still stalls dyld, §116). No `CODESIGNING` line since.
+- **[V]** **liblockdown.** The re-log 114 stubs are back, without a re-sign,
+  plus `lockdown_checkin`/`lockdown_copy_identity` (as 7E18). Two bugs in the
+  old bytes: `lockdown_copy_value` began `ldr ip,[pc,#0x14]`, which loads the
+  stub's own `bx lr` word as the table pointer (every caller faulted at
+  0x30893c24, far 0xe12fff1e); now `#0x20`, as on 7E18. BrickState pointed at
+  the `kCFBooleanFalse` *variable* (0x38241c48); objc_msgSend crashed on it;
+  now the object `__kCFBooleanFalse` 0x38237524.
+- **[V]** **DataMigrator:** `SBLastSystemVersion = 5H11a` (2.x SpringBoard
+  has the same migration gate).
+- **[V]** **MBX2D.** With activation fixed SpringBoard starts the render
+  server (`CARenderServerStart`) and crashed in `CARenderMBX2DRender` →
+  MBX2D.framework (no MBX hardware). SpringBoard's environment now sets
+  `CA_ENABLE_MBX2D=0` (and the LK_/OGL variants): software compositor,
+  `CADisplayIOMFB::finish_update` presents. `gpu_mirror=0` as on 3.1.3.
+- **[V]** **Tools for 2.x.** 5H11a's dyld has no LC_DYLD_INFO/`dyld_stub_binder`,
+  and its `pthread_getspecific` uses **r9** as the thread pointer. 2.x builds
+  use `-target armv6-apple-ios2.0 -ffixed-r9` plus
+  `tools/common/dyld2_glue.S` (a classic `dyld_stub_binding_helper` and the
+  `__DATA,__dyld` words dyld fills). Without `-ffixed-r9` the input daemon
+  died in dyld at 0x2fe1e724 on its first lazy bind.
+- **[V]** **GSEvents on 2.x** have no `context` word: the record is 48 bytes
+  (timestamp +0x18, infoSize +0x2c, hand info +0x30, paths +0x54, from
+  GraphicsServices' getters and `_GSSendEvent`). `-DINPUT_IOS2` uses that
+  layout; with the 4.x layout taps arrived but opened nothing.
+- **[V]** **mcud** gets a `-DMCU_OLD` build (3.x and 2.x): no
+  IOHIDEventSystemClient, so no brightness/accelerometer, but battery polling,
+  the volume slider (AVSystemController) and the NoIdleSleepAssertion work
+  (`[mcud] NoIdleSleepAssertion held`, `volume slider 32/63 -> iOS volume 0.51`).
+- **[V]** **Battery service off on 2.2.1.** Once the shim registered its
+  IOPMPowerSource, the next registry match (CrashHousekeeping) hit
+  `IOPanic` in `IORegistryEntry::free` (freed while attached; backtrace
+  `getMatchingServices` → `IORegistryIterator::reset` → `IOService::free`).
+  `versions.py` `no_battery_ps` → `IOS3DS_KPI_MCU_NO_PMPS` makes `ps_update`
+  return at once on 2.2.1 only (4.2.1 shim bytes unchanged).
+- **[V]** **Audio relocation reverted.** `i2s-start-no-lrck-sync` exists in
+  both kernels (7E18 0xc0565964, 5H11a 0xc0612b9c, state at +0x8c), but with
+  it both kernels hung before the root mount (heartbeat timer stopped at
+  59 ticks on 2.2.1, 32 md0 requests on 3.1.3). Audio DMA stays as stock
+  ("could not start DMA: device is not ready" per stream, no sound).
+
+### Result
+
+- **[V]** Fresh 2.2.1 image, `emu/soak.py --sd build/sd221.img --cycles 5
+  --icount 2 --require-app --targets "275,226;199,226;123,226;47,226;275,50"
+  --crashlogs` → **Result: PASS**: input after 50 s, Settings, Notes,
+  Calculator, Clock and Contacts opened (app diffs 163.4/128.1/84.3/109.8/
+  173.6), home diff 0.0 after every Home, 0 restarts, 0 panics, no crash
+  reports, lock round passed (screens: `build/emu-s221d/`, not committed).

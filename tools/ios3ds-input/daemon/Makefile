@@ -7,8 +7,9 @@ ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/../../..)
 CC   := $(ROOT)/scripts/ios-cc
 OUT  ?= $(ROOT)/build/rootfs-add/usr/libexec/ios3ds-input
 OUT3 ?= $(ROOT)/build/rootfs-add/ios3/ios3ds-input
+OUT2 ?= $(ROOT)/build/rootfs-add/ios2/ios3ds-input
 
-all: $(OUT) $(OUT3)
+all: $(OUT) $(OUT3) $(OUT2)
 
 $(OUT): input.c cpad.h n3ds.h $(ROOT)/boot/common/input_proto.h
 	mkdir -p $(dir $@)
@@ -20,6 +21,14 @@ $(OUT3): input.c cpad.h n3ds.h $(ROOT)/boot/common/input_proto.h
 	mkdir -p $(dir $@)
 	$(CC) -Os -Wall -Wextra -DINPUT_IOS3 -I$(ROOT)/boot/common input.c -framework IOKit -framework CoreFoundation -o $@
 
+# iOS 2.x build: the 3.x source, linked for 2.0 (classic lazy binding; 5H11a's
+# dyld has no LC_DYLD_INFO / dyld_stub_binder) with our dyld_stub_binding_helper;
+# installed only by rootfs/overlay-2.2.1.json
+$(OUT2): input.c cpad.h n3ds.h $(ROOT)/boot/common/input_proto.h $(ROOT)/tools/common/dyld2_glue.S
+	mkdir -p $(dir $@)
+	$(CC) -Os -Wall -Wextra -DINPUT_IOS3 -DINPUT_IOS2 -target armv6-apple-ios2.0 -ffixed-r9 -Wl,-w -I$(ROOT)/boot/common input.c \
+	    $(ROOT)/tools/common/dyld2_glue.S -framework IOKit -framework CoreFoundation -o $@
+
 clean:
-	rm -f $(OUT) $(OUT3)
+	rm -f $(OUT) $(OUT3) $(OUT2)
 .PHONY: all clean

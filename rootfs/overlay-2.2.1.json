@@ -7,7 +7,8 @@
   "_replace": true,
   "/etc/fstab": "/dev/md0 / hfs rw 0 0\n",
   "/etc/syslog.conf": "*.*\t/var/log/syslog\n",
-  "/var/log/syslog": ""
+  "/var/log/syslog": "",
+  "/private/var/mobile/Library/Preferences/com.apple.springboard.plist": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict>\n\t<key>SBLastSystemVersion</key>\n\t<string>5H11a</string>\n\t<key>SBDisableAutoDim</key>\n\t<true/>\n\t<key>SBDontLockAfterCrash</key>\n\t<true/>\n\t<key>SBDidShowReorderText</key>\n\t<true/>\n\t<key>SBDisableMailAutoLaunch</key>\n\t<true/>\n\t<key>SBNoWatchdogs</key>\n\t<true/>\n</dict>\n</plist>\n"
  },
  "remove": [
   "/System/Library/Caches/com.apple.kernelcaches/kernelcache.s5l8720x"
@@ -16,7 +17,7 @@
   "/private/var/mobile/Library/Logs",
   "/private/var/mobile/Library/Logs/CrashReporter"
  ],
- "_activation": "SpringBoard's liblockdown calls lockdown_connect()/lockdown_copy_value() through /var/run/lockdown/localcomm, which does not exist without lockdownd. Patching and re-signing /usr/lib/liblockdown.dylib is not viable on 2.x: even a re-sign with no byte changes makes dyld stop after CoreSurface. The stock dylib is kept; activation/UI is still not reached.",
+ "_activation": "SpringBoard's liblockdown calls end in /var/run/lockdown/localcomm, which does not exist without lockdownd. The stock /usr/lib/liblockdown.dylib is byte-patched in place (connect/checkin/copy_value/copy_identity/disconnect/set/remove stubs and an offline ActivationState table) and keeps its stock signature blob: re-signing it stalls 2.x dyld (re-log 116), and the 2.2.1 kernel patch cs-invalid-page-allow accepts the patched pages instead (re-log NEXT).",
  "symlink": {
   "_replace": true
  },
@@ -26,7 +27,12 @@
    "StandardErrorPath": "/dev/console",
    "StandardOutPath": "/dev/console",
    "EnvironmentVariables": {
-    "DYLD_PRINT_LIBRARIES": "1"
+    "DYLD_PRINT_LIBRARIES": "1",
+    "CA_ENABLE_MBX2D": "0",
+    "LK_ENABLE_MBX2D": "0",
+    "CA_ENABLE_OGL": "0",
+    "LK_ENABLE_OGL": "0",
+    "MBX2D_PAGE_FLIP": "0"
    }
   }
  },
@@ -34,16 +40,89 @@
   "_replace": true
  },
  "add": {
-  "_replace": true
+  "_replace": true,
+  "build/rootfs-add/ios2/ios3ds-input": "/usr/libexec/ios3ds-input",
+  "tools/ios3ds-input/daemon/com.ios3ds.input.plist": "/System/Library/LaunchDaemons/com.ios3ds.input.plist",
+  "build/rootfs-add/ios2/ios3ds-mcud": "/usr/libexec/ios3ds-mcud",
+  "tools/ios3ds-mcu/daemon/com.ios3ds.mcud.plist": "/System/Library/LaunchDaemons/com.ios3ds.mcud.plist"
  },
  "chmod": {
-  "_replace": true
+  "_replace": true,
+  "/usr/libexec/ios3ds-input": "0755",
+  "/System/Library/LaunchDaemons/com.ios3ds.input.plist": "0644",
+  "/usr/libexec/ios3ds-mcud": "0755",
+  "/System/Library/LaunchDaemons/com.ios3ds.mcud.plist": "0644"
  },
  "cydia_plist_write": {
   "_replace": true
  },
  "file_patches": [],
  "disable_daemons": [],
- "_todo": "Darwin 9 lacks IOSurface, CoreMotion and Celestial's 4.x API: our 4.2.1 GPU/gyro/camera userland binaries cannot simply be copied here. The activation interposer above is the only 4.2.1-derived tool installed on 2.2.1; input/MCU/Wi-Fi tools are still not installed (docs/multi-version.md \u00a76.5).",
- "extra_file_patches": []
+ "_todo": "Darwin 9 lacks IOSurface, CoreMotion and Celestial's 4.x API: our 4.2.1 GPU/gyro/camera userland binaries cannot simply be copied here. The activation interposer above is the only 4.2.1-derived tool installed on 2.2.1; input/MCU/Wi-Fi tools are still not installed (docs/multi-version.md §6.5).",
+ "extra_file_patches": [
+  {
+   "path": "/usr/lib/liblockdown.dylib",
+   "offset": "0x2ea8",
+   "orig": "70009fe5f0402de9",
+   "new": "0100a0e31eff2fe1",
+   "why": "5H11a liblockdown: lockdown_connect -> 1 (fake handle) because __local_connect() to /var/run/lockdown/localcomm fails without lockdownd.",
+   "mode": "0755"
+  },
+  {
+   "path": "/usr/lib/liblockdown.dylib",
+   "offset": "0x2c20",
+   "orig": "90402de904708de204d04de204308de200c0a0e304c023e5000090e56afcffeb0040a0e100009de5000050e3",
+   "new": "20c09fe508309ce4000053e30300000a020053e1faffff1a04001ce51eff2fe10000a0e31eff2fe144158930",
+   "why": "5H11a liblockdown: ARM stub for lockdown_copy_value; walks the key/value table at VA 0x30891544 (patch @0x544) comparing the requested key CFStringRef (r2) by pointer and returns the value, else NULL. Verified 44-byte original body replaced. The first instruction is ldr ip,[pc,#0x20] (the table literal at +0x28); the re-log 114 bytes had #0x14, which loads the 'bx lr' word as the table pointer and faulted every caller at 0x30893c24 (far 0xe12fff1e, re-log NEXT).",
+   "mode": "0755"
+  },
+  {
+   "path": "/usr/lib/liblockdown.dylib",
+   "offset": "0x544",
+   "orig": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "new": "481e893858158930481c89382475233800000000a07d2338c80700006815893009000000416374697661746564000000",
+   "why": "Offline activation table in a verified zero gap of liblockdown __TEXT (VA 0x30891544): ActivationState -> inline CFString 'Activated' (isa __CFConstantStringClassReference 0x38237da0), BrickState -> __kCFBooleanFalse 0x38237524 (the object; re-log 114 stored 0x38241c48, the kCFBooleanFalse *variable*, and objc_msgSend crashed on it, re-log NEXT). Addresses from 5H11a CoreFoundation's symtab; 2.x dylibs are prebound, never slid. Other keys return NULL as on 4.x.",
+   "mode": "0755"
+  },
+  {
+   "path": "/usr/lib/liblockdown.dylib",
+   "offset": "0x2be4",
+   "orig": "90402de904708de2",
+   "new": "0000a0e31eff2fe1",
+   "why": "5H11a lockdown_disconnect -> 0. SpringBoard imports it and passes the fake handle from lockdown_connect (symbol VA 0x30893be4 from liblockdown's own symtab); without this stub it faults on a fake handle.",
+   "mode": "0755"
+  },
+  {
+   "path": "/usr/lib/liblockdown.dylib",
+   "offset": "0x30a8",
+   "orig": "90402de904708de2",
+   "new": "0000a0e31eff2fe1",
+   "why": "5H11a lockdown_remove_value -> 0 (symbol VA 0x308940a8; same reason as disconnect).",
+   "mode": "0755"
+  },
+  {
+   "path": "/usr/lib/liblockdown.dylib",
+   "offset": "0x30f4",
+   "orig": "90402de904708de2",
+   "new": "0000a0e31eff2fe1",
+   "why": "5H11a lockdown_set_value -> 0 (symbol VA 0x308940f4; same reason as disconnect). All three original byte sequences were verified in this dylib; The dylib keeps its stock signature blob; the 2.2.1 kernel patch cs-invalid-page-allow lets the patched pages load (re-log NEXT).",
+   "mode": "0755"
+  },
+  {
+   "path": "/usr/lib/liblockdown.dylib",
+   "offset": "0x3144",
+   "orig": "f0402de9006051e2",
+   "new": "0000a0e31eff2fe1",
+   "why": "5H11a lockdown_checkin -> 0 (ARM: mov r0,#0; bx lr; symbol VA 0x30894144 from the dylib symtab). No lockdownd to check in with; 7E18 stubs the same function.",
+   "mode": "0755"
+  },
+  {
+   "path": "/usr/lib/liblockdown.dylib",
+   "offset": "0x2c60",
+   "orig": "f0402de90c708de2",
+   "new": "0000a0e31eff2fe1",
+   "why": "5H11a lockdown_copy_identity -> NULL (ARM; symbol VA 0x30893c60). No pairing identity offline; 7E18 stubs the same function.",
+   "mode": "0755"
+  }
+ ]
 }

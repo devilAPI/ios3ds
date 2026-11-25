@@ -194,6 +194,11 @@
 #endif
 /* 1: the kernel's _fleh_irq starts "sub lr,lr,#4; mrs sp,spsr" (Darwin 9/10:
    2.2.1, 3.1.3) instead of 4.x's "mrs sp,cpsr"; the shim replays it */
+/* 1 = do not publish the MCU battery as an IOPMPowerSource (2.2.1: the
+   registry freed it while attached, IOPanic in IORegistryEntry::free) */
+#ifndef IOS3DS_KPI_MCU_NO_PMPS
+#define IOS3DS_KPI_MCU_NO_PMPS 0
+#endif
 #ifndef IOS3DS_KPI_KERNEL_IRQ_SPSR
 #define IOS3DS_KPI_KERNEL_IRQ_SPSR 0
 #endif

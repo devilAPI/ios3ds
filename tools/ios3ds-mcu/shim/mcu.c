@@ -214,6 +214,9 @@ static void *sym_fully, *sym_rawv;
 static void ps_update(void)
 {
     volatile mcubox_t *b = BOX;
+#if IOS3DS_KPI_MCU_NO_PMPS
+    return;                     /* this firmware: no battery service (kpi.h) */
+#endif
     if (!(b->valid & MCUV_BATT)) return;
     u32 key = b->batt_percent | (u32)b->flags << 8 | (u32)b->batt_volt << 16;
     if (ps && key == ps_seen) return;

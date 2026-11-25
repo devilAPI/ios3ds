@@ -119,17 +119,38 @@ class TestVersions(unittest.TestCase):
                     self.assertIn("<key>SBLastSystemVersion</key>\n\t<string>7E18</string>",
                                   recipe["write"]["/private/var/mobile/Library/Preferences/com.apple.springboard.plist"])
                 elif v == "2.2.1":
-                    # 2.x has no dyld cache. Patching + re-signing liblockdown
-                    # made dyld stop after CoreSurface (re-log 115), so the
-                    # stock signed dylib is kept and no file patches apply.
-                    self.assertEqual(recipe["file_patches"], [])
+                    # 2.x has no dyld cache: liblockdown is patched in place
+                    # and keeps its stock signature blob (re-signing stalls
+                    # dyld, re-log 116); the 2.2.1 kernel patch
+                    # cs-invalid-page-allow accepts the patched pages.
+                    self.assertEqual([fp["offset"] for fp in recipe["file_patches"]],
+                                     ["0x2ea8", "0x2c20", "0x544", "0x2be4", "0x30a8",
+                                      "0x30f4", "0x3144", "0x2c60"])
+                    self.assertTrue(all(fp["path"] == "/usr/lib/liblockdown.dylib"
+                                        for fp in recipe["file_patches"]))
+                    # lockdown_copy_value's table literal is at +0x28 (re-log NEXT)
+                    self.assertTrue(recipe["file_patches"][1]["new"].startswith("20c09fe5"))
                     self.assertNotIn("resign", recipe)
+                    self.assertIn("<key>SBLastSystemVersion</key>\n\t<string>5H11a</string>",
+                                  recipe["write"]["/private/var/mobile/Library/Preferences/com.apple.springboard.plist"])
+                    names = [p["name"] for p in json.load(open(versions.patch_files(v)[0]))]
+                    self.assertIn("cs-invalid-page-allow", names)
                 else:
                     self.assertEqual(recipe["file_patches"], [])
                 if v == "2.2.1":
-                    self.assertEqual(recipe["add"], {})
+                    # the 2.x build of the input daemon (classic lazy binding)
+                    self.assertEqual(recipe["add"], {
+                        "build/rootfs-add/ios2/ios3ds-input": "/usr/libexec/ios3ds-input",
+                        "tools/ios3ds-input/daemon/com.ios3ds.input.plist":
+                        "/System/Library/LaunchDaemons/com.ios3ds.input.plist",
+                        "build/rootfs-add/ios2/ios3ds-mcud": "/usr/libexec/ios3ds-mcud",
+                        "tools/ios3ds-mcu/daemon/com.ios3ds.mcud.plist":
+                        "/System/Library/LaunchDaemons/com.ios3ds.mcud.plist"})
                     self.assertEqual(list(recipe["plist_set"]),
                                      ["/System/Library/LaunchDaemons/com.apple.SpringBoard.plist"])
+                    env = recipe["plist_set"]["/System/Library/LaunchDaemons/com.apple.SpringBoard.plist"][
+                        "EnvironmentVariables"]
+                    self.assertEqual(env["CA_ENABLE_MBX2D"], "0")
                 else:
                     # only the 7E18 builds (-DGL_IOS3, -DINPUT_IOS3) of our
                     # GL engine and input daemon
@@ -138,7 +159,10 @@ class TestVersions(unittest.TestCase):
                         "/System/Library/Frameworks/OpenGLES.framework/MBXGLEngine.bundle/MBXGLEngine",
                         "build/rootfs-add/ios3/ios3ds-input": "/usr/libexec/ios3ds-input",
                         "tools/ios3ds-input/daemon/com.ios3ds.input.plist":
-                        "/System/Library/LaunchDaemons/com.ios3ds.input.plist"})
+                        "/System/Library/LaunchDaemons/com.ios3ds.input.plist",
+                        "build/rootfs-add/ios3/ios3ds-mcud": "/usr/libexec/ios3ds-mcud",
+                        "tools/ios3ds-mcu/daemon/com.ios3ds.mcud.plist":
+                        "/System/Library/LaunchDaemons/com.ios3ds.mcud.plist"})
                     self.assertEqual(list(recipe["plist_set"]),
                                      ["/System/Library/LaunchDaemons/com.apple.SpringBoard.plist"])
                     self.assertEqual(recipe["plist_set"][
