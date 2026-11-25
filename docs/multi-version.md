@@ -814,7 +814,7 @@ All items below were ported or shown unnecessary; kept for the history.
 |---|---|---|
 | 4.2.1 (8C148) | home screen, apps, input, Cydia/TLSFix | **PASS** (5 cycles) |
 | 4.1 (8B117) | home screen, apps, input, Cydia/TLSFix (APT against the local repo, Cydia opens); all re-log 101/111 open items resolved (re-log 131, iOS 4.1 completeness) | **PASS**, 10 cycles with `--require-app` |
-| 3.1.3 (7E18) | **home screen, apps open and render, clock runs, taps, buttons, lock/wake and brightness (re-log 132).** DataMigrator skipped (`SBLastSystemVersion`), shim `mrs sp,spsr` IRQ replay, 822-slot GSEvent input daemon; software CoreAnimation + ARM9 screen copy by default, PICA200 path opt-in with `IOS3DS_GPU313=1` at build time (re-log NEXT) | **PASS**, 5 cycles with `--require-app` on the default image; GPU-opt-in image also soaked (re-log NEXT) |
+| 3.1.3 (7E18) | **home screen, apps open and render, clock runs, taps, buttons, lock/wake and brightness (re-log 132).** DataMigrator skipped (`SBLastSystemVersion`), shim `mrs sp,spsr` IRQ replay, 822-slot GSEvent input daemon; software CoreAnimation + ARM9 screen copy by default, PICA200 path opt-in with `IOS3DS_GPU313=1` at build time (re-log 135) | **PASS**, 5 cycles with `--require-app` on the default image; GPU-opt-in image also soaked (re-log 135) |
 | 2.2.1 (5H11a) | **home screen, apps open and render, taps and buttons, battery, lock/wake and brightness (re-log 132).** Kernel `cs-invalid-page-allow`, fixed liblockdown stubs, `CA_ENABLE_MBX2D=0`, 2.x tool ABI (classic binding, r9, 48-byte GSEvents) | **PASS**, 10 cycles with `--require-app` |
 
 Driver matrix (QEMU-verified unless marked [G]; "off" = cleanly not installed
@@ -824,7 +824,7 @@ or not registered, with the reason):
 |---|---|---|
 | Touch + Home/Power/volume buttons | works: `ios3ds-input -DINPUT_IOS3`, GSEvents to PurpleSystemEventPort | works: `-DINPUT_IOS2` (48-byte records), 2.x link |
 | Display | default: software CA, ARM9 CPU copy every frame (`gpu_mirror=0`); opt-in `IOS3DS_GPU313=1`: CA on the PICA200, GPU mirror | works: software CA, ARM9 CPU copy every frame |
-| GPU (PICA200) | **off by default** (slower in QEMU, re-log NEXT). Opt in with `IOS3DS_GPU313=1` at build time: CoreAnimation renders through `MBXGLEngine -DGL_IOS3` (QuartzCore `new_server` asked EAGL for API 2, which 7E18 OpenGLES never gives the MBX engine; patched to API 1), mirror on, `[gl] CA compositor: OpenGL ES on the PICA200`; [G] hardware speed not measured. The mirror also treats a CLCD switch to another IOSurface as a new frame, so a late swap after Home is not dropped (kpi flag `clcd_swap_dirty`) | off: 2.x OpenGLES.framework *is* the IMG MBX driver (no engine bundle); a GL engine means replacing the framework (EAGL classes + ~214 GLES/IMGegl exports) with one built on the ios3ds GL core: possible, not done |
+| GPU (PICA200) | **off by default** (slower in QEMU, re-log 135). Opt in with `IOS3DS_GPU313=1` at build time: CoreAnimation renders through `MBXGLEngine -DGL_IOS3` (QuartzCore `new_server` asked EAGL for API 2, which 7E18 OpenGLES never gives the MBX engine; patched to API 1), mirror on, `[gl] CA compositor: OpenGL ES on the PICA200`; [G] hardware speed not measured. The mirror also treats a CLCD switch to another IOSurface as a new frame, so a late swap after Home is not dropped (kpi flag `clcd_swap_dirty`) | off: 2.x OpenGLES.framework *is* the IMG MBX driver (no engine bundle); a GL engine means replacing the framework (EAGL classes + ~214 GLES/IMGegl exports) with one built on the ios3ds GL core: possible, not done |
 | Battery | works: shim IOPMPowerSource, refreshed by mcud polling | works: shim IOPMPowerSource; kernel patch `audio-pm-msg-no-store` (AppleEmbeddedAudio's PM handler zeroed IOPMrootDomain's retain count) and the Darwin 9 vtable bias (`IOS3DS_KPI_VT_BIAS`); level + charging in the status bar and on the lock screen |
 | Volume slider | works: mcud `-DMCU_OLD` → AVSystemController | works (same) |
 | No-sleep assertion | works: mcud | works: mcud |
@@ -843,7 +843,7 @@ or not registered, with the reason):
 The 4.2.1 and 4.1 builds are unchanged by all of this: every older-version
 switch is either in `rootfs/overlay-*.json`, `kernel/patchsets/*.json`, or a
 `versions.py` flag that only non-default versions set (six 4.2.1 hashes
-re-checked, re-log NEXT).
+re-checked, re-log 135).
 
 **Enabling the 3.1.3 GPU path (hardware testing):** it is a *build-time*
 switch, because it needs a dyld-cache patch and a SpringBoard plist value:
@@ -856,5 +856,5 @@ to ask EAGL for API 1 (0x1bde788), and sets `CA_ENABLE_OGL=1`. Without it the
 `CA_ENABLE_OGL=0`, i.e. the ARM9 copies the screen. Add
 `IOS3DS_GPU313_DIAG=1` to log every CA swap and present (`[gl] [swapdiag]`) for
 a hardware `diag=1` log. The GPU path is slower in QEMU (Notes open/close
-10–20 s against 4–6 s software), so it is not the default; see re-log NEXT for
+10–20 s against 4–6 s software), so it is not the default; see re-log 135 for
 the QEMU and hardware checklist.

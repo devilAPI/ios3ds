@@ -282,7 +282,7 @@ swaps to N (test hook, e.g. to see the cost before and after a scattered
 surface in a short QEMU run). `IOS3DS_CA_SWAP_DIAG=1` logs every CA swap and
 the present / arena copy / read-back that wrote its surface (`[gl] [swapdiag]`),
 so a last frame lost after Home can be counted against the mirror's frame count
-(re-log NEXT). Both are off by default and add a line per frame when enabled.
+(re-log 135). Both are off by default and add a line per frame when enabled.
 
 ### Switching it on, and falling back
 

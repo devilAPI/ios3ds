@@ -66,7 +66,7 @@ VERSIONS = {
               "mic_gain_q15": 32768,
               # 7E18's final CA swap can switch the CLCD to the other
               # IOSurface after the GL present that marked the frame dirty;
-              # the mirror must notice the new source PA as well (re-log NEXT)
+              # the mirror must notice the new source PA as well (re-log 135)
               "clcd_swap_dirty": True,
               # The PICA200 CoreAnimation path is opt-in on 3.1.3 (re-log
               # NEXT): it is slower than the software compositor in QEMU and

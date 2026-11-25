@@ -177,7 +177,7 @@
    "offset": "0x1bde788",
    "orig": "0430a0e1",
    "new": "0130a0e3",
-   "why": "7E18 QuartzCore M2Display::new_server: the EAGLServer constructor's API argument mov r3,r4 (the display kind, 2) -> mov r3,#1. EAGLServer::renderer() passes it to CAEAGLContextCreate -> [EAGLContext initWithAPI:2], and 7E18's -[EAGLSharegroup initWithAPI:require_acceleration:] only tries the MBX engine bundle (ours) for API 1 (cmp r8,#1 at 0x32f80bd0), so every frame got a NULL renderer and CA composited in software. CA's OGL renderer is GLESContext (ES1) only. With API 1 the render server gets an ES1 context on the PICA200 engine (re-log NEXT).",
+   "why": "7E18 QuartzCore M2Display::new_server: the EAGLServer constructor's API argument mov r3,r4 (the display kind, 2) -> mov r3,#1. EAGLServer::renderer() passes it to CAEAGLContextCreate -> [EAGLContext initWithAPI:2], and 7E18's -[EAGLSharegroup initWithAPI:require_acceleration:] only tries the MBX engine bundle (ours) for API 1 (cmp r8,#1 at 0x32f80bd0), so every frame got a NULL renderer and CA composited in software. CA's OGL renderer is GLESContext (ES1) only. With API 1 the render server gets an ES1 context on the PICA200 engine (re-log 135).",
    "mode": "0644"
   },
   {
@@ -203,5 +203,5 @@
   "cy+kernel.darwin": "10.0.0",
   "cy+lib.corefoundation": "478.52"
  },
- "_gps": "Fake GPS (docs/location.md): ios3ds-applog.dylib, ios3ds-gps, ios3ds-gpstest and ios3ds-diag are installed (2.x builds on 2.2.1). The CoreLocation hooks work in a process that loads applog (gpstest). Stock apps do not get applog yet: SpringBoard's SBGuardMalloc debug switch (3.x/2.x have no SBGuardMallocAlways) did not reach MobileMaps in QEMU even with its one-shot removeObjectForKey: nopped, so it is not used (re-log NEXT)."
+ "_gps": "Fake GPS (docs/location.md): ios3ds-applog.dylib, ios3ds-gps, ios3ds-gpstest and ios3ds-diag are installed (2.x builds on 2.2.1). The CoreLocation hooks work in a process that loads applog (gpstest). Stock apps do not get applog yet: SpringBoard's SBGuardMalloc debug switch (3.x/2.x have no SBGuardMallocAlways) did not reach MobileMaps in QEMU even with its one-shot removeObjectForKey: nopped, so it is not used (re-log 135)."
 }

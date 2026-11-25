@@ -5362,7 +5362,7 @@ and 2.2.1.
   frames, peak 13273 (a boot UI sound overlaps the first tone), 264,089
   non-silent frames. A final `ios3ds-tone rec` on the same tree still logs
   `input available 0, route "Speaker"` with no `rx start`.
-## NEXT. Sensors, camera, GPS and GPU on 3.1.3, 2.2.1 and 4.1 (2026-11-25)
+## 135. Sensors, camera, GPS and GPU on 3.1.3, 2.2.1 and 4.1 (2026-11-25)
 
 Firmware staged from compat16 into this worktree's `build/fw-*`. 7E18 code read
 from its dyld shared cache (symbols kept in the 3.x cache) with
@@ -5488,7 +5488,7 @@ from its dyld shared cache (symbols kept in the 3.x cache) with
   **PASS**es: 0 panics, 0 restarts, every tap opened an app, only cycle 2
   needed a second Home.
 
-## NEXT. 3.1.3's last frame after Home, and making the GPU path opt-in (2026-11-25)
+## 136. 3.1.3's last frame after Home, and making the GPU path opt-in (2026-11-25)
 
 Continues the previous NEXT section. The 3.1.3 PICA200 CoreAnimation path from
 137e6cc is kept, but it is **opt-in**: the default image is back on software
