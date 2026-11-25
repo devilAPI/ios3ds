@@ -4004,7 +4004,7 @@ Only `rootfs/overlay-3.1.3.json` and this log change in the tree.
   is `5851eebe…` after the later main-branch boot-option changes (4.1 is not
   required to be byte-identical).
 
-## NEXT. Older-version round 9: `transition:toView:` is an alert, the icon-list gate is the away controller and the power-down restore (2026-11-25)
+## 122. Older-version round 9: `transition:toView:` is an alert, the icon-list gate is the away controller and the power-down restore (2026-11-25)
 
 Continues §121. Both archived IPSWs were fetched again into this worktree's
 `build/fw-3.1.3/` and `build/fw-2.2.1/` (sha1 `5f4f5c01…` / `9af5625e…`
