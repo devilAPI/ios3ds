@@ -77,7 +77,7 @@ void IOHIDEventAppendEvent(IOHIDEventRef parent, IOHIDEventRef child);
 /* iOS 3.x (7E18): IOKit has no IOHIDEventSystemClient API and SpringBoard
    serves no com.apple.iohideventsystem; every event already goes as a
    GSEvent to SpringBoard's PurpleSystemEventPort, so the client calls are
-   no-ops and the connection check watches that port instead (re-log NEXT). */
+   no-ops and the connection check watches that port instead (re-log 125). */
 #define IOHIDEventSystemClientDispatchEvent(c, e) ((void)(c), (void)(e))
 #else
 IOHIDEventSystemClientRef IOHIDEventSystemClientCreate(const void *allocator);

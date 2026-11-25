@@ -79,7 +79,7 @@
    "offset": "0x176a358",
    "orig": "f0402de90c708de2",
    "new": "0100a0e31eff2fe1",
-   "why": "7E18 lockdown_connect -> fake handle 1 (ARM: mov r0,#1; bx lr). With no lockdownd on the 3DS, __local_connect() returns -1 and this function returned NULL, so SpringBoard stopped before calling lockdown_copy_value; lockdown_copy_value/set/remove/disconnect are stubbed and never dereference the handle. The function is ARM code (even symbol 0x3176a358, push at +0): the earlier Thumb bytes 20014770 decoded as ARM subvc r0,r7,r0,lsr #2 and fell into the body with its push skipped (re-log NEXT).",
+   "why": "7E18 lockdown_connect -> fake handle 1 (ARM: mov r0,#1; bx lr). With no lockdownd on the 3DS, __local_connect() returns -1 and this function returned NULL, so SpringBoard stopped before calling lockdown_copy_value; lockdown_copy_value/set/remove/disconnect are stubbed and never dereference the handle. The function is ARM code (even symbol 0x3176a358, push at +0): the earlier Thumb bytes 20014770 decoded as ARM subvc r0,r7,r0,lsr #2 and fell into the body with its push skipped (re-log 125).",
    "mode": "0644"
   },
   {
@@ -87,7 +87,7 @@
    "offset": "0x176a3dc",
    "orig": "f0402de90c708de2",
    "new": "0000a0e31eff2fe1",
-   "why": "7E18 lockdown_checkin -> 0 (ARM: mov r0,#0; bx lr; no lockdownd session to check in with; 8C148 stubs lockdown_activate the same way). Earlier Thumb bytes were wrong for this ARM function (re-log NEXT).",
+   "why": "7E18 lockdown_checkin -> 0 (ARM: mov r0,#0; bx lr; no lockdownd session to check in with; 8C148 stubs lockdown_activate the same way). Earlier Thumb bytes were wrong for this ARM function (re-log 125).",
    "mode": "0644"
   },
   {
@@ -95,7 +95,7 @@
    "offset": "0x1769eb0",
    "orig": "f0402de90c708de2",
    "new": "0000a0e31eff2fe1",
-   "why": "7E18 lockdown_copy_identity -> NULL (ARM: mov r0,#0; bx lr; iTunes pairing cert/device key: not available offline). Earlier Thumb bytes were wrong for this ARM function (re-log NEXT).",
+   "why": "7E18 lockdown_copy_identity -> NULL (ARM: mov r0,#0; bx lr; iTunes pairing cert/device key: not available offline). Earlier Thumb bytes were wrong for this ARM function (re-log 125).",
    "mode": "0644"
   },
   {
@@ -143,7 +143,7 @@
    "offset": "0x2f91bb8",
    "orig": "4170706c654d4258446576696365",
    "new": "494f5265736f7572636573000000",
-   "why": "7E18 OpenGLES: the engine-bundle match string AppleMBXDevice -> IOResources, so OpenGLES loads MBXGLEngine.bundle (our PICA200 engine, built with -DGL_IOS3 for 7E18's 822-slot dispatch table) on the 3DS, which has no MBX GPU. Same change as 8C148's; verified original bytes in this cache (re-log NEXT).",
+   "why": "7E18 OpenGLES: the engine-bundle match string AppleMBXDevice -> IOResources, so OpenGLES loads MBXGLEngine.bundle (our PICA200 engine, built with -DGL_IOS3 for 7E18's 822-slot dispatch table) on the 3DS, which has no MBX GPU. Same change as 8C148's; verified original bytes in this cache (re-log 125).",
    "mode": "0644"
   }
  ]

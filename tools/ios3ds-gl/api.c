@@ -2375,7 +2375,7 @@ static const char *slot_name(int slot)
  * 4.x-only slots 761-776 (instanced/base-vertex draws, ARB vertex arrays,
  * multisample textures) and 838-840 (discard/APPLE framebuffer) do not
  * exist, so 4.x slots 777-837 sit 16 lower. Writing the 841-slot 4.x layout
- * overflowed OpenGLES's heap block (re-log NEXT). Slots 441-447 differ in
+ * overflowed OpenGLES's heap block (re-log 125). Slots 441-447 differ in
  * name only (NV combiners vs uniform blocks); the engine implements neither. */
 #define GLI_TABLE_SLOTS 822
 static int table_slot(unsigned s)

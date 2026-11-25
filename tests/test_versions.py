@@ -98,14 +98,14 @@ class TestVersions(unittest.TestCase):
                     # the tethered/display-kind gates and the OpenGLES engine
                     # match string. The SpringBoard lock/icon-list/key-window
                     # patches of re-log 121-123 are gone: they only worked
-                    # around DataMigrator (re-log NEXT).
+                    # around DataMigrator (re-log 125).
                     self.assertEqual([fp["offset"] for fp in recipe["file_patches"]],
                                      ["0x176a008", "0x1767600", "0x176a358",
                                       "0x176a3dc", "0x1769eb0", "0x176a1c4",
                                       "0x176a210", "0x176a260",
                                       "0x95760", "0x1bde74c", "0x2f91bb8"])
                     # SpringBoard skips DataMigrator only when this matches
-                    # the running build (re-log NEXT).
+                    # the running build (re-log 125).
                     self.assertIn("<key>SBLastSystemVersion</key>\n\t<string>7E18</string>",
                                   recipe["write"]["/private/var/mobile/Library/Preferences/com.apple.springboard.plist"])
                 elif v == "2.2.1":

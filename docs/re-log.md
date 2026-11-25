@@ -4335,7 +4335,7 @@ shim or GPU file is touched by this round.
   screen yet. 3.1.3 is stable for 300 s with one dyld pass but keeps the
   Apple/progress frame; the seven scratch patches above were all reverted.
 
-## NEXT. 3.1.3 reaches its home screen: the "reset view" was DataMigrator, plus an IRQ-replay and a dispatch-table bug (2026-11-25)
+## 125. 3.1.3 reaches its home screen: the "reset view" was DataMigrator, plus an IRQ-replay and a dispatch-table bug (2026-11-25)
 
 Continues §124. The 7E18 IPSW staged by §124 was copied into this worktree's
 `build/fw-3.1.3/` (Apple files stay under `build/`). The 4.2.1 boot files are
