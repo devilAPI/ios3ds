@@ -828,7 +828,7 @@ or not registered, with the reason):
 | Lock / auto-lock | off: SpringBoard turns the screen off on Lock, but Home never wakes it (CLCD stays off); the 3.x/2.x input daemon sends no Lock event and `SBAutoLockTime = -1` | off: same |
 | Brightness | off: no IOHIDEventSystemClient properties to read on 3.x; LCD stays at Luma's level | off: same |
 | Accelerometer / gyro | off: needs IOHIDEventSystemClient (4.x) / CoreMotion (4.x); iPod2,1 3.x has no gyro API | off: same |
-| Audio | works in QEMU: speaker output (UI sounds, `ios3ds-tone`; DMA TC IRQs injected through the version's IRQ path), volume → CSND, mic input via the VirtualAudio N82-slot swap at unity gain (re-log NEXT); [G] real sound, headphones, keyboard click; test song not shown (4.x library format) | partial: I2S patch in, kernel no longer hangs, but `AudioSessionInitialize` never returns (no stream); mic swap applied, untested (re-log NEXT) |
+| Audio | works in QEMU: speaker output (UI sounds, `ios3ds-tone`; DMA TC IRQs injected through the version's IRQ path), volume → CSND, mic input via the VirtualAudio N82-slot swap at unity gain (re-log 130); [G] real sound, headphones, keyboard click; test song not shown (4.x library format) | partial: I2S patch in, kernel no longer hangs, but `AudioSessionInitialize` never returns (no stream); mic swap applied, untested (re-log 130) |
 | Wi-Fi (`ios3ds-wifid`/a80211) | off: built against 4.2.1 private Apple80211/IOKit APIs | off: same |
 | Camera (`vcd`) | off: iPod2,1 has no camera stack before 4.x | off: same |
 | GPS | off: 4.x CoreLocation hooks | off: same |

@@ -4755,7 +4755,7 @@ hardware breakpoints on QEMU's gdbstub (private port); `exception_triage`
 - **[G]** 4.1 (8B117, now staged here) was not re-soaked; its shim path has no
   new flag set.
 
-## NEXT. Audio on 3.1.3, 2.2.1 and 4.1: the audio IRQ glue's hard-coded 4.2.1 address, mic routes (2026-11-25)
+## 130. Audio on 3.1.3, 2.2.1 and 4.1: the audio IRQ glue's hard-coded 4.2.1 address, mic routes (2026-11-25)
 
 ### Why relocating `i2s-start-no-lrck-sync` hung 3.1.3/2.2.1
 

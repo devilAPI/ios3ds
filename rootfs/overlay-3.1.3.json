@@ -157,7 +157,7 @@
    "offset": "0xfa800",
    "orig": "4e3732004e383200",
    "new": "583732004e373200",
-   "why": "7E18 VirtualAudio (mediaserverd's routing plug-in) picks its routing by matching hw.model against the product table at 0xfa7f4 (M68 N18 N45 N72 N82 N88). N72 has no built-in microphone, so iOS reported input available 0 and AudioQueueNewInput failed with 'nohw'. 3.1.3 has no N81 entry (the receiver-less model 4.2.1 borrows), so swap the N72 slot to 'X72' and the N82 (iPhone 3G) slot to 'N72': input comes from the codec's 'imic' data source (dt_audio.py ain2b-intmic) and the 3DS microphone (docs/audio.md section 7, re-log NEXT)"
+   "why": "7E18 VirtualAudio (mediaserverd's routing plug-in) picks its routing by matching hw.model against the product table at 0xfa7f4 (M68 N18 N45 N72 N82 N88). N72 has no built-in microphone, so iOS reported input available 0 and AudioQueueNewInput failed with 'nohw'. 3.1.3 has no N81 entry (the receiver-less model 4.2.1 borrows), so swap the N72 slot to 'X72' and the N82 (iPhone 3G) slot to 'N72': input comes from the codec's 'imic' data source (dt_audio.py ain2b-intmic) and the 3DS microphone (docs/audio.md section 7, re-log 130)"
   }
  ]
 }
