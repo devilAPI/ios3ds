@@ -12,6 +12,9 @@ CC   := $(ROOT)/scripts/ios-cc
 ADD  := $(ROOT)/build/rootfs-add
 ENGINE := $(ADD)/System/Library/Frameworks/OpenGLES.framework/MBXGLEngine.bundle/MBXGLEngine
 GLTEST := $(ADD)/usr/libexec/ios3ds-gltest
+# iOS 3.x build of the same engine (-DGL_IOS3: 7E18's 822-slot dispatch
+# table); installed only by rootfs/overlay-3.1.3.json
+ENGINE3 := $(ADD)/ios3/MBXGLEngine
 HOSTDIR := $(ROOT)/build/gl-host
 
 CORE  := api.c draw.c raster.c pica_be.c ca.c stereo.c pvrtc.c
@@ -27,11 +30,16 @@ PICA_HOST := $(PICA_SRC) $(PICA)/src/pica_dev_host.c $(PICA)/src/pica_drv.c $(PI
 PICA_HDRS := $(wildcard $(PICA)/include/*.h $(PICA)/src/*.h $(PICA)/sim/*.h)
 CFLAGS := -O2 -Wall -Wextra -Wno-unused-parameter -mfpu=vfp -DGL_PICA -I$(PICA)/include -I$(ROOT)/boot/common
 
-all: $(ENGINE) $(GLTEST)
+all: $(ENGINE) $(ENGINE3) $(GLTEST)
 
 $(ENGINE): $(CORE) iface.c thunks.S $(HDRS) $(STEREO) $(PICA_IOS) $(PICA_HDRS)
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -bundle -fvisibility=hidden $(CORE) $(PICA_IOS) iface.c thunks.S \
+	    -framework CoreFoundation -o $@
+
+$(ENGINE3): $(CORE) iface.c thunks.S $(HDRS) $(STEREO) $(PICA_IOS) $(PICA_HDRS)
+	mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -DGL_IOS3 -bundle -fvisibility=hidden $(CORE) $(PICA_IOS) iface.c thunks.S \
 	    -framework CoreFoundation -o $@
 
 $(GLTEST): test/gltest.c test/glapi.h gl_defs.h
@@ -68,6 +76,6 @@ slots:
 	python3 genslots.py $(CACHE) -o gl_slots.h
 
 clean:
-	rm -f $(ENGINE) $(GLTEST)
+	rm -f $(ENGINE) $(ENGINE3) $(GLTEST)
 	rm -rf $(HOSTDIR)
 .PHONY: all host-test slots clean

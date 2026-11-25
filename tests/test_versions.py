@@ -103,7 +103,11 @@ class TestVersions(unittest.TestCase):
                                       "0x176a210", "0x176a260",
                                       "0x95760", "0x1bde74c", "0xd478", "0x1c47c",
                                       "0x48bc", "0xda860", "0xb9b2", "0xb9d2",
-                                      "0xb9e8"])
+                                      "0xb9e8", "0x2f91bb8"])
+                    # SpringBoard skips DataMigrator only when this matches
+                    # the running build (re-log NEXT).
+                    self.assertIn("<key>SBLastSystemVersion</key>\n\t<string>7E18</string>",
+                                  recipe["write"]["/private/var/mobile/Library/Preferences/com.apple.springboard.plist"])
                 elif v == "2.2.1":
                     # 2.x has no dyld cache. Patching + re-signing liblockdown
                     # made dyld stop after CoreSurface (re-log 115), so the
@@ -117,7 +121,10 @@ class TestVersions(unittest.TestCase):
                     self.assertEqual(list(recipe["plist_set"]),
                                      ["/System/Library/LaunchDaemons/com.apple.SpringBoard.plist"])
                 else:
-                    self.assertEqual(recipe["add"], {})
+                    # only the 7E18 (-DGL_IOS3) build of our GL engine
+                    self.assertEqual(recipe["add"], {
+                        "build/rootfs-add/ios3/MBXGLEngine":
+                        "/System/Library/Frameworks/OpenGLES.framework/MBXGLEngine.bundle/MBXGLEngine"})
                     self.assertEqual(list(recipe["plist_set"]),
                                      ["/System/Library/LaunchDaemons/com.apple.SpringBoard.plist"])
                     self.assertEqual(recipe["plist_set"][

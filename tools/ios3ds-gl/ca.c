@@ -217,7 +217,7 @@ int gl_scene_diff(int which, int *maxd)
             break;
         }
         gc->be = be[i];
-        gl_install_dispatch(gc, tab[i]);
+        gl_install_dispatch_native(gc, tab[i]);
         ok = which ? depth_scene(gc, tab[i], img[i]) : scene(gc, tab[i], img[i]);
         gl_gc_free(gc);
         gl_share_release(sh);

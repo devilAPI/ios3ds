@@ -2370,16 +2370,57 @@ static const char *slot_name(int slot)
 
 /* Fill one __GLIFunctionDispatchRec: every slot gets a logging stub, then
  * the implemented entry points go on top. */
-void gl_install_dispatch(GC *gc, void **table)
+#ifdef GL_IOS3
+/* iOS 3.x (7E18) OpenGLES has an 822-slot __GLIFunctionDispatchRec: the
+ * 4.x-only slots 761-776 (instanced/base-vertex draws, ARB vertex arrays,
+ * multisample textures) and 838-840 (discard/APPLE framebuffer) do not
+ * exist, so 4.x slots 777-837 sit 16 lower. Writing the 841-slot 4.x layout
+ * overflowed OpenGLES's heap block (re-log NEXT). Slots 441-447 differ in
+ * name only (NV combiners vs uniform blocks); the engine implements neither. */
+#define GLI_TABLE_SLOTS 822
+static int table_slot(unsigned s)
+{
+    if (s < 761)
+        return (int)s;
+    if (s >= 777 && s < 838)
+        return (int)s - 16;
+    return -1;
+}
+#else
+#define GLI_TABLE_SLOTS GLI_NSLOTS
+static int table_slot(unsigned s) { return (int)s; }
+#endif
+
+static void install(void **table, int native)
 {
     unsigned i;
-    (void)gc;
-    for (i = 0; i < GLI_NSLOTS; i++)
+    int t;
+    for (i = 0; i < GLI_NSLOTS; i++) {
+        if ((t = native ? (int)i : table_slot(i)) < 0 || t >= (native ? GLI_NSLOTS : GLI_TABLE_SLOTS))
+            continue;
 #ifdef GL_HOST
-        table[i] = (void *)unimpl_host;
+        table[t] = (void *)unimpl_host;
 #else
-        table[i] = (char *)gl_unimpl_thunks + 12 * i;
+        table[t] = (char *)gl_unimpl_thunks + 12 * i;
 #endif
-    for (i = 0; i < sizeof handlers / sizeof handlers[0]; i++)
-        table[handlers[i].slot] = handlers[i].fn;
+    }
+    for (i = 0; i < sizeof handlers / sizeof handlers[0]; i++) {
+        t = native ? (int)handlers[i].slot : table_slot(handlers[i].slot);
+        if (t >= 0 && t < (native ? GLI_NSLOTS : GLI_TABLE_SLOTS))
+            table[t] = handlers[i].fn;
+    }
+}
+
+/* OpenGLES's own dispatch tables (the running OS's layout) */
+void gl_install_dispatch(GC *gc, void **table)
+{
+    (void)gc;
+    install(table, 0);
+}
+
+/* the engine's internal tables, indexed by SLOT_* (ca.c's scene check) */
+void gl_install_dispatch_native(GC *gc, void **table)
+{
+    (void)gc;
+    install(table, 1);
 }

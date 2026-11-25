@@ -225,6 +225,7 @@ void *nt_get(NameTab *t, GLuint name);
 Tex *gl_bound_tex(GC *gc, int unit);
 int gl_get_rt(GC *gc, RT *rt);
 void gl_install_dispatch(GC *gc, void **table);
+void gl_install_dispatch_native(GC *gc, void **table);
 GC *gl_gc_new(Share *sh);
 void gl_gc_free(GC *gc);
 Share *gl_share_new(void);
