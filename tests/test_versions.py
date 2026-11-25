@@ -86,6 +86,7 @@ class TestVersions(unittest.TestCase):
             sb = "/System/Library/LaunchDaemons/com.apple.SpringBoard.plist"
             self.assertEqual(plain["plist_set"][sb]["EnvironmentVariables"]["CA_ENABLE_OGL"], "0")
             self.assertEqual(plain["plist_set"][sb]["EnvironmentVariables"]["LK_ENABLE_OGL"], "0")
+            self.assertNotIn("IOS3DS_CA_SWAP_DIAG", plain["plist_set"][sb]["EnvironmentVariables"])
         with mock.patch.dict(os.environ, {"IOS3DS_GPU313": "1"}):
             self.assertTrue(versions.gpu313("3.1.3"))
             self.assertFalse(versions.gpu313("4.2.1"))
@@ -98,6 +99,13 @@ class TestVersions(unittest.TestCase):
                 env = recipe["plist_set"][sb]["EnvironmentVariables"]
                 self.assertEqual(env["CA_ENABLE_OGL"], "1")
                 self.assertNotIn("LK_ENABLE_OGL", env)
+                self.assertNotIn("IOS3DS_CA_SWAP_DIAG", env)
+        with mock.patch.dict(os.environ, {"IOS3DS_GPU313": "1", "IOS3DS_GPU313_DIAG": "1"}):
+            with tempfile.TemporaryDirectory() as td:
+                with open(versions.recipe_path("3.1.3", td)) as f:
+                    recipe = json.load(f)
+                env = recipe["plist_set"][sb]["EnvironmentVariables"]
+                self.assertEqual(env["IOS3DS_CA_SWAP_DIAG"], "1")
 
     def test_replace_marker_in_overlay(self):
         base = {"a": {"x": 1, "y": 2}, "b": [1, 2]}

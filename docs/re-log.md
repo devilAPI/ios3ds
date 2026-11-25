@@ -5487,3 +5487,104 @@ from its dyld shared cache (symbols kept in the 3.x cache) with
   branch), and a fresh 3.1.3 soak (`--cycles 5 --require-app --crashlogs`)
   **PASS**es: 0 panics, 0 restarts, every tap opened an app, only cycle 2
   needed a second Home.
+
+## NEXT. 3.1.3's last frame after Home, and making the GPU path opt-in (2026-11-25)
+
+Continues the previous NEXT section. The 3.1.3 PICA200 CoreAnimation path from
+137e6cc is kept, but it is **opt-in**: the default image is back on software
+CA + the ARM9 screen copy. Firmware staged read-only from the oldsensors
+worktree into this worktree's `build/fw-3.1.3`; 2.2.1 was staged by copying
+`fw-2.2.1/staging` into this worktree's own `build/`.
+
+### Counting frames after Home
+
+- **[V]** `IOS3DS_CA_SWAP_DIAG=1` (new, off by default) prints every CA
+  `SwapNotification` and each present / arena copy / CPU read-back behind it
+  as `[gl] [swapdiag]`, next to the ARM9's 30 s `[gpu] mirror:` report. On a
+  fresh GPU image (`IOS3DS_GPU313=1 IOS3DS_GPU313_DIAG=1 make sdimg IOS=3.1.3`)
+  boot produced swaps #1–6, each with exactly one direct `PICA_OP_PRESENT`
+  into surface 0x621000; the mirror built 4 frames in the first 30 s and then
+  reported 901 idle VBlanks in the next 30 s (0 busy skips, 0 timeouts).
+- **[V]** After the first Home key (`[input] key 40 down/up @14806`) CA still
+  issued 18 swaps (#26–#43, presents 36→53, all direct), so the final present
+  was not missing and the mirror was not stuck. The frame the soak captured
+  after Home was still Settings, not a dark-icon home screen: on this loaded
+  host the Home press was swallowed or the GPU close animation had not
+  finished inside the harness's settle window; the harness then had to try its
+  page-swipe / second-Home recovery (as in the previous section). The
+  dark-icon symptom could not be isolated to a single dropped mirror frame
+  here.
+- **[V]** A late `IOMobileFramebufferSwapSignal` can still switch the CLCD to
+  another IOSurface *after* the present marked `m_dirty`: the mirror would then
+  copy the old surface, clear `m_dirty`, and see no further present on 3.x.
+  This is the remaining display-side race that the fix below closes; the
+  QEMU runs cannot confirm that it was the only cause of (a).
+
+### Fix / opt-in
+
+- **[V]** `kernel/shim/pica.c` remembers the CLCD source PA of the last mirror
+  frame (new `IOS3DS_KPI_CLCD_SWAP_DIRTY`, set only for 3.1.3 in
+  `scripts/versions.py` / `scripts/kpi.py`). On a VBlank with `m_dirty == 0`, a
+  changed source PA now marks a frame dirty, so a swap that arrives after the
+  present is still mirrored. The code is compiled out on 4.1/4.2.1; the six
+  4.2.1 hashes are unchanged (below). GPU part on 3.1.3: 26496/32768 bytes.
+- **[V]** `scripts/versions.py` restores 3.1.3's `gpu_mirror=0` boot.cfg
+  override; `rootfs/overlay-3.1.3.json` sets `CA_ENABLE_OGL=0` and
+  `LK_ENABLE_OGL=0`, and the EAGLServer API patch (0x1bde788) is left out of
+  the default recipe. `IOS3DS_GPU313=1 make sdimg IOS=3.1.3` keeps
+  `gpu_mirror=1`, sets `CA_ENABLE_OGL=1` and includes the patch.
+  `IOS3DS_GPU313_DIAG=1` additionally sets `IOS3DS_CA_SWAP_DIAG=1` in
+  SpringBoard's environment. Offline tests check both recipes and boot.cfg.
+- **[V]** Why default-off: in QEMU the GPU path is slower (previous section:
+  Notes open 10–14 s vs 4–6 s, close ~20 s vs 4 s after the first bring-up
+  run). GPS hooks, sensor/camera status and `emu/perf.py` options from the
+  branch are unchanged.
+
+### Verification
+
+- **[V]** `make test` passes. Fresh default 4.2.1 build (SHA-256): kernel
+  `505f451a44d9da6aae7034d427d5524d7392d9fc70640ec997c374b0b5a70e38`,
+  devtree `25b1bd233447ddfc60eb69e30ad4cbd085c1963f86e77052fda969469d8327cc`,
+  fakeio `e5fecd6645b3bc44d6510d7af7397c667fdc25da4517e2cd9fabc42fb673570d`,
+  shim `a35631eb66b3c2855a1a02e656bb88b77b132dd89f7a3c69a429f9a033a4a3a1`,
+  gpu `6bdaf6177b66a3d268d3472958a74c8797ce18c64a1a4556f04806292691f479`,
+  boot.cfg `8d4079cfe114e5006a82967dee51b28de666376474fa86ebd8c9a5d4969b5e29`
+  (unchanged by this branch). Shim main part 24268/24320 bytes; 3.1.3's GPU
+  part is 26496/32768 bytes with the kpi flag compiled in.
+- **[V]** Every soak below started from a **fresh `build/sd.img`** (`rm -f`
+  then `make sdimg [IOS=...]`), with
+  `IOS3DS_QEMU=/tmp/opencode/qemu-compat2/b/qemu-system-arm` and `--icount 2`:
+
+  | image | command | boot | cycles / home | result |
+  |---|---|---|---|---|
+  | 3.1.3 default | `emu/soak.py --cycles 5 --require-app --crashlogs --targets "47,314;123,226;199,226;275,226;123,50"` | 40 s | 5 apps opened, app diffs 84.8–163.8, home diff 0.03–0.04, **no Home recovery**, 0 restarts | **PASS** |
+  | 3.1.3 opt-in GPU | same | 50 s | 5 apps opened, app diffs 73.9–160.7, home diff 0.0–0.04 except cycle 1 (60.7, fixed by the harness's page-swipe + Home), 0 restarts | **PASS** |
+  | 2.2.1 | same with targets `"275,226;199,226;123,226;47,226;275,50"` | 60 s | 5 apps opened, app diffs 84.4–173.6, home diff 0.0–0.04, no recovery, 0 restarts | **PASS** |
+  | 4.2.1 | `emu/soak.py --cycles 5` | 70 s | 5 apps opened, home diff 0.0–5.0, no recovery, 0 restarts | **PASS** |
+
+  The GPU image's `boot.cfg` has `gpu_mirror=1` and the generated recipe has
+  `CA_ENABLE_OGL=1`; the default 3.1.3 image has `gpu_mirror=0` and
+  `CA_ENABLE_OGL=0`. All five taps opened an app in every run. The one GPU
+  recovery shows that (a) is **not fully eliminated** by the CLCD-PA fix under
+  a loaded host, which is a second reason (besides (b)) to keep that path off
+  by default. The diagnostic run used for the swap counts above was stopped
+  after its first cycle; its image was discarded and rebuilt fresh for the
+  final soaks.
+
+### Needs hardware
+
+- **[G]** On a console, first boot the **default** 3.1.3 image: home screen
+  after a single Home, Notes opening in ~4–6 s, ARM9 copy (`gpu_mirror=0`) in
+  `log.txt`.
+- **[G]** For the opt-in image, build with
+  `IOS3DS_GPU313=1 IOS3DS_GPU313_DIAG=1 make sdimg IOS=3.1.3`, boot with
+  `diag=1` and check for `[gl] CA compositor: OpenGL ES on the PICA200`,
+  `[gl] [swapdiag] swap #N: … presents …`, `[gpu] display mirror ACTIVE` and
+  `[gpu] mirror: N frames` after opening and closing Notes five times. Take a
+  photo 2 s after Home: all icons must be fully drawn without a second Home or
+  touch. Compare open/close times with the default image; if the GPU path is
+  slower or the last frame is still lost, ship the default (software) image.
+- **[G]** The CLCD-source change is only exercised when CA swaps IOSurfaces
+  after a present; QEMU's model and the loaded host could not isolate that
+  race from a swallowed Home / slow close animation, so the hardware log is
+  the deciding evidence for the fix.
