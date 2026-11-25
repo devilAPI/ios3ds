@@ -5241,3 +5241,8 @@ and 2.2.1.
   (default options) **8/8 PASS** (a first run tapped the wrong network while
   Settings was still drawing; the rerun passed). `make test` passes (the
   three new CoreFoundation imports are in `scripts/ios-sdk-symbols.json`).
+- **[V]** After rebasing onto origin/main (1add5cf, with the old-version audio,
+  power and Cydia rounds): 4.2.1 hashes still equal origin/main's (same six
+  values), `make test` passes, 3.1.3 `wifi_test --case ok` **PASS**, fresh
+  3.1.3 soak (`--require-app`, §128 targets) **PASS**, fresh 4.2.1 soak
+  **PASS**.
