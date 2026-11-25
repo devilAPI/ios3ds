@@ -4741,3 +4741,16 @@ hardware breakpoints on QEMU's gdbstub (private port); `exception_triage`
   0 crashes). Screenshots: `build/shots/{313,221}-{home,apps}.png` (not
   committed).
 - **[V]** `make test` passes. Driver matrix: docs/multi-version.md §6.9.
+
+### Verification after rebasing onto origin/main (82d308c)
+
+- **[V]** `make test` passes. The default 4.2.1 build gives `kernel 505f451a…`,
+  `devtree 25b1bd23…`, `fakeio e5fecd66…`, `shim a35631eb…`, `gpu 6bdaf617…`,
+  `boot.cfg 8d4079cf…`. The shim/gpu values differ from §125's because main's
+  stereo round (§127) changed them; building origin/main's `kpi.h`, `mcu.c`
+  and `mkboot.py` in this tree gives the same six hashes, so this branch
+  changes no 4.2.1 byte.
+- **[V]** Fresh 4.2.1 image, `emu/soak.py --cycles 5 --icount 2` → **Result:
+  PASS** (input after 70 s, warm-up 135 s, five app/home cycles, home diff 0.0).
+- **[G]** 4.1 (8B117, now staged here) was not re-soaked; its shim path has no
+  new flag set.
