@@ -4972,3 +4972,90 @@ backlight log/retry patches (above); mic routing landed with re-log 130.
   PASS** (input after 90 s, five apps opened, 0 restarts).
 - 2.2.1 was not re-soaked: its effective recipe is unchanged (`cydia: false`;
   `cydia_pseudo` and the cydia.py parser only run with Cydia enabled).
+
+## NEXT. 3.1.3/2.2.1 power: wake after Lock, brightness, the 2.2.1 battery panic, the lid (2026-11-25)
+
+Worktree `oldwake`; firmware staged from `compat16` into this worktree's
+`build/fw-{2.2.1,3.1.3,4.1}/`.
+
+### Wake after Lock: the clock controller's performance-state wait
+
+- **[V]** Same cause as 4.2.1's re-log 41: AppleS5L8720XClockController
+  sleeps on its command gate after starting a performance-state change until
+  a change-done interrupt clears a byte, and the fake clock/power page never
+  raises it. Display sleep lowers the performance state, so the CLCD power
+  path blocked there and Home never re-enabled the controller. 8C148's
+  `s5l-perf-nowait` (byte `+0x38c`) was in the "skipped" list for 7E18/5H11a.
+  The loop exists in both, with byte `+0x248` (`ldrb r3,[rX,#0x248]; cmp;
+  bne -40` right after `commandSleep`, vtable `+0x90` on 7E18, `+0x98` on
+  5H11a): 7E18 `0xc05f30ec` (r5), 5H11a `0xc05e2b40` (r6), both unique.
+  Patch: `mov r3,#0; strb r3,[rX,#0x248]; nop`, as on 4.x.
+- **[V]** With it: `[input] key 30` → `[input] screen off` → Home →
+  `screen on` → the slide on the lock screen → home screen, and every later
+  tap opens its app (3.1.3 and 2.2.1 soaks below). The input daemon's
+  3.x/2.x build maps SELECT/POWER to Lock again, and both overlays drop
+  `SBAutoLockTime = -1` (SpringBoard's default auto-lock, as on 4.2.1).
+- **[V]** No "Where is my backlight?" flood on 7E18 after wakes (2 lines
+  each for `enable_backlight`/`disable_backlight` in a 10-cycle soak), so
+  the 4.x `clcd-backlight-retry-off` is not needed there.
+
+### Brightness on 2.x/3.x
+
+- **[V]** 2.2.1 and 3.1.3 SpringBoard keep `DisplayBrightness` in their own
+  in-process `IOHIDEventSystem` (`IOHIDEventSystemCreate/SetProperty`); there
+  is no `IOHIDEventSystemClient` to read it from. The Settings slider
+  (`GSEventSetBacklightLevel` → SpringBoard) is saved at once as
+  `SBBacklightLevel2` in mobile's `com.apple.springboard.plist`.
+  `ios3ds-mcud -DMCU_OLD` (root, so not through CFPreferences) reads that file
+  when its mtime changes (and every ~2 s anyway), takes the factor from the
+  ARM9's screen-off flag (0 after Lock/auto-lock, 1 on wake) and drives the
+  shim's LCD backlight through the existing `kern.ios3ds_mcuctl` path. Without
+  the key it uses 0.5, SpringBoard's default. Auto-brightness (New 3DS
+  camera ALS, `SBEnableALS` read from the same file) runs on top, as on 4.x.
+- **[V]** QEMU, 2.2.1 Settings > Brightness: `[mcud] iOS brightness 0.50 x
+  factor 1.00 -> 500/1000` at boot; slider to the left → `0.01 ... -> LCD
+  backlight 120/1000 (minimum)` (QEMU `lcd-backlight` 90 → 50); to the
+  right → `1.00 ... -> 1000/1000` (143); Lock → `factor 0.00 -> 0/1000`,
+  wake → `1000/1000`.
+- Four new stub-SDK symbols (`_CFDictionaryGetTypeID`, `_CFDictionaryGetValue`,
+  `_CFPropertyListCreateFromXMLData`, `_stat`) in `scripts/ios-sdk-symbols.json`.
+
+### 2.2.1 battery: AppleEmbeddedAudio zeroed IOPMrootDomain's retain count
+
+- **[V]** First finding: Darwin 9 objects point at their `__ZTV` symbol
+  itself; 7E18/8C148 point 8 bytes in (the constructors store `ZTV` vs
+  `ZTV+8`; `IOService` slot of `getProperty(const char*)` is `+0xa4` on
+  5H11a vs `+0x9c`). The shim's hand-indexed virtual calls (OSNumber
+  `release`, the accelerometer nub's `getProperty("reg")`, the PE/gyro
+  calls) therefore hit the wrong slot on 2.2.1 (`release` became
+  `getRetainCount`, a leak; `getProperty` a different virtual). New
+  `versions.py` `vt_bias` → `IOS3DS_KPI_VT_BIAS` (8 on 5H11a, 0 elsewhere)
+  is added to every such offset; the 4.2.1 shim bytes are unchanged.
+- **[V]** That was not the panic. QEMU gdbstub (private port), hardware
+  breakpoint on `IOPanic` (0xc014c3ec): the message is
+  `IOPMrootDomain: attached at free()`. A write watchpoint on the root
+  domain's retain count (`+4`, read through `gRootDomain` 0xc0206468) after
+  `IOPMrootDomain::batteryPublished` showed `0x00080009 -> 0` written by
+  `str r0,[r6,#4]` at 0xc03efb30, called from `IOService::messageClients` ←
+  `IOPMPowerStateQueue::checkForWork`: AppleEmbeddedAudio's power interest
+  handler stores 0 to `messageArgument+4` (an `IOPowerStateChangeNotification`
+  return value) for every message before it checks the type.
+  `batteryPublished` → `publishFeature("DisplayDims")` queues
+  `kIOPMMessageFeatureChange` with the root domain itself as the argument,
+  so the store wiped its retain count; the next registry iterator release
+  (CrashHousekeeping, BTServer) freed it.
+- **[V]** New 2.2.1 patch `audio-pm-msg-no-store` (0xc03efb28, the store
+  becomes `nop`; senders of the sleep messages pre-zero the return value).
+  `no_battery_ps` is gone. QEMU: `ios3ds-mcu: battery 100%, charger,
+  4200 mV: IOPMPowerSource registered`, no panic, and the status bar shows
+  the charging battery; the lock screen shows the big charging battery.
+
+### Lid (shell close/open)
+
+- **[V]** The ARM9 locks on close (POWER tap) unless the shim's backlight
+  says the screen is off, and wakes on open (HOME tap) only when it is. On
+  3.x/2.x nothing drove the shim's backlight before, so open never woke iOS.
+  With mcud's backlight (above): QEMU 2.2.1, `c` → `[mcu] shell closed:
+  locking iOS (POWER tap)` → `key 30` → `screen off` → `LCD backlight 0`;
+  `c` → `[mcu] shell opened: waking iOS (HOME tap)` → `key 40` →
+  `screen on` → `1000/1000`, lock screen on the display.

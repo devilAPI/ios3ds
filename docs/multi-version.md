@@ -678,7 +678,8 @@ time by `kernel/patcher.py`. Examples where offsets moved:
   wait is patched), gyro usage/dispatch (driver differs), and Seatbelt
   (disabled by default). None of these is needed to reach BSD root; the CLCD
   ones matter for wake, the clock ones for power management, and gyro for
-  CoreMotion.
+  CoreMotion. (Later: the performance-state wait is now patched on 7E18 and
+  5H11a as `s5l-perf-nowait`, which the Lock/wake path needs; re-log NEXT.)
 - **[V]** Skipped on 5H11a: the same group plus IFAR/ACTLR (Darwin 9's fault
   path differs), all PE/RTC MCU hooks (the functions exist but their Thumb
   prologues and vtable slot indices changed), `iortc-wait-2s` and
@@ -824,11 +825,12 @@ or not registered, with the reason):
 | Touch + Home/Power/volume buttons | works: `ios3ds-input -DINPUT_IOS3`, GSEvents to PurpleSystemEventPort | works: `-DINPUT_IOS2` (48-byte records), 2.x link |
 | Display | works: software CA, ARM9 CPU copy every frame | works: same |
 | GPU (PICA200) | mirror off (no GL present marks CA frames); `MBXGLEngine -DGL_IOS3` installed for EAGL apps [G: no EAGL app tested]; CA's own GL path unused (`EAGLServer::renderer()` gets no context) | off: 2.x OpenGLES talks to MBX directly, no engine bundle; MBX2D disabled |
-| Battery | works: shim IOPMPowerSource, refreshed by mcud polling | off: registering the IOPMPowerSource panics 5H11a (`IORegistryEntry::free`); status bar shows no level |
+| Battery | works: shim IOPMPowerSource, refreshed by mcud polling | works: shim IOPMPowerSource; kernel patch `audio-pm-msg-no-store` (AppleEmbeddedAudio's PM handler zeroed IOPMrootDomain's retain count) and the Darwin 9 vtable bias (`IOS3DS_KPI_VT_BIAS`); level + charging in the status bar and on the lock screen |
 | Volume slider | works: mcud `-DMCU_OLD` → AVSystemController | works (same) |
 | No-sleep assertion | works: mcud | works: mcud |
-| Lock / auto-lock | off: SpringBoard turns the screen off on Lock, but Home never wakes it (CLCD stays off); the 3.x/2.x input daemon sends no Lock event and `SBAutoLockTime = -1` | off: same |
-| Brightness | off: no IOHIDEventSystemClient properties to read on 3.x; LCD stays at Luma's level | off: same |
+| Lid (shell close/open) | works: close = Lock (POWER tap) + LCDs off, open = Home tap + LCDs on (needs the mcud backlight above) | works: same |
+| Lock / auto-lock | works: kernel patch `s5l-perf-nowait` (the clock controller's performance-state wait blocked the CLCD wake); SELECT/POWER lock, Home wakes, slide unlocks; SpringBoard's default auto-lock | works: same (5H11a patch at 0xc05e2b40) |
+| Brightness | works: mcud `-DMCU_OLD` reads `SBBacklightLevel2` (Settings slider) from mobile's springboard plist, factor 0 while the screen is off; auto-brightness (New 3DS camera ALS) on top | works: same |
 | Accelerometer / gyro | off: needs IOHIDEventSystemClient (4.x) / CoreMotion (4.x); iPod2,1 3.x has no gyro API | off: same |
 | Audio | works in QEMU: speaker output (UI sounds, `ios3ds-tone`; DMA TC IRQs injected through the version's IRQ path), volume → CSND, mic input via the VirtualAudio N82-slot swap at unity gain (re-log 130); [G] real sound, headphones, keyboard click; test song not shown (4.x library format) | partial: I2S patch in, kernel no longer hangs, but `AudioSessionInitialize` never returns (no stream); mic swap applied, untested (re-log 130) |
 | Wi-Fi (`ios3ds-wifid`/a80211) | off: built against 4.2.1 private Apple80211/IOKit APIs | off: same |
