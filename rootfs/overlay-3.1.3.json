@@ -119,7 +119,7 @@
    "offset": "0x95760",
    "orig": "f0b503af",
    "new": "00207047",
-   "why": "7E18 -[SBTetherController isTethered] -> NO. The stock method calls IOServiceMatching(\"AppleTetheredDevice\") via _demoCardConnection; on the 3DS there is no such service, and the affirmative branch keeps SpringBoard on the boot LCD path. Returning 0 makes UIKit call +[CAWindowServer server] (GDB: 0 hits before, 3 after) and IOMobileFramebufferOpen. Thumb IMP 0x96761, file offset 0x95760; original prologue push {r4,r5,r6,r7,lr} verified in the extracted executable (re-log NEXT).",
+   "why": "7E18 -[SBTetherController isTethered] -> NO. The stock method calls IOServiceMatching(\"AppleTetheredDevice\") via _demoCardConnection; on the 3DS there is no such service, and the affirmative branch keeps SpringBoard on the boot LCD path. Returning 0 makes UIKit call +[CAWindowServer server] (GDB: 0 hits before, 3 after) and IOMobileFramebufferOpen. Thumb IMP 0x96761, file offset 0x95760; original prologue push {r4,r5,r6,r7,lr} verified in the extracted executable (re-log 120).",
    "mode": "0755"
   },
   {
@@ -127,7 +127,7 @@
    "offset": "0x1bde74c",
    "orig": "d04095e5",
    "new": "0240a0e3",
-   "why": "7E18 QuartzCore CA::WindowServer::M2Display::new_server: replace ldr r4,[r5,#0xd0] (display kind from the M2CLCD display) with mov r4,#2, forcing the EAGLServer path. On the 3DS the kind is neither 1 (MBXServer) nor 2 (EAGLServer), so new_server fell through to the plain Server constructor and no render server/display context was created. With this patch GDB hits EAGLServer::EAGLServer (0x31bda5a0) and CAWindowServer::Server::Server (0x31bdf010); verified original bytes at cache VA 0x31bde74c (re-log NEXT). 4.x caches and overlays are untouched.",
+   "why": "7E18 QuartzCore CA::WindowServer::M2Display::new_server: replace ldr r4,[r5,#0xd0] (display kind from the M2CLCD display) with mov r4,#2, forcing the EAGLServer path. On the 3DS the kind is neither 1 (MBXServer) nor 2 (EAGLServer), so new_server fell through to the plain Server constructor and no render server/display context was created. With this patch GDB hits EAGLServer::EAGLServer (0x31bda5a0) and CAWindowServer::Server::Server (0x31bdf010); verified original bytes at cache VA 0x31bde74c (re-log 120). 4.x caches and overlays are untouched.",
    "mode": "0644"
   }
  ]

@@ -811,7 +811,7 @@ here produce the same bytes.)
 |---|---|---|
 | 4.2.1 (8C148) | home screen, apps, input, Cydia/TLSFix | **PASS** (70 s to SpringBoard + input, 0 failures) |
 | 4.1 (8B117) | home screen with stock icons; Cydia/TLSFix disabled | **PASS** after the soak harness stopped accepting the green boot console as a home reference (60 s to SpringBoard + input, 0 failures) |
-| 3.1.3 (7E18) | `/dev/md0` mounts, launchd + mDNSResponder; SpringBoard launches, stays up and draws the Apple logo/spinner. Its app delegate and `finishLaunching` run. A version-only overlay now forces `SBTetherController isTethered` to NO and the QuartzCore display kind to EAGL, so GDB reaches `+[CAWindowServer server]`, `IOMobileFramebufferOpen` and `EAGLServer::EAGLServer`; no key UIWindow, CA render start or home-screen frame yet (re-log NEXT) | not meaningful until the home screen appears |
+| 3.1.3 (7E18) | `/dev/md0` mounts, launchd + mDNSResponder; SpringBoard launches, stays up and draws the Apple logo/spinner. Its app delegate and `finishLaunching` run. A version-only overlay now forces `SBTetherController isTethered` to NO and the QuartzCore display kind to EAGL, so GDB reaches `+[CAWindowServer server]`, `IOMobileFramebufferOpen` and `EAGLServer::EAGLServer`; no key UIWindow, CA render start or home-screen frame yet (re-log 120) | not meaningful until the home screen appears |
 | 2.2.1 (5H11a) | `/dev/md0` mounts, launchd + mDNSResponder, display; GDB confirms SpringBoard's app delegate and `finishLaunching` run, so the `libCGFreetype` console tail is not a dyld failure, but no CA render server is created and no UI is drawn | not meaningful until the home screen appears |
 
 **What works on the older versions.** The kernel-side shim is shared by all

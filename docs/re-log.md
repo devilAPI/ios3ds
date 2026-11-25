@@ -3787,7 +3787,7 @@ Apple file is committed. All scratch overlays and GDB harnesses live under
   pass. The deliverable is the traced stop point above, plus verified addresses
   for the next attempt.
 
-## NEXT. 3.1.3: the tethered-display gate and the missing EAGL display server (2026-11-25)
+## 120. 3.1.3: the tethered-display gate and the missing EAGL display server (2026-11-25)
 
 Continues §119. This round ships a version-only rootfs change for 7E18;
 `scripts/versions.py`, all 4.x recipes, kernel patch sets, the shim and the
