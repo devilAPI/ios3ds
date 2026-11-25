@@ -132,7 +132,7 @@
   "name": "audio-pm-msg-no-store",
   "orig": "0000a0e30240a0e1040086e5",
   "new": "0000a0e30240a0e10000a0e1",
-  "why": "AppleEmbeddedAudio's IOPMrootDomain interest handler (ARM, 0xc03efb08) stores 0 to messageArgument+4 (IOPowerStateChangeNotification.returnValue) for every message before it checks the type. publishFeature() (from IOPMrootDomain::batteryPublished, when an IOPMPowerSource registers) sends kIOPMMessageFeatureChange with the root domain itself as the argument, so the store zeroed IOPMrootDomain's retain count; the next registry iterator release freed it ('IOPMrootDomain: attached at free()', re-log NEXT; QEMU watchpoint on rootDomain+4). The senders of the sleep messages pre-zero returnValue, so the store is dropped (mov r4,r2 kept; str r0,[r6,#4] -> nop)",
+  "why": "AppleEmbeddedAudio's IOPMrootDomain interest handler (ARM, 0xc03efb08) stores 0 to messageArgument+4 (IOPowerStateChangeNotification.returnValue) for every message before it checks the type. publishFeature() (from IOPMrootDomain::batteryPublished, when an IOPMPowerSource registers) sends kIOPMMessageFeatureChange with the root domain itself as the argument, so the store zeroed IOPMrootDomain's retain count; the next registry iterator release freed it ('IOPMrootDomain: attached at free()', re-log 132; QEMU watchpoint on rootDomain+4). The senders of the sleep messages pre-zero returnValue, so the store is dropped (mov r4,r2 kept; str r0,[r6,#4] -> nop)",
   "va": "0xc03efb28"
  }
 ]

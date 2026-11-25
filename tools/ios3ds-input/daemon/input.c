@@ -122,7 +122,7 @@ static const struct { uint16_t btn, usage; } keymap[] = {
     { PAD_START,  kHIDUsage_Csmr_Menu },
     { INBTN_HOME, kHIDUsage_Csmr_Menu },
     /* iOS 3.x/2.x lock too since their kernels carry s5l-perf-nowait
-       (the wake used to block in the clock controller, re-log NEXT) */
+       (the wake used to block in the clock controller, re-log 132) */
     { PAD_SELECT, kHIDUsage_Csmr_Power },
     { INBTN_POWER, kHIDUsage_Csmr_Power },
     { PAD_R,      kHIDUsage_Csmr_VolumeInc },

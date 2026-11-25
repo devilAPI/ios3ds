@@ -195,7 +195,7 @@
 /* 1: the kernel's _fleh_irq starts "sub lr,lr,#4; mrs sp,spsr" (Darwin 9/10:
    2.2.1, 3.1.3) instead of 4.x's "mrs sp,cpsr"; the shim replays it */
 /* 1 = do not publish the MCU battery as an IOPMPowerSource (no firmware
-   sets it since 2.2.1's patch audio-pm-msg-no-store, re-log NEXT) */
+   sets it since 2.2.1's patch audio-pm-msg-no-store, re-log 132) */
 #ifndef IOS3DS_KPI_MCU_NO_PMPS
 #define IOS3DS_KPI_MCU_NO_PMPS 0
 #endif

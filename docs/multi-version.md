@@ -679,7 +679,7 @@ time by `kernel/patcher.py`. Examples where offsets moved:
   (disabled by default). None of these is needed to reach BSD root; the CLCD
   ones matter for wake, the clock ones for power management, and gyro for
   CoreMotion. (Later: the performance-state wait is now patched on 7E18 and
-  5H11a as `s5l-perf-nowait`, which the Lock/wake path needs; re-log NEXT.)
+  5H11a as `s5l-perf-nowait`, which the Lock/wake path needs; re-log 132.)
 - **[V]** Skipped on 5H11a: the same group plus IFAR/ACTLR (Darwin 9's fault
   path differs), all PE/RTC MCU hooks (the functions exist but their Thumb
   prologues and vtable slot indices changed), `iortc-wait-2s` and

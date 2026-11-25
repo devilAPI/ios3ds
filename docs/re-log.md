@@ -4973,7 +4973,7 @@ backlight log/retry patches (above); mic routing landed with re-log 130.
 - 2.2.1 was not re-soaked: its effective recipe is unchanged (`cydia: false`;
   `cydia_pseudo` and the cydia.py parser only run with Cydia enabled).
 
-## NEXT. 3.1.3/2.2.1 power: wake after Lock, brightness, the 2.2.1 battery panic, the lid (2026-11-25)
+## 132. 3.1.3/2.2.1 power: wake after Lock, brightness, the 2.2.1 battery panic, the lid (2026-11-25)
 
 Worktree `oldwake`; firmware staged from `compat16` into this worktree's
 `build/fw-{2.2.1,3.1.3,4.1}/`.
