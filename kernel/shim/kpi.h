@@ -206,4 +206,9 @@
 #define IOS3DS_KPI_KERNEL_IRQ_CONT 0x80066494
 #endif
 
+/* AppleARMPlatform device-tree function lookup (no symbol; scripts/kpi.py LITERALS) */
+#ifndef IOS3DS_KPI_ARM_FUNCTION_LOOKUP
+#define IOS3DS_KPI_ARM_FUNCTION_LOOKUP 0x802e4814
+#endif
+
 #endif /* IOS3DS_SHIM_KPI_H */

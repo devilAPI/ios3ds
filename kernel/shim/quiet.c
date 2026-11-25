@@ -28,7 +28,7 @@
 #define svc_adjust_busy KPI(IOS3DS_KPI_IOSERVICE_ADJUSTBUSY, void, void *, long)
 /* AppleARMPlatform: look up the platform function named by a device-tree
    property of the provider (waitForService on its phandle, no timeout) */
-#define arm_function_lookup KPI(0x802e4814, void *, void *, const char *)
+#define arm_function_lookup KPI(IOS3DS_KPI_ARM_FUNCTION_LOOKUP, void *, void *, const char *)
 
 static void *clk_nub;
 

@@ -126,6 +126,13 @@
   "why": "IOKitInitializeTime (bsd_init, 0x8024a53e) waits 30 s for resourceMatching(\"IORTC\") before clock_initialize_calendar; nothing publishes IORTC yet (no RTC driver). 2 s, not 0: with 0 the calendar can be initialised before AppleARMPE (gIOPlatform) is up, and early userland gettimeofday deltas then read 0 (gltest \"frame took 0 ms\", QEMU and hardware run10). AppleARMPE is up within 1 s even in plain QEMU, so 2 s keeps the original order [4.1: relocated by context-8 from 8C148 0x801a800a]"
  },
  {
+  "name": "iortc-wait-mcu",
+  "va": "0x801a7608",
+  "orig": "b90e1b80",
+  "new": "@shim+0x34@",
+  "why": "IOKitInitializeTime (0x801a75dc): literal of its waitForService(resourceMatching(\"IORTC\"), {2 s}) call -> shim_mcu_wait_rtc (no wait when the MCU RTC is known) [4.1: relocated from 8C148 0x801a8030; same 0x30-byte function, literal = 8B117 IOService::waitForService 0x801b0eb8|1]"
+ },
+ {
   "name": "clcd-sync-swap",
   "va": "0x80758eb8",
   "orig": "0400000a",
@@ -216,5 +223,12 @@
   "new": "00000000",
   "why": "Seatbelt sandbox (com.apple.security.sandbox @0x803cd000, Sandbox-58.12) sb_evaluate(sandbox, label, op, ctx): r2 = operation index. Its first instruction (push {r4,r5,r6,r7,lr}) -> b shim_sb_evaluate (kernel/shim/entry.S), the branch word computed at build time from the shim ELF symbol. The shim returns 0 (allow) for the file-read operations (file* 1, file-read* and children 6-9, file-search 11) and replays push + continues into sb_evaluate at 0x803ced9c for everything else. This lets a sandboxed app (MobileSafari, App Store apps) read the Cydia Substrate / TLSFix dylibs under /Library so the tweaks load; write/exec/network/iokit/mach checks stay enforced. iOS 4 jailbreaks relaxed the sandbox the same way. Disabled by SANDBOX=0 / IOS3DS_SANDBOX_OPEN=0 / recipe \"sandbox_open\": false (docs/cydia.md). [4.1: relocated by context-16 from 8C148 0x803ced98]",
   "branch": "shim_sb_evaluate"
+ },
+ {
+  "name": "clkctl-voltage-quiet",
+  "va": "0x807040a4",
+  "orig": "15382e80",
+  "new": "@shim+0x28@",
+  "why": "AppleS5L8720XClockController::start: literal of the AppleARMPlatform function lookup (8B117 0x802e3814, byte-identical to 8C148 0x802e4814) for 'function-core_voltage_%ld' (string literal at 0x807040a8 -> 0x80707404) -> shim_quiet_clk_function, which takes clkrstgen off the busy count during the endless PMU wait (launchctl's IOKitWaitQuiet no longer sits out its 5 s timeout) [4.1: relocated from 8C148 0x807510a4 by the pool neighbours: Bad DPSM Tables string, panic]"
  }
 ]

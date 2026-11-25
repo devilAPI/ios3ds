@@ -237,7 +237,9 @@ class Image:
             out = self.run(self.img, "ls", d, check=False)
             names = {}
             for line in out.splitlines():
-                m = re.match(r"^(\d{6})\s+\d+\s+\d+\s+\d+\s+\S+\s+\S+\s(.*)$", line)
+                # hfsplus pads one-digit dates with a space (" 7/ 5/2010" on
+                # 4.1's stock files), so the date is matched, not split
+                m = re.match(r"^(\d{6})\s+\d+\s+\d+\s+\d+\s+\d+/\s*\d+/\d+\s+\d+:\d+\s(.*)$", line)
                 if m:
                     names[m.group(2)] = int(m.group(1), 8)
             self.dirs[d] = names
@@ -419,6 +421,12 @@ def apply(img, hfs, recipe, cache=None, verbose=True, tlsfix=True):
     groups = ("tlsfix",) if tlsfix and tlsfix_enabled(recipe) else ()
     if verbose and not groups:
         say("TLSFix left out (recipe 'tlsfix' / IOS3DS_TLSFIX=0 / --no-tlsfix)")
+    # older firmwares: the virtual firmware/OS/kernel/CF packages Cydia
+    # filters packages by carry that firmware's versions (recipe overlay
+    # "cydia_pseudo"); the default recipe has none, so 4.2.1 is unchanged
+    for p in m.get("pseudo", []):
+        if p["package"] in recipe.get("cydia_pseudo", {}):
+            p["version"] = recipe["cydia_pseudo"][p["package"]]
     debs = fetch(m, cache, verbose, groups)
     if not debs:
         return None

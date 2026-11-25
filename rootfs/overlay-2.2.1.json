@@ -1,6 +1,6 @@
 {
  "_comment": "iOS 2.2.1 (5H11a) overlay on rootfs/recipe.json. Applied by scripts/versions.py into build/fw-2.2.1/recipe.json; the 4.2.1 recipe is never changed. 2.x has no dyld shared cache (frameworks are individual dylibs) and no MBXGLEngine/Substrate, so all cache patches, interposers, Cydia and TLSFix are left out. The liblockdown patches + ldid re-sign were removed after a control run showed the re-sign alone stops dyld after CoreSurface; the stock signed dylib lets it load the full framework set (re-log 115). Activation remains an open item.",
- "cydia": false,
+ "cydia": "rootfs/cydia.json",
  "tlsfix": false,
  "trust_store": null,
  "write": {
@@ -60,7 +60,7 @@
  },
  "file_patches": [],
  "disable_daemons": [],
- "_todo": "Darwin 9 lacks IOSurface, CoreMotion and Celestial's 4.x API: our 4.2.1 GPU/gyro/camera userland binaries cannot simply be copied here. The activation interposer above is the only 4.2.1-derived tool installed on 2.2.1; input/MCU/Wi-Fi tools are still not installed (docs/multi-version.md §6.5).",
+ "_todo": "Darwin 9 lacks IOSurface, CoreMotion and Celestial's 4.x API: our 4.2.1 GPU/gyro/camera userland binaries cannot simply be copied here. The activation interposer above is the only 4.2.1-derived tool installed on 2.2.1; input/MCU/Wi-Fi tools are still not installed (docs/multi-version.md \u00a76.5).",
  "extra_file_patches": [
   {
    "path": "/usr/lib/liblockdown.dylib",
@@ -133,5 +133,12 @@
    "new": "583732004e373200",
    "why": "5H11a VirtualAudio product table at 0x9a350 (M68 N45 N72 N82): as on 3.1.3, the N72 slot -> 'X72' and the N82 (iPhone 3G) slot -> 'N72', so this N72 routes with a built-in microphone (docs/audio.md section 7, re-log 130)"
   }
- ]
+ ],
+ "_cydia_pseudo": "Cydia 1.1.30 + APT/dpkg (armv6, iOS >= 2.0) without TLSFix (a Substrate tweak; Substrate is loaded by ios3ds-applog, which old versions do not install). Virtual firmware packages carry this firmware's versions",
+ "cydia_pseudo": {
+  "firmware": "2.2.1",
+  "cy+os.ios": "2.2.1",
+  "cy+kernel.darwin": "9.4.1",
+  "cy+lib.corefoundation": "478.29"
+ }
 }
