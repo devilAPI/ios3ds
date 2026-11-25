@@ -4870,7 +4870,7 @@ hardware breakpoints on QEMU's gdbstub (private port); `exception_triage`
   "could not start DMA").
 - **[V]** 2.2.1 `--cycles 5 --require-app --targets "275,226;199,226;123,226;47,226;275,50" --crashlogs`
   → **Result: PASS**.
-## NEXT. iOS 4.1 completeness, and Cydia on 3.1.3/2.2.1 (2026-11-25)
+## 131. iOS 4.1 completeness, and Cydia on 3.1.3/2.2.1 (2026-11-25)
 
 Closes the 4.1 (8B117) open items of re-log 101/111 (docs/multi-version.md
 §6.8) and turns Cydia on for the older versions.

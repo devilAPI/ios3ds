@@ -88,7 +88,7 @@ LITERALS = {"GIO_PLATFORM": (0x8029d490, {"8B117": 0x8029c49c,
                                             "5H11a": 0xc02064a0}),
             # AppleARMPlatform's device-tree function lookup (kernel/shim/quiet.c,
             # patch clkctl-voltage-quiet): an unexported kext function, byte-
-            # identical in 8B117 (re-log NEXT, iOS 4.1 completeness)
+            # identical in 8B117 (re-log 131, iOS 4.1 completeness)
             "ARM_FUNCTION_LOOKUP": (0x802e4814, {"8B117": 0x802e3814})}
 
 

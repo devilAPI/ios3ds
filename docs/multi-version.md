@@ -787,7 +787,7 @@ PICA host build works). Every hash matched:
 main gained GPU/boot-option changes after that table was written; both trees
 here produce the same bytes.)
 
-### 6.8 4.1 open items (resolved, re-log NEXT "iOS 4.1 completeness")
+### 6.8 4.1 open items (resolved, re-log 131 "iOS 4.1 completeness")
 
 All items below were ported or shown unnecessary; kept for the history.
 
@@ -812,7 +812,7 @@ All items below were ported or shown unnecessary; kept for the history.
 | Version | QEMU state | Fresh-image soak |
 |---|---|---|
 | 4.2.1 (8C148) | home screen, apps, input, Cydia/TLSFix | **PASS** (5 cycles) |
-| 4.1 (8B117) | home screen, apps, input, Cydia/TLSFix (APT against the local repo, Cydia opens); all re-log 101/111 open items resolved (re-log NEXT, iOS 4.1 completeness) | **PASS**, 10 cycles with `--require-app` |
+| 4.1 (8B117) | home screen, apps, input, Cydia/TLSFix (APT against the local repo, Cydia opens); all re-log 101/111 open items resolved (re-log 131, iOS 4.1 completeness) | **PASS**, 10 cycles with `--require-app` |
 | 3.1.3 (7E18) | **home screen, apps open and render, clock runs, taps and buttons.** DataMigrator skipped (`SBLastSystemVersion`), shim `mrs sp,spsr` IRQ replay, 822-slot GL dispatch, GSEvent input daemon; CoreAnimation composites in software and the ARM9 copies the screen (`gpu_mirror=0`, re-log 128) | **PASS**, 10 cycles with `--require-app` (every tap opened an app) |
 | 2.2.1 (5H11a) | **home screen, apps open and render, taps and buttons.** Kernel `cs-invalid-page-allow`, fixed liblockdown stubs, `CA_ENABLE_MBX2D=0`, 2.x tool ABI (classic binding, r9, 48-byte GSEvents) | **PASS**, 10 cycles with `--require-app` |
 

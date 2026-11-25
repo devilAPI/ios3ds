@@ -90,7 +90,7 @@ class TestVersions(unittest.TestCase):
             # to the base recipe after the original positional map and are
             # relocated here too (unique string hits in the 8B117 cache).
             # 24: VirtualAudio's N72/N81 product swap (mic input) and the
-            # 8B117 MusicLibrary .cbk patch (re-log NEXT, 4.1 completeness)
+            # 8B117 MusicLibrary .cbk patch (re-log 131, 4.1 completeness)
             self.assertEqual(len(recipe["file_patches"]), 24)
             self.assertIn("0x5708c4", [fp["offset"] for fp in recipe["file_patches"]])
             self.assertTrue(all("offset" in fp and "search" not in fp
