@@ -5092,6 +5092,13 @@ Worktree `oldwake`; firmware staged from `compat16` into this worktree's
   `emu/soak.py --cycles 5 --icount 2` → **Result: PASS** (input after 84 s,
   five cycles, home diff 0.0, lock round passed, 0 restarts/panics/crashes).
 
+### After rebasing onto origin/main (52c663f, old-version audio + 4.1 work)
+
+- **[V]** `make test` passes; the six 4.2.1 hashes are unchanged (above).
+  Fresh images, 10-cycle `--require-app --crashlogs` soaks: 3.1.3 **PASS**
+  and 2.2.1 **PASS** (ten apps each, lock rounds at cycles 4 and 9, 0
+  restarts/panics/crashes; 2.2.1 `IOPMPowerSource registered`).
+
 ### Hardware checklist
 
 - 3.1.3/2.2.1: SELECT (or POWER) locks; HOME wakes to the lock screen; the
