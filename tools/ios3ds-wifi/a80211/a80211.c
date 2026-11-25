@@ -42,8 +42,21 @@
 
 #include "wifi_proto.h"
 
+/* iOS 2.x (-DA80211_IOS2): en0 is the shim's own ifnet (kif_eth.c), so it has
+   no IOKit object at all. Aeropuerto (2.x's WiFiManager) matches
+   IO80211Controller, reads the child's "BSD Name" with
+   IORegistryEntrySearchCFProperty and conforms-checks the controller. It is
+   handed IOResources (always registered) as the controller instead, and the
+   "BSD Name" search on it answers our interface. */
+#ifdef A80211_IOS2
+#define CTRL_CLASS "IOResources"
+#else
+#define CTRL_CLASS "IOUserEthernetController"
+#endif
+
 /* ---- libSystem (stub SDK: Darwin arm32 declared here) ------------------- */
 int ioctl(int, unsigned long, ...);
+const char *getprogname(void);
 int socket(int, int, int);
 int socketpair(int, int, int, int[2]);
 int dup2(int, int);
@@ -167,7 +180,13 @@ static int wlan_read(void)
 {
     if (!miblen) {
         miblen = 8;
+#ifdef A80211_IOS2
+        /* the shim's twin any user may write (Settings and SpringBoard run as mobile) */
+        if (sysctlnametomib("debug.ios3ds_wlan", mib, &miblen) != 0 &&
+            (miblen = 8, sysctlnametomib(WLAN_SYSCTL_NAME, mib, &miblen) != 0)) { miblen = 0; return -1; }
+#else
         if (sysctlnametomib(WLAN_SYSCTL_NAME, mib, &miblen) != 0) { miblen = 0; return -1; }
+#endif
     }
     for (int tries = 0; tries < 50; tries++) {
         size_t len = sizeof io;
@@ -311,8 +330,16 @@ static void fill_result(uint8_t *r, uint32_t cap, const wlan_bss_t *b)
     *(uint32_t *)(r + 0x04) = 1;
     *(uint32_t *)(r + 0x08) = chan_of(b->channel_mhz);
     *(uint32_t *)(r + 0x0C) = 2 | 8;                /* 2.4 GHz, 20 MHz */
+#ifdef A80211_IOS2
+    /* 2.x's Apple80211 drops scan results whose RSSI is below the scan's
+       threshold, which Settings leaves at 0: its driver reported a
+       non-negative signal, so dBm + 100 here */
+    *(int16_t *)(r + 0x10) = (int16_t)(b->noise + 100);
+    *(int16_t *)(r + 0x12) = (int16_t)(b->rssi + 100 > 0 ? b->rssi + 100 : 0);
+#else
     *(int16_t *)(r + 0x10) = b->noise;
     *(int16_t *)(r + 0x12) = b->rssi;
+#endif
     *(int16_t *)(r + 0x14) = (int16_t)b->beacon_int;
     *(uint16_t *)(r + 0x16) = b->caps;
     memcpy(r + 0x18, b->bssid, 6);
@@ -457,7 +484,12 @@ static int a80211_get(struct apple80211req *r)
         return 0;
     case 11:                        /* SCAN_RESULT: one per call, EIO at the end */
         if (!d || len < 0x8C) return fail(22);
-        if (scan_cursor >= io.st.nscan || scan_cursor >= WLAN_SCAN_MAX) return fail(5 /* EIO */);
+        if (scan_cursor >= io.st.nscan || scan_cursor >= WLAN_SCAN_MAX) {
+#ifdef A80211_IOS2
+            scan_cursor = 0;        /* 2.x reads the list once per SCAN_DONE */
+#endif
+            return fail(5 /* EIO */);
+        }
         fill_result(d, len, &io.bss[scan_cursor++]);
         return 0;
     case 201:                       /* current network as a scan_result */
@@ -489,9 +521,12 @@ static int a80211_set(struct apple80211req *r)
         if (!power || io.st.state == WLAN_ST_OFF) return fail(6);
         if (io.st.state == WLAN_ST_STARTING) return fail(16);   /* client retries EBUSY */
         c.cmd = WLAN_CMD_SCAN;
-        scan_seq_at_req = io.st.scan_seq;
-        scan_wanted = 1;
-        scan_since = time(NULL);
+        if (!scan_wanted) scan_seq_at_req = io.st.scan_seq;
+        /* one SCAN_DONE per request: 2.x's Apple80211 counts its outstanding
+           scans and only completes when every one is answered (Settings
+           asks again before the last one finished) */
+        if (!scan_wanted) scan_since = time(NULL);
+        scan_wanted++;
         scan_cursor = 0;
         say("[a80211] scan requested");
         return wlan_post(&c) == 0 ? 0 : fail(6);
@@ -548,9 +583,15 @@ static int a80211_set(struct apple80211req *r)
 
 typedef struct { const char *dli_fname; void *dli_fbase; const char *dli_sname; void *dli_saddr; } Dl_info;
 int dladdr(const void *, Dl_info *);
+#ifdef A80211_IOS2
+static void watcher_start(void);
+#endif
 static int a80211_ioctl(int set, struct apple80211req *r)
 {
     int t = r->req_type;
+#ifdef A80211_IOS2
+    watcher_start();                /* Settings / SpringBoard: their own events */
+#endif
     pthread_mutex_lock(&lock);
     int rc = set ? a80211_set(r) : a80211_get(r);
     int e = errno;
@@ -565,8 +606,8 @@ static int a80211_ioctl(int set, struct apple80211req *r)
     }
     if (t >= 0 && t < 256 && !(seen[t] & (set ? 2 : 1))) {
         seen[t] |= set ? 2 : 1;
-        say("[a80211] first %s type %d (len %u): %s", set ? "SET" : "GET", t, r->req_len,
-            rc == 0 ? "ok" : e == EOPNOTSUPP_D ? "unsupported" : "error");
+        say("[a80211] first %s type %d (len %u): %s [%s]", set ? "SET" : "GET", t, r->req_len,
+            rc == 0 ? "ok" : e == EOPNOTSUPP_D ? "unsupported" : "error", getprogname());
     }
     errno = e;
     return rc;
@@ -608,7 +649,11 @@ static void note_fire(CFRunLoopTimerRef t, void *info)
     pthread_mutex_unlock(&lock);
     if (!n.cb) return;
     io_object_t it = 0;
+#ifdef A80211_IOS2
+    CFMutableDictionaryRef m = IOServiceMatching(CTRL_CLASS);
+#else
     CFMutableDictionaryRef m = IOBSDNameMatching(kIOMasterPortDefault, 0, ourif);
+#endif
     if (!m || IOServiceGetMatchingServices(kIOMasterPortDefault, m, &it) != 0 || !it) {
         say("[a80211] no IOKit service for %s", ourif);
         return;
@@ -731,6 +776,8 @@ static void display_mirror(void)
     say("[a80211] display %s (SpringBoard) -> %s", on ? "on" : "blanked", DISPLAY_NOTE);
 }
 
+static int in_configd;
+
 /* status poller: turns ARM9 state changes into 802.11 events */
 static void *watcher(void *arg)
 {
@@ -738,12 +785,12 @@ static void *watcher(void *arg)
     int first = 1;
     for (;;) {
         usleep(250000);
-        display_mirror();
+        if (in_configd) display_mirror();
         if (!ourif[0]) { is_ours(""); continue; }
         pthread_mutex_lock(&lock);
         notes_schedule();
         int ok = wlan_read() == 0;
-        uint32_t ev[4], nev = 0;
+        uint32_t ev[4], nev = 0, ndone = 0;
         if (ok) {
             /* WiFiManager's synchronous scan waits for SCAN_DONE without a
                timeout: always send one, after at most 8 s */
@@ -752,9 +799,13 @@ static void *watcher(void *arg)
                     say("[a80211] scan timed out (ARM9 state %u): reporting the old list", io.st.state);
                 else
                     say("[a80211] scan done: %u networks", io.st.nscan);
+#ifdef A80211_IOS2
+                ndone = (uint32_t)scan_wanted;
+#else
+                ndone = 1;              /* WiFiManager waits for one */
+#endif
                 scan_wanted = 0;
                 scan_cursor = 0;
-                ev[nev++] = EV_SCAN_DONE;
             }
             if (assoc_pending) {
                 /* judge only what the ARM9 did after it took the join command
@@ -785,6 +836,7 @@ static void *watcher(void *arg)
             first = 0;
         }
         pthread_mutex_unlock(&lock);
+        for (uint32_t i = 0; i < ndone; i++) post_event(EV_SCAN_DONE);
         for (uint32_t i = 0; i < nev; i++) post_event(ev[i]);
     }
     return NULL;
@@ -830,14 +882,24 @@ static CFMutableDictionaryRef my_IOServiceMatching(const char *name)
         return m;
     }
     if (name && !strcmp(name, "IO80211Controller"))
+#ifdef A80211_IOS2
+    {
+        CFMutableDictionaryRef m = IOServiceMatching(CTRL_CLASS);
+        pthread_mutex_lock(&lock);
+        if (iface_match_n < NOTE_MAX) iface_match[iface_match_n++] = m;
+        pthread_mutex_unlock(&lock);
+        return m;
+    }
+#else
         return IOServiceMatching("IOUserEthernetController");
+#endif
     return IOServiceMatching(name);
 }
 
 static Boolean my_IOObjectConformsTo(io_object_t o, const char *cls)
 {
     if (cls && !strcmp(cls, "IO80211Controller"))
-        return IOObjectConformsTo(o, "IOUserEthernetController");
+        return IOObjectConformsTo(o, CTRL_CLASS);
     if (cls && !strcmp(cls, "IO80211Interface"))
         return IOObjectConformsTo(o, "IOEthernetInterface");
     return IOObjectConformsTo(o, cls);
@@ -847,7 +909,7 @@ static kern_return_t my_IORegistryEntryCreateCFProperties(io_registry_entry_t e,
                                                           CFAllocatorRef a, IOOptionBits o)
 {
     kern_return_t r = IORegistryEntryCreateCFProperties(e, p, a, o);
-    if (r == 0 && p && *p && IOObjectConformsTo(e, "IOUserEthernetController")) {
+    if (r == 0 && p && *p && IOObjectConformsTo(e, CTRL_CLASS)) {
         static const char *const kv[][2] = {
             { "IO80211HardwareVersion", "ios3ds AR6014 (ARM9 driver)" },
             { "IO80211DriverVersion", "ios3ds-a80211 1" },
@@ -869,10 +931,23 @@ static kern_return_t my_IORegistryEntrySetCFProperty(io_registry_entry_t e, CFSt
 {
     kern_return_t r = IORegistryEntrySetCFProperty(e, n, v);
     if (r != 0 && (IOObjectConformsTo(e, "IOEthernetInterface") ||
-                   IOObjectConformsTo(e, "IOUserEthernetController")))
+                   IOObjectConformsTo(e, CTRL_CLASS)))
         return 0;                   /* IO80211InterfaceIPAddress & co: accepted, unused */
     return r;
 }
+
+#ifdef A80211_IOS2
+CFTypeRef IORegistryEntrySearchCFProperty(io_registry_entry_t, const char *, CFStringRef, CFAllocatorRef, IOOptionBits);
+static CFStringRef k_bsdname;
+static CFTypeRef my_IORegistryEntrySearchCFProperty(io_registry_entry_t e, const char *plane, CFStringRef key,
+                                                    CFAllocatorRef a, IOOptionBits o)
+{
+    if (ourif[0] && key && k_bsdname && CFEqual(key, k_bsdname) && IOObjectConformsTo(e, CTRL_CLASS))
+        return CFStringCreateWithCString(a, ourif, kCFStringEncodingUTF8);
+    return IORegistryEntrySearchCFProperty(e, plane, key, a, o);
+}
+
+#endif
 
 /* IOS3DS_WIFI_LOG=1 (or 2) in configd's environment: WiFiManager's own log
    (LoggingEnabled/LoggingFileEnabled/LoggingFile in com.apple.wifi.plist)
@@ -922,10 +997,33 @@ __attribute__((used, section("__DATA,__interpose"))) static const struct { const
     { (const void *)my_IORegistryEntrySetCFProperty, (const void *)IORegistryEntrySetCFProperty },
     { (const void *)my_SCPreferencesGetValue, (const void *)SCPreferencesGetValue },
     { (const void *)my_CFReadStreamCreateWithFile, (const void *)CFReadStreamCreateWithFile },
+#ifdef A80211_IOS2
+    { (const void *)my_IORegistryEntrySearchCFProperty, (const void *)IORegistryEntrySearchCFProperty },
+#endif
 };
 
 const char *getprogname(void);
 int unsetenv(const char *);
+
+#ifdef A80211_IOS2
+/* iOS 2.x: Settings' AirPortSettings bundle and SpringBoard's status bar call
+   Apple80211 in their own process (no WiFiManager in between), so the
+   library is inserted there too (SpringBoard's environment, which its apps
+   inherit) and each process that asks gets its own status poller. */
+static void watcher_start(void)
+{
+    static int started;
+    pthread_t t;
+    pthread_mutex_lock(&lock);
+    int go = !started;
+    started = 1;
+    pthread_mutex_unlock(&lock);
+    if (go) {
+        say("[a80211] Apple80211 user: %s (pid %d)", getprogname(), getpid());
+        pthread_create(&t, NULL, watcher, NULL);
+    }
+}
+#endif
 
 __attribute__((constructor)) static void init(void)
 {
@@ -938,8 +1036,21 @@ __attribute__((constructor)) static void init(void)
         v_console = CFStringCreateWithCString(kCFAllocatorDefault, "/dev/console", kCFStringEncodingUTF8);
         wm_log = *lg - '0';
     }
+#ifdef A80211_IOS2
+    k_bsdname = CFStringCreateWithCString(kCFAllocatorDefault, "BSD Name", kCFStringEncodingUTF8);
+#endif
+#ifdef A80211_IOS2
+    (void)t;
+    if (strcmp(getprogname(), "configd")) return;   /* SpringBoard's apps keep it */
+    in_configd = 1;
+    unsetenv("DYLD_INSERT_LIBRARIES");
+    say("[a80211] loaded into configd (pid %d)", getpid());
+    watcher_start();
+#else
     unsetenv("DYLD_INSERT_LIBRARIES");      /* configd's children get the plain system */
     if (strcmp(getprogname(), "configd")) return;
+    in_configd = 1;
     say("[a80211] loaded into configd (pid %d)", getpid());
     pthread_create(&t, NULL, watcher, NULL);
+#endif
 }

@@ -331,9 +331,22 @@ static struct sysctl_oid kif_oid = {
     .oid_fmt     = "S,ios3ds_eth",
 };
 
+/* debug.ios3ds_wlan: kern.ios3ds_wlan's twin that user mobile may write.
+   On 2.x Settings and SpringBoard drive Apple80211 in their own process
+   (a80211 A80211_IOS2), and xnu-1228's __sysctl wants root for any write
+   below CTL_KERN, whatever the OID's CTLFLAG_ANYBODY says; CTL_DEBUG has
+   no such rule. Same handler, buffer and size as net.c's OID. */
+static struct sysctl_oid wlan_any;
+
 /* from shim_net_register() (thread context, once) */
-void shim_kif_register(void)
+void shim_kif_register(struct sysctl_oid *wlan)
 {
+    wlan_any = *wlan;
+    wlan_any.oid_parent = (void *)IOS3DS_KPI_KIF_SYSCTL__DEBUG_CHILDREN;
+    wlan_any.oid_link = 0;
+    wlan_any.oid_number = -1;
+    wlan_any.oid_kind |= 0x10000000;            /* CTLFLAG_ANYBODY */
+    sysctl_register_oid(&wlan_any);
     kio = IOMalloc(KIF_SIZE);
     if (!kio) return;
     kif_oid.oid_arg1 = kio;

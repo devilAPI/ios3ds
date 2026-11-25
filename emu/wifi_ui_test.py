@@ -96,6 +96,8 @@ def main():
                     help="x,y of the Wi-Fi row in Settings (3.1.3: 160,96, the first row)")
     ap.add_argument("--net-row", default="%d,%d" % NET_ROW, help="x,y of the second listed network")
     ap.add_argument("--join-key", default="%d,%d" % JOIN_KEY, help="x,y of the keyboard's Join key")
+    ap.add_argument("--settings-icon", default="%d,%d" % SETTINGS_ICON,
+                    help="x,y of the Settings icon on the home screen")
     ap.add_argument("--key-pause", type=float, default=0,
                     help="type one key at a time with this pause (s): 3.1.3's software "
                          "compositor drops keys typed at the default pace")
@@ -140,7 +142,8 @@ def main():
             return 1
         check("chip idle without wifi.cfg", wait_log(r"\[wifi\] idle: no network configured", 30))
         check("WiFiManager got the interface",
-              wait_log(r"\[a80211\] handing en\d to an IO80211Interface client", 120))
+              wait_log(r"\[a80211\] (handing en\d to an IO80211Interface client|"
+                       r"our 802\.11 interface is en\d)", 120))   # 4.x IOKit match | 2.x/3.x ioctl
         # a stable home screen (as emu/soak.py)
         prev, home = None, None
         for _ in range(30):
@@ -160,7 +163,7 @@ def main():
             if diff(shot(a.out, "01-before-settings"), home) > 15:
                 sess("key", "h")            # Spotlight: back to the icons
                 time.sleep(4)
-            sess("tap", *map(str, SETTINGS_ICON))
+            sess("tap", *a.settings_icon.split(","))
             prev = None
             for _ in range(40):                     # Settings is slow to launch in QEMU:
                 time.sleep(3)                       # wait until it is up and drawn

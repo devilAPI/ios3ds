@@ -102,7 +102,7 @@ KIF_SYMBOLS = ["ifnet_allocate", "ifnet_attach", "ifnet_input", "ifnet_set_flags
                "mbuf_mclget", "mbuf_data", "mbuf_setdata", "mbuf_pkthdr_setlen", "mbuf_pkthdr_len",
                "mbuf_pkthdr_setrcvif", "mbuf_pkthdr_setheader", "mbuf_copydata", "mbuf_freem",
                "IOMalloc", "ether_demux", "ether_add_proto", "ether_del_proto",
-               "ether_check_multi", "ether_frameout"]
+               "ether_check_multi", "ether_frameout", "sysctl__debug_children"]
 
 
 def layout_consts(staging):
