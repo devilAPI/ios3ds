@@ -68,15 +68,13 @@ void firm_swap_restore(void)
 
 static u8 scanbuf[4096];
 
-/* 1: SELF contains IOS3DS_VERSION, 0: it does not, -1: no SELF / read error */
-static int self_has_our_version(void)
+/* 1: file contains v, 0: it does not, -1: cannot open / read error */
+static int file_has(const char *path, const char *v)
 {
-    const char *v = IOS3DS_VERSION;
     UINT vl = 0;
     while (v[vl]) vl++;
-    if (vl < 8 || vl > 128) return 1;         /* "dev" build: no usable id */
     FIL f;
-    if (f_open(&f, SELF, FA_READ) != FR_OK) return -1;
+    if (f_open(&f, path, FA_READ) != FR_OK) return -1;
     UINT keep = 0, got = 0;
     int found = 0;
     for (;;) {
@@ -115,9 +113,63 @@ static FRESULT copy_file(const char *from, const char *to)
     return r != FR_OK ? r : rc;
 }
 
+static bool version_usable(void)
+{
+    UINT vl = 0;
+    while (IOS3DS_VERSION[vl]) vl++;
+    return vl >= 8 && vl <= 128;              /* "dev" build: no usable id */
+}
+
+/*
+ * Issue #9 round 2: the check above runs inside the *chainloaded* payload, so
+ * it only helps once that payload is new enough to contain it. A payload that
+ * predates it (Retrow26: m1-0.3.0-62 in luma/payloads/) never checks anything,
+ * while the current build only ever ran from the .3dsx launcher. So the
+ * current build, whichever way it was started, also repairs the chainloader
+ * copies: every *.firm in luma/payloads/ that is an ios3ds build (contains the
+ * loader banner) but not this build is replaced with ios3ds/ios3ds.firm.
+ */
+#define PAYDIR "0:/luma/payloads"
+#define BANNER "ios3ds m1-"
+
+static void heal_payloads(void)
+{
+    DIR d;
+    FILINFO fi;
+    static char path[300];
+    if (f_opendir(&d, PAYDIR) != FR_OK) { logp("payload check: no luma/payloads\n"); return; }
+    int seen = 0;
+    while (f_readdir(&d, &fi) == FR_OK && fi.fname[0]) {
+        if (fi.fattrib & AM_DIR) continue;
+        UINT n = 0;
+        while (fi.fname[n]) n++;
+        if (n < 5) continue;
+        const char *e = fi.fname + n - 5;
+        if (!(e[0] == '.' && (e[1] | 32) == 'f' && (e[2] | 32) == 'i' && (e[3] | 32) == 'r' && (e[4] | 32) == 'm'))
+            continue;
+        UINT k = 0;
+        for (const char *q = PAYDIR "/"; *q; q++) path[k++] = *q;
+        for (UINT i = 0; i < n && k < sizeof path - 1; i++) path[k++] = fi.fname[i];
+        path[k] = 0;
+        if (file_has(path, BANNER) != 1) continue;          /* not ios3ds */
+        seen++;
+        int m = file_has(path, IOS3DS_VERSION);
+        if (m == 1) { logp("payload check: %s is this build\n", path); continue; }
+        log_warn("payload check: %s is an older ios3ds build (%lu bytes), updating it\n",
+                 path, (unsigned long)fi.fsize);
+        FRESULT r = copy_file(SELF, path);
+        if (r == FR_OK) log_ok("payload check: %s updated - Luma chainload now boots this build\n", path);
+        else log_err("payload check: updating %s failed (FRESULT %d): copy ios3ds/ios3ds.firm there by hand\n", path, r);
+    }
+    f_closedir(&d);
+    if (!seen) logp("payload check: no ios3ds .firm in luma/payloads\n");
+}
+
 bool firm_is_stale(void)
 {
-    int s = self_has_our_version();
+    if (!version_usable()) return false;
+    int s = file_has(SELF, IOS3DS_VERSION);
+    if (s == 1) heal_payloads();
     if (s != 0) {
         if (s < 0) log_warn("payload check: cannot read %s, skipped\n", SELF);
         return false;

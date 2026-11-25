@@ -687,6 +687,13 @@ void a9_main(int argc, char **argv)
     char why[96];
 
     /* argv lives on Luma's ITCM stack: copy what we need first */
+    static char path0[64];              /* argv[0]: which .firm was booted (issue #9) */
+    if (argc >= 1 && argv && argv[0]) {
+        const char *a = argv[0];
+        unsigned i = 0;
+        while (i < sizeof path0 - 1 && a[i] >= 0x20 && a[i] < 0x7f) { path0[i] = a[i]; i++; }
+        path0[i] = 0;
+    }
     if (argc >= 2 && argv && argv[1]) {
         u32 *fbs = (u32 *)argv[1];
         top0 = (u8 *)fbs[0];
@@ -705,7 +712,7 @@ void a9_main(int argc, char **argv)
     status(5, CON_WHITE, "hold POWER to switch off");
 
     log_color(CON_GREEN, "ios3ds %s  (M1 loader)\n", IOS3DS_VERSION);
-    logp("ARM9: argc=%d cpsr=%08x\n", argc, a9_get_cpsr());
+    logp("ARM9: argc=%d cpsr=%08x argv0=\"%s\"\n", argc, a9_get_cpsr(), path0);
     if (top0) {
         logp("framebuffers: top %p/%p bottom %p/%p\n", top0, top1, bot0, bot1);
     } else {

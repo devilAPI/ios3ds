@@ -4451,3 +4451,59 @@ byte-identical (see the verification list).
   restarts, never "not home after Home").
 - **[G]** The 4.1 soak was not re-run this round (8B117 not staged in this
   worktree); 4.1 keeps `irq_spsr` unset, so its shim source path is unchanged.
+
+## NEXT. Issue #9 round 2: the chainloader still runs the old payload, and nothing updates it (2026-11-25)
+
+Retrow26 retested with a new build (6 labelled logs, 2026-11-25 13:31Z):
+hbmenu boots, every chainloader boot fails or shows the graphics error,
+with `gpu=0`, `diag=1` or both.
+
+**Evidence.** The first line already settles it. The hbmenu log:
+
+    ios3ds m1-0.4.0-209-ga43f415-20261125.0639  (M1 loader)
+    CFG9_SDMMCCTL 0248 -> 0248
+    launcher swap: restoring Luma as sd:/boot.firm
+
+All five chainloader logs (plain, failed, gpu=0, diag=1, gpu=0+diag=1):
+
+    ios3ds m1-0.3.0-62-g6d963b6-20261121.0001  (M1 loader)
+    CFG9_SDMMCCTL 0200 -> 0200
+    boot.cfg:41: unknown key 'boot_delay'   (… hp_codec, auto_brightness, gps, stereo3d)
+
+and no `payload check` line at all. `argc=2`, `cpsr=600000d3` and the
+framebuffer addresses (`top 0x18300000/0x18400000 bottom 0x18346500/0x18446500`)
+are identical in all six, so Luma's chainloader and boot9strap hand over the
+same screen-init state and argv framebuffers; the ARM11 reaches `ready` in
+both. The remaining diffs (SDMMCCTL, unknown keys, timings) are build
+differences of the 0.3.0-62 binary, as in round 1. `gpu=0`/`diag=1` change
+nothing because they are read by a loader that predates the shared layout of
+the current shim.bin/gpu.bin.
+
+**Root cause.** Round 1's diagnosis (old `luma/payloads/ios3ds.firm` against
+new shim.bin/gpu.bin) is right; its fix could not reach this user.
+`firm_is_stale()` runs inside the *chainloaded* payload, but the chainloaded
+payload is 0.3.0-62, which has no such check. The current build only ever ran
+from the launcher, i.e. from `ios3ds/ios3ds.firm`, where the check compares the
+file with itself and passes. So no code path ever touched
+`luma/payloads/ios3ds.firm`, and the "copy it by hand" instruction from the
+round-1 reply was evidently not applied (or went to a different file name).
+No code-level difference between the two entry paths was found.
+
+**What round 1 got wrong.** It assumed the self-update would trigger on the
+next chainload; that needs the new code to already be in the payload
+(chicken-and-egg). It also only knew the one file name `ios3ds.firm`.
+
+**Fix.** `boot/arm9/swap.c: heal_payloads()`: when the running build matches
+`ios3ds/ios3ds.firm` (so it is the current build, whichever way it started),
+it scans every `*.firm` in `sd:/luma/payloads/`. Files containing the loader
+banner `ios3ds m1-` but not this `IOS3DS_VERSION` are overwritten with
+`ios3ds/ios3ds.firm`; each decision is logged (`payload check: … is this
+build` / `… is an older ios3ds build, updating it` / `… updated`). Booting once
+from hbmenu therefore repairs the chainloader copy, under any file name.
+Non-ios3ds payloads are never touched. `boot/arm9/main.c` also logs
+`argv0="…"` (the path Luma/b9s booted) on the `ARM9:` line, so the next log
+shows exactly which file ran.
+
+- **[V]** `make test` passes; `make shim`: main part 24268/24320, GPU part 26304/32768.
+- **[V]** Fresh soak (5 cycles, icount 2): see commit message / report.
+- **[HW]** (1) Boot once via hbmenu: the log must show `payload check: 0:/luma/payloads/<name>.firm is an older ios3ds build, updating it` then `… updated`. (2) Chainload: the first log line must be the same version as the hbmenu log, `argv0=` must name the payloads file, and SpringBoard must show with working buttons. If the chainloaded log *still* shows an old version, the chainloader is booting a file outside `luma/payloads/` and `argv0` names it.
