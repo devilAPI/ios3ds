@@ -468,7 +468,13 @@ int main(int argc, char **argv)
     OSStatus st;
     int i, tries;
 
+#ifdef TONE_OLD
+    say("tone: start (3.x/2.x build), %d argument(s)", argc - 1);   /* bring-up trace */
+#endif
     if (!load()) return 1;
+#ifdef TONE_OLD
+    say("tone: AudioToolbox loaded");
+#endif
     if (argc > 1 && !strcmp(argv[1], "rec")) return rec_main(argc, argv);
     sleep((unsigned)delay);                         /* let SpringBoard and mediaserverd settle */
     for (tries = 0; (st = ASInitialize(NULL, NULL, NULL, NULL)) && tries < 60; tries++) sleep(2);

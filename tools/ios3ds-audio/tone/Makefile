@@ -17,11 +17,11 @@ $(OUT): tone.c
 # is linked like ios3ds-mcud (2.0 target, classic lazy binding, r9 kept free).
 $(OUT3): tone.c
 	mkdir -p $(dir $@)
-	$(CC) -Os -Wall -Wextra tone.c -o $@
+	$(CC) -Os -Wall -Wextra -DTONE_OLD tone.c -o $@
 
 $(OUT2): tone.c $(ROOT)/tools/common/dyld2_glue.S
 	mkdir -p $(dir $@)
-	$(CC) -Os -Wall -Wextra -target armv6-apple-ios2.0 -ffixed-r9 -Wl,-w tone.c \
+	$(CC) -Os -Wall -Wextra -DTONE_OLD -target armv6-apple-ios2.0 -ffixed-r9 -Wl,-w tone.c \
 	    $(ROOT)/tools/common/dyld2_glue.S -o $@
 
 clean:
