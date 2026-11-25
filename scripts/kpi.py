@@ -92,6 +92,19 @@ LITERALS = {"GIO_PLATFORM": (0x8029d490, {"8B117": 0x8029c49c,
             "ARM_FUNCTION_LOOKUP": (0x802e4814, {"8B117": 0x802e3814})}
 
 
+# iOS 2.x only (versions.py "kernel_ifnet"): the Darwin 9 network KPI for the
+# shim's kernel Ethernet interface (tools/ios3ds-wifi/shim/kif_eth.c). These
+# are emitted with the Thumb bit taken from n_desc, as IOS3DS_KPI_KIF_<name>,
+# and only for that firmware, so other shims never see them.
+KIF_SYMBOLS = ["ifnet_allocate", "ifnet_attach", "ifnet_input", "ifnet_set_flags",
+               "ifnet_set_mtu", "ifnet_set_hdrlen", "ifnet_set_addrlen", "ifnet_set_baudrate",
+               "ifnet_event", "bpfattach", "bpf_tap_in", "bpf_tap_out", "mbuf_gethdr",
+               "mbuf_mclget", "mbuf_data", "mbuf_setdata", "mbuf_pkthdr_setlen", "mbuf_pkthdr_len",
+               "mbuf_pkthdr_setrcvif", "mbuf_pkthdr_setheader", "mbuf_copydata", "mbuf_freem",
+               "IOMalloc", "ether_demux", "ether_add_proto", "ether_del_proto",
+               "ether_check_multi", "ether_frameout"]
+
+
 def layout_consts(staging):
     """Virtual base and the kernel IRQ continuation for this firmware.
 
@@ -121,12 +134,14 @@ def resolve(staging):
     mo = MachO(blob)
     symoff, nsyms, stroff, _ = mo.symtab
     found = {}
+    thumb = {}
     for i in range(nsyms):
         strx, typ, sect, desc, val = struct.unpack_from("<IBBhI", blob, symoff + 12 * i)
         if not val:
             continue
         name = blob[stroff + strx:blob.index(b"\0", stroff + strx)].decode(errors="replace")
         found.setdefault(name, val)
+        thumb.setdefault(name, desc & 0x0008)       # N_ARM_THUMB_DEF
     out = {}
     for macro, (sym, fallback) in SYMBOLS.items():
         out[macro] = found.get(sym, fallback)
@@ -146,6 +161,13 @@ def resolve(staging):
         out["VT_BIAS"] = info["vt_bias"]
     if info.get("clcd_swap_dirty"):
         out["CLCD_SWAP_DIRTY"] = 1
+    if info.get("kernel_ifnet"):
+        missing = [n for n in KIF_SYMBOLS if "_" + n not in found]
+        if missing:
+            raise SystemExit("[kpi] kernel_ifnet: %s not in the kernelcache" % ", ".join(missing))
+        out["KIF"] = 1
+        for n in KIF_SYMBOLS:
+            out["KIF_" + n.upper()] = found["_" + n] | (1 if thumb["_" + n] else 0)
     return out
 
 

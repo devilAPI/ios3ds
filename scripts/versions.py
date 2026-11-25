@@ -35,6 +35,9 @@ VERSIONS = {
               # AppleEmbeddedAudio's PM handler, patch audio-pm-msg-no-store)
               # Darwin 9 vtable pointers point at __ZTV itself (+8 on 3.x/4.x)
               "vt_bias": 8,
+              # no IOUserEthernet in 5H11a: the shim registers en0 itself
+              # (tools/ios3ds-wifi/shim/kif_eth.c, scripts/kpi.py KIF_SYMBOLS)
+              "kernel_ifnet": True,
               # no GL engine on 2.x: CoreAnimation composites in software and
               # nothing marks a new frame for the PICA200 mirror (see 3.1.3)
               "boot_cfg": {"gpu_mirror": ("0", "CoreAnimation composites in software (no GL "

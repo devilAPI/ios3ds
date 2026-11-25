@@ -149,4 +149,8 @@ void shim_net_register(void)
     done = 1;
     sysctl_register_oid(&net_oid);
     sysctl_register_oid(&wlan_oid);
+#ifdef IOS3DS_KPI_KIF
+    void shim_kif_register(void);   /* kif_eth.c, iOS 2.x only */
+    shim_kif_register();
+#endif
 }

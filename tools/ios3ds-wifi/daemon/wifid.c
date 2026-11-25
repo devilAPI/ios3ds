@@ -97,6 +97,7 @@ int CFSocketGetNative(CFSocketRef s);
 void CFRelease(CFTypeRef cf);
 #define kCFStringEncodingUTF8 0x08000100u
 
+#ifndef WIFID_KIF
 typedef struct __IOEthernetController *IOEthernetControllerRef;
 extern const CFStringRef kIOEthernetHardwareAddress;
 IOEthernetControllerRef IOEthernetControllerCreate(CFAllocatorRef a, CFDictionaryRef props);
@@ -105,6 +106,7 @@ CFIndex IOEthernetControllerReadPacket(IOEthernetControllerRef c, uint8_t *buf, 
 IOReturn IOEthernetControllerWritePacket(IOEthernetControllerRef c, const uint8_t *buf, CFIndex len);
 io_object_t IOEthernetControllerGetIONetworkInterfaceObject(IOEthernetControllerRef c);
 #define CONTROLLER_SOCKET_OFF 0x28      /* IOKit 8C148: ReadPacket does ldr r0, [r0, #0x28] */
+#endif
 
 static int opt_debug, opt_poll_ms = 4, opt_dhcp = 1;
 #define IDLE_POLL_MS 20
@@ -141,6 +143,109 @@ static int xchg(const netio_t *out)
 
 static int find_ifname(const uint8_t mac[6]);
 
+#ifdef WIFID_KIF
+/* iOS 2.x: no IOUserEthernet in 5H11a. The shim registers en0 itself and
+   exchanges its frames through kern.ios3ds_eth (shim/kif_eth.c, kif_proto.h). */
+#include "kif_proto.h"
+static int kmib[8];
+static size_t kmiblen;
+static kif_t kin, kout;
+static uint32_t k_ack;              /* output frames consumed up to this seq */
+static uint32_t k_off, k_left;      /* unread frames of the last batch in kin */
+static uint32_t k_next;             /* seq of the next unread one */
+static int k_link;
+
+static int kif_call(uint32_t flags, const uint8_t *frames, uint32_t used, uint32_t n)
+{
+    memset(&kout, 0, 64);
+    kout.magic = KIF_CMD;
+    kout.version = KIF_VERSION;
+    kout.flags = flags | KIF_F_LINK;
+    kout.link = (uint32_t)k_link;
+    kout.seq = k_ack;
+    memcpy(kout.mac, io_in.mac, 6);
+    if (n) memcpy(kout.data, frames, used);
+    kout.nframes = n;
+    kout.used = used;
+    size_t len = sizeof kin;
+    if (sysctl(kmib, (unsigned)kmiblen, &kin, &len, &kout, sizeof kout) != 0 ||
+        len != sizeof kin || kin.magic != KIF_MAGIC)
+        return -1;
+    /* skip frames of this batch we already delivered */
+    k_off = 0;
+    k_left = kin.nframes;
+    k_next = kin.seq;
+    uint32_t l;
+    while (k_left && (int)(k_ack - k_next) > 0 && netio_get(kin.data, kin.used, &k_off, &l)) {
+        k_next++;
+        k_left--;
+    }
+    return 0;
+}
+
+typedef int IOEthCtl;
+static IOEthCtl *make_controller(const uint8_t mac[6], int *fd)
+{
+    static IOEthCtl one = 1;
+    kmiblen = sizeof kmib / sizeof kmib[0];
+    if (sysctlnametomib(KIF_SYSCTL_NAME, kmib, &kmiblen) != 0) {
+        say("[wifid] %s missing (shim without the 2.x interface?)", KIF_SYSCTL_NAME);
+        return NULL;
+    }
+    if (kif_call(KIF_F_ATTACH, NULL, 0, 0) != 0 || !(kin.state & KIF_ST_ATTACHED)) {
+        kif_call(0, NULL, 0, 0);
+        if (!(kin.state & KIF_ST_ATTACHED)) {
+            say("[wifid] the shim could not attach en0");
+            return NULL;
+        }
+    }
+    *fd = -1;
+    snprintf(ifname, sizeof ifname, "en%u", kin.unit);
+    say("[wifid] interface %s up (shim ifnet), MAC %02x:%02x:%02x:%02x:%02x:%02x",
+        ifname, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    return &one;
+}
+#define IOEthernetControllerRef IOEthCtl *
+static void IOEthernetControllerSetLinkStatus(IOEthCtl *c, Boolean up)
+{
+    (void)c;
+    k_link = up;
+    kif_call(0, NULL, 0, 0);
+}
+/* one queued output frame, fetching a new batch when the last is used up */
+static CFIndex IOEthernetControllerReadPacket(IOEthCtl *c, uint8_t *buf, CFIndex cap)
+{
+    (void)c;
+    uint32_t l;
+    const uint8_t *p;
+    if (!k_left && kif_call(0, NULL, 0, 0) != 0) return -1;
+    if (!k_left || !(p = netio_get(kin.data, kin.used, &k_off, &l))) return -1;
+    k_left--;
+    k_ack = ++k_next;
+    if ((CFIndex)l > cap) return 0;
+    memcpy(buf, p, l);
+    return (CFIndex)l;
+}
+/* received frames are batched and handed over by kif_flush() */
+static uint8_t k_rx[KIF_DATA];
+static uint32_t k_rx_used, k_rx_n;
+static void kif_flush(void)
+{
+    if (k_rx_n) kif_call(0, k_rx, k_rx_used, k_rx_n);
+    k_rx_used = k_rx_n = 0;
+}
+static IOReturn IOEthernetControllerWritePacket(IOEthCtl *c, const uint8_t *f, CFIndex len)
+{
+    (void)c;
+    if (netio_put(k_rx, KIF_DATA, &k_rx_used, f, (uint32_t)len) != 0) {
+        kif_flush();
+        if (netio_put(k_rx, KIF_DATA, &k_rx_used, f, (uint32_t)len) != 0) return -1;
+    }
+    k_rx_n++;
+    return 0;
+}
+#else
+#define kif_flush() ((void)0)
 static IOEthernetControllerRef make_controller(const uint8_t mac[6], int *fd)
 {
     CFDataRef macd = CFDataCreate(kCFAllocatorDefault, mac, 6);
@@ -172,6 +277,8 @@ static IOEthernetControllerRef make_controller(const uint8_t mac[6], int *fd)
         name, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], *fd);
     return c;
 }
+
+#endif
 
 /* The BSD name of the interface with our MAC (IONetworkStack names it a
    moment after the controller appears, so the registry property may not be
@@ -267,7 +374,11 @@ int main(int argc, char **argv)
     }
     int fd = -1;
     IOEthernetControllerRef ctl = make_controller(io_in.mac, &fd);
+#ifdef WIFID_KIF
+    if (!ctl) {
+#else
     if (!ctl || fd < 0) {
+#endif
         say("[wifid] IOEthernetControllerCreate failed (entitlement? kext?)");
         return 1;
     }
@@ -351,6 +462,7 @@ int main(int argc, char **argv)
             IOEthernetControllerWritePacket(ctl, p, (CFIndex)len);
             if (opt_debug) say("[wifid] rx %u", len);
         }
+        kif_flush();
         delivered = io_in.rx_next;
         if (io_in.rx_pending || n || delivered != acked) {          /* more to do: go again now */
             idle = 0;
@@ -366,6 +478,6 @@ int main(int argc, char **argv)
            28.7 s of system time in 630 s). A frame iOS sends still wakes the
            loop at once; one from the network waits at most IDLE_POLL_MS. */
         struct pollfd pfd = { fd, POLLIN, 0 };
-        poll(&pfd, 1, ++idle > 64 && opt_poll_ms < IDLE_POLL_MS ? IDLE_POLL_MS : opt_poll_ms);
+        poll(fd >= 0 ? &pfd : NULL, fd >= 0 ? 1 : 0, ++idle > 64 && opt_poll_ms < IDLE_POLL_MS ? IDLE_POLL_MS : opt_poll_ms);
     }
 }

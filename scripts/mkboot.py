@@ -115,6 +115,9 @@ def build_shim(outdir, staging=None, version=versions.DEFAULT, virt_base=None):
              os.path.join(ROOT, "tools", "ios3ds-pica", "src", "pica_drv.c"),
              os.path.join(ROOT, "tools", "ios3ds-pica", "src", "pica_mirror.c"),
              os.path.join(sd, "cam.c")]                     # camera data side (docs/camera.md)
+    if versions.get(version).get("kernel_ifnet"):
+        # iOS 2.x: the shim's own en0 (no IOUserEthernet); GPU part (*kif*.o)
+        srcs.append(os.path.join(ROOT, "tools", "ios3ds-wifi", "shim", "kif_eth.c"))
     # pica_diag.c (the staged [gpu-diag] bring-up diagnostics, docs/pica200.md
     # section 12) is NOT linked into the shim any more: the GPU part was at
     # 32624/32768 bytes and the mirror/perf work needs room. The diagnostics
