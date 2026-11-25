@@ -5246,7 +5246,7 @@ and 2.2.1.
   values), `make test` passes, 3.1.3 `wifi_test --case ok` **PASS**, fresh
   3.1.3 soak (`--require-app`, §128 targets) **PASS**, fresh 4.2.1 soak
   **PASS**.
-## NEXT. 2.2.1 audio: mediaserverd is alive, a TLS-clobbering test client was the wall (2026-11-25)
+## 134. 2.2.1 audio: mediaserverd is alive, a TLS-clobbering test client was the wall (2026-11-25)
 
 ### mediaserverd / IOAudio on 5H11a
 
