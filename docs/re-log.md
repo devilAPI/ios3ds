@@ -4334,3 +4334,120 @@ shim or GPU file is touched by this round.
 - **[V]** No 3.1.3/2.2.1 soak PASS is claimed: neither version reaches a home
   screen yet. 3.1.3 is stable for 300 s with one dyld pass but keeps the
   Apple/progress frame; the seven scratch patches above were all reverted.
+
+## NEXT. 3.1.3 reaches its home screen: the "reset view" was DataMigrator, plus an IRQ-replay and a dispatch-table bug (2026-11-25)
+
+Continues §124. The 7E18 IPSW staged by §124 was copied into this worktree's
+`build/fw-3.1.3/` (Apple files stay under `build/`). The 4.2.1 boot files are
+byte-identical (see the verification list).
+
+### The Apple logo + progress bar was never SpringBoard
+
+- **[V]** A SELECT+START thread dump of the shipped §124 image lists a
+  `DataMigrator` process (pid 27) next to SpringBoard. 7E18's
+  `/System/Library/PrivateFrameworks/DataMigration.framework/Support/DataMigrator`
+  links CoreSurface + IOMobileFramebuffer and draws its own Apple logo and
+  progress bar straight into the framebuffer (`IOMobileFramebufferSwapBegin/
+  SwapSetLayer/SwapEnd`). It is the only thing that ever turned the 3.1.3 display
+  on: every earlier screenshot (spinner, logo + bar) and §124's /vram dump were
+  its frames, which is why no SpringBoard patch in §119–§124 changed them.
+- **[V]** SpringBoard starts it: the function at Thumb `0x36c1`–`0x37ec` of the 7E18
+  executable compares `CFPreferencesCopyAppValue("SBLastSystemVersion",
+  "com.apple.springboard")` with `_CFCopySystemVersionDictionary()[ProductBuildVersion]`
+  and, if they differ, runs `_DMPerformMigration` on a thread while its main
+  thread spins a run loop until it is done (log string "Migration complete").
+  On the 3DS the migrators never finish. **Fix (shipped):** the 3.1.3 overlay
+  writes `com.apple.springboard.plist` with `SBLastSystemVersion = 7E18` (plus
+  the 4.2.1 debug keys and `SBDisableMailAutoLaunch`). DataMigrator no longer
+  runs.
+- **[V]** With DataMigrator gone the display stayed off (CLCD `on=0x3`,
+  base still iBoot's `0x18000000`, all five /vram slots black): SpringBoard
+  had never drawn a frame.
+
+### Three real bugs on the way to a frame
+
+- **[V]** **lockdown stubs.** `lockdown_connect`, `lockdown_checkin` and
+  `lockdown_copy_identity` are ARM functions (even symbols, `push` at +0).
+  The shipped stubs were Thumb bytes (`20014770`/`20004770`), which execute as
+  ARM `subvc r0,r7,r0,lsr #2` and fall into the body with its `push` skipped.
+  Now `mov r0,#1|#0; bx lr` (ARM), original 8 bytes verified.
+- **[V]** **GL dispatch table.** With the 4.2.1 `MBXGLEngine` (and the
+  `AppleMBXDevice` → `IOResources` match string, as on 8C148) the engine passes
+  its PICA200 self-checks and creates SpringBoard's context, then
+  `malloc: incorrect checksum for freed object`. 7E18 OpenGLES's
+  `__GLIFunctionDispatchRec` has **822** slots, not 841 (from the ObjC
+  `@encode` in the 7E18 cache): 4.x slots 761–776 and 838–840 do not exist,
+  so 777–837 sit 16 lower. `tools/ios3ds-gl` now also builds
+  `build/rootfs-add/ios3/MBXGLEngine` with `-DGL_IOS3`, which remaps slots
+  when filling OpenGLES's tables (the internal scene-check tables keep the
+  4.x numbering); only the 3.1.3 overlay installs it. The 3.1 EGL interface
+  table has the same first nine entries as ours.
+- **[V]** **IRQ replay (the big one).** Darwin 9/10 `_fleh_irq` starts
+  `sub lr,lr,#4; mrs sp,spsr` (`04e04ee2 00d04fe1`, both 5H11a and 7E18);
+  8C148's second instruction is `mrs sp,cpsr`. The shim's CLCD-frame-IRQ path
+  replays the two displaced instructions and always used the 4.x form, so
+  every injected frame IRQ that interrupted user mode was treated as a
+  kernel-mode interrupt and the user thread died (crash report: SpringBoard,
+  `KERN_INVALID_ADDRESS`, `pc 0xc00684c0`, i.e. inside the kernel IRQ
+  continuation in user mode). `versions.py` now marks 2.2.1/3.1.3
+  `irq_spsr`, `scripts/kpi.py` emits `IOS3DS_KPI_KERNEL_IRQ_SPSR`, and
+  `kernel/shim/entry.S` assembles `mrs sp,spsr` only then. The 4.2.1 shim
+  hash is unchanged.
+
+### Result: a 3.1.3 home screen
+
+- **[V]** With the three fixes, a fresh `make sdimg IOS=3.1.3` boots to the
+  stock 3.1.3 icon grid (two pages, dock Music/Videos/Safari/App Store, status
+  bar time) in the 195–225 s screenshots at `--icount 2` (screenshot kept at
+  `build/shots/313-home-t6.png`, not committed); one SpringBoard pass.
+- **[V]** The §121–§123 SpringBoard patches only fought the DataMigrator screen
+  and are removed: `isLocked -> NO` (`0x1c47c`), the `appleIconViewRemoved`
+  → `restoreIconList:` trampoline (`0x48bc`, `0xda860`) and its three gates
+  (`0xb9b2`, `0xb9d2`, `0xb9e8`), and the `SBUIController init`
+  `makeKeyAndVisible` literal (`0xd478`). The icon grid still appears.
+  `SBTetherController isTethered -> NO` and the QuartzCore display-kind → EAGL
+  patch stay: without the kind patch a one-tap soak never gets a stable home
+  frame and SpringBoard crashes (scratch run, reverted).
+- **[V]** `ios3ds-input` is now built a second time with `-DINPUT_IOS3`
+  (7E18 IOKit has no `IOHIDEventSystemClient*`): it waits for
+  `PurpleSystemEventPort` and sends GSEvents only (7E18 `GSEventGetHandInfo`
+  / `GetPathInfoAtIndex` / `GetWindow` use the same record offsets as 8C148).
+  Taps arrive: a tap on Settings makes SpringBoard load
+  `Preferences.framework` and `SBSCopyFrontmost…` reports
+  `com.apple.Preferences`.
+
+### Still open
+
+- **[V]** CoreAnimation composites only the **first** frame. The clock stays at
+  the minute of that frame, a launched app (Settings) never appears, and
+  `[gpu] mirror` reports only idle VBlanks afterwards. The engine sees no
+  `BindCoreSurface`, `BindView` or `SwapNotification` call at all, so the
+  EAGLServer is not rendering through GL; the CLCD page shows the frame-IRQ
+  enable (`+0x08` bit 0, same layout as 8C148, 7E18 enable/ack code at kernel
+  file `0x5a6bbc`) clear, i.e. QuartzCore's vsync source (`IOMFBServer`,
+  whose run-loop thread is idle in `mach_msg`) is not asking for frames.
+  `render_for_time` is only called from `IOMFBServer::link_callback`.
+- **[G]** Next: trace why 7E18 `EAGLServer::render_update`/`renderer()`
+  (`0x31bda440`/`0x31bda370`) does not use the EAGL context, and who enables
+  vsync notifications after the first swap.
+- **[V]** A one-tap soak (`--cycles 1 --targets 47,314 --no-extras`) prints
+  **Result: PASS** (0 failures, 0 crashes) but its own log says "the tap did
+  not open an app"; that check is informational in `soak.py`. No 3.1.3
+  five-cycle soak PASS is claimed. 2.2.1 was not attempted this round (it
+  shares the IRQ-replay fix).
+
+### Verification of this round's tree
+
+- **[V]** `make test`: offline unit tests (incl. the updated 3.1.3 recipe
+  test), GL host tests, Wi-Fi/GPS/input/ALS/blkcache harnesses and the stub
+  symbol check pass.
+- **[V]** Fresh default build (`make userland`, `rm -f build/sd.img`,
+  `make sdimg`) reproduces the six 4.2.1 hashes: `kernel 505f451a…`,
+  `devtree 25b1bd23…`, `fakeio e5fecd66…`, `shim e0609de9…`, `gpu 7e696f65…`,
+  `boot.cfg 8d4079cf…` (the shim's new `.if` assembles the 4.x path).
+- **[V]** `rm -f build/sd.img && make sdimg && python3 emu/soak.py --cycles 5
+  --icount 2` → **Result: PASS** (SpringBoard + input after 70 s, warm-up
+  135 s, home reference 145 s with stddev 53.6, five app/home cycles, 0
+  restarts, never "not home after Home").
+- **[G]** The 4.1 soak was not re-run this round (8B117 not staged in this
+  worktree); 4.1 keeps `irq_spsr` unset, so its shim source path is unchanged.
