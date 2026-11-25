@@ -4754,3 +4754,119 @@ hardware breakpoints on QEMU's gdbstub (private port); `exception_triage`
   PASS** (input after 70 s, warm-up 135 s, five app/home cycles, home diff 0.0).
 - **[G]** 4.1 (8B117, now staged here) was not re-soaked; its shim path has no
   new flag set.
+
+## NEXT. Audio on 3.1.3, 2.2.1 and 4.1: the audio IRQ glue's hard-coded 4.2.1 address, mic routes (2026-11-25)
+
+### Why relocating `i2s-start-no-lrck-sync` hung 3.1.3/2.2.1
+
+- **[V]** The patch sites from re-log 129 are right. In 7E18 (0xc0565964) and
+  5H11a (0xc0612b9c), the `AppleS5L8900XI2SController` DMA start is
+  instruction for instruction the 8C148 function (state at +0x8c instead of
+  +0xb0, the same wait loop, enable/disableInterrupt and timer calls).
+- **[V]** Reproduced on 3.1.3 with only the patch: the kernel boots further
+  than re-log 129 saw this time, and the first UI sound gives
+  `[audio] iOS output stream #1 started`, `tx start ch5 ...`, then
+  `sleh_abort: prefetch abort in kernel mode: fault_addr=0x80066494`.
+- **[V]** Cause: `kernel/shim/audio_glue.S` hard-coded 4.2.1's XNU IRQ
+  continuation (`.equ KERNEL_IRQ_CONT, 0x80066494`) and replayed `mrs sp,cpsr`.
+  `entry.S` already used `IOS3DS_KPI_KERNEL_IRQ_CONT`/`_SPSR`, but the glue
+  that injects the PL080 TC interrupt (return code 2) did not. So the first
+  completed DMA buffer on a 0xC0000000 kernel jumped into unmapped memory.
+  Before the patch, DMA never started, so the bug never showed.
+- **Fix:** the glue includes `kpi.h` and uses the same two KPI macros as
+  `entry.S`. 4.1's continuation is also 0x80066494 (`scripts/kpi.py`), so 4.1
+  was never affected. **[V]** The six 4.2.1 hashes are unchanged (below).
+
+### Mic input on the old versions
+
+- **[V]** The 3.x build of `ios3ds-tone rec` reported `input available 0`, then
+  `AudioQueueNewInput` 'nohw'. This is the same N72 routing wall as 4.2.1
+  (docs/audio.md §7), but the 4.2.1 file patch (VirtualAudio @0x287228) was
+  dropped on 4.1 (`null`) and absent on 3.x/2.x.
+- 4.1's table (`K48 K66 N18 N72 N81 ...`) has N81 at 0x1c9d44: the overlay now
+  maps the base patch to 0x1c9d40 (same orig/new bytes).
+- 7E18 (`M68 N18 N45 N72 N82 N88`, N72 at 0xfa800) and 5H11a
+  (`M68 N45 N72 N82`, N72 at 0x9a358) have no N81, so N72 becomes `X72` and
+  N82 (iPhone 3G) becomes `N72`. On 3.1.3 output stays on route "Speaker" and
+  input reports `SpeakerAndMicrophone`.
+- **[V]** 7E18's input chain does not add 4.2.1's +23.65 dB: with the shim's
+  2151/32768 gain, a 1000-amplitude QEMU sine came back at 46.6. New
+  `versions.py` key `mic_gain_q15` → `IOS3DS_KPI_MIC_GAIN_Q15` (`audio.h`);
+  3.1.3 uses 32768 (unity, so the iOS-side level is about -3 dB). 4.2.1 keeps 2151.
+
+### Test client
+
+- `ios3ds-tone` is now built for 3.x (`build/rootfs-add/ios3/`) and 2.x
+  (`ios2/`, 2.0 target, r9, dyld2 glue) with `-DTONE_OLD` (start trace
+  lines), and the old overlays install it. As on 4.2.1, no job is shipped.
+  `tools/ios3ds-audio/tone/com.ios3ds.tone.old.plist` is the job without the
+  ios3ds-diag wrapper, for test images.
+
+### Results (QEMU, plain TCG)
+
+- **[V] 3.1.3** (`build/emu-a2`, `a3`, `a4`): boot UI sounds play: streams
+  #1-#4, `[audio] stream stopped: ... TC IRQs 16 (16 injected), bad addr 0`,
+  and the CSND model shows 50,011 non-silent frames, peak 8120. The test job
+  `ios3ds-tone 2 5 1500 1000 6000 70` → `tone: #1 ... route "Speaker"`,
+  `#1 done`, `#2 done`, stream peak 5999 (= amplitude 6000), 34/41 TC IRQs,
+  SpringBoard and input up, no panic. Mic: `rec start: input available 1,
+  route "SpeakerAndMicrophone"`, `[mic] 1 s: FIFO peak 1000 rms 707.0`,
+  `tone: rec 88200 of 88200 frames`, `sine fit: 439.42 Hz` (gain then still
+  2151: amplitude 46.6, hence the per-version gain above). The `rx stop` line
+  shows 734 underruns without `--icount` (host load); 4.2.1 measured 0 with
+  `--icount 2`.
+- **[V] 2.2.1** (`build/emu-b1`, `b3`): the I2S patch no longer hangs the
+  kernel (SpringBoard and input up, heartbeat runs through 420 s, no panic).
+  But no stream ever starts. 2.2.1 plays no boot UI sound, and the test job
+  logs `tone: start` and `AudioToolbox loaded` and then nothing: it blocks in
+  `AudioSessionInitialize` (the 60 x 2 s retry loop never prints a failure).
+  mediaserverd's launchd job exists. **Unfinished [G]:** find out whether
+  mediaserverd runs and reaches IOAudio on 5H11a (next: `ps`-style dump or
+  a launchd stdout path for mediaserverd). The mic swap @0x9a358 is applied
+  but cannot be tested until then.
+- **[G] 4.1:** not run this round. Its I2S patch and IRQ path were already
+  right (same continuation address). The new VirtualAudio relocation needs one
+  `ios3ds-tone rec` run.
+- Keyboard click, the test song and Music: **not verified** on 3.x/2.x. The
+  click is an ordinary UI sound (same path as the boot sounds that play on
+  3.1.3). `scripts/music.py` writes a 4.x `iTunes Library.itlp`, and the
+  MusicLibrary signature patch is not relocated for 7E18/5H11a (2.x uses the
+  older iTunesDB format), so the song most likely does not appear there.
+- Volume buttons: mcud `-DMCU_OLD` → AVSystemController (re-log 129). On
+  3.1.3 the shim logs `[audio] iOS volume: amp step 22 -> CSND volume`, so the
+  amp-step → CSND volume path works there.
+
+### Hardware checklist (diag=1 log.txt)
+
+1. 3.1.3 boot: a `[audio] iOS output stream #N started` / `stream stopped:
+   ... TC IRQs n (n injected), bad addr 0` pair for each UI sound, no
+   `sleh_abort`, no `could not start DMA`. You should hear the unlock/tap
+   clicks from the speaker.
+2. Press the volume buttons: `[audio] iOS volume: amp step S -> CSND volume
+   V/32768` changes, and the loudness follows.
+3. Plug in headphones: `[audio] headphones in ... iOS route -> headphones`, and
+   the sound moves.
+4. Voice memo / `ios3ds-tone rec` on 3.1.3: `[audio] mic on: 11901 Hz`,
+   `[mic] 1 s: FIFO peak ...` with speech-level peaks, and the iOS peak about
+   the same as the FIFO peak (unity gain on 3.1.3). If the iOS peak is about 15x
+   the FIFO peak or clips, 7E18 does add gain on hardware: lower
+   `mic_gain_q15`.
+5. 2.2.1: expect silence (above). Report whether any `stream started` line
+   appears at all.
+
+### 4.2.1 unchanged
+
+- **[V]** The default build gives `kernel 505f451a…`, `devtree 25b1bd23…`,
+  `fakeio e5fecd66…`, `shim a35631eb…`, `gpu 6bdaf617…`, `boot.cfg 8d4079cf…`.
+  These are identical to origin/main built from a git archive. The 4.2.1
+  ios3ds-tone binary is byte-identical too (`TONE_OLD` only in the 3.x/2.x
+  builds).
+
+### Soaks (fresh images, --icount 2)
+
+- **[V]** 4.2.1 `emu/soak.py --cycles 5` → **Result: PASS**.
+- **[V]** 3.1.3 `--cycles 5 --require-app --crashlogs` → **Result: PASS**
+  (audio DMA error count 0; previously each UI sound logged
+  "could not start DMA").
+- **[V]** 2.2.1 `--cycles 5 --require-app --targets "275,226;199,226;123,226;47,226;275,50" --crashlogs`
+  → **Result: PASS**.
