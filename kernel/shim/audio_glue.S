@@ -15,11 +15,16 @@
 @
 @ SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "kpi.h"
+
     .arch armv6k
     .arm
     .section .text, "ax"
 
-    .equ KERNEL_IRQ_CONT, 0x80066494        @ XNU's IRQ handler after the 2 instructions entry.S replaced
+    @ XNU's IRQ handler after the 2 instructions entry.S replaced. 4.2.1:
+    @ 0x80066494 (kpi.h default). It was hard-coded here, so on 3.1.3/2.2.1
+    @ (kernel at 0xC0000000) the first PL080 TC interrupt jumped into nothing.
+    .equ KERNEL_IRQ_CONT, IOS3DS_KPI_KERNEL_IRQ_CONT
 
     .global shim_audio_hook
 shim_audio_hook:
@@ -40,7 +45,11 @@ shim_audio_hook:
     subeqs pc, lr, #4                       @ 1 (flags still from the cmp); 2 falls through
 1:  @ the two instructions the irq-entry patch displaced, then XNU's handler
     sub lr, lr, #4
+.if IOS3DS_KPI_KERNEL_IRQ_SPSR
+    mrs sp, spsr                            @ 2.2.1/3.1.3 _fleh_irq: as entry.S
+.else
     mrs sp, cpsr
+.endif
     ldr pc, =KERNEL_IRQ_CONT
 
     .ltorg

@@ -83,6 +83,13 @@
   "find": {}
  },
  {
+  "name": "i2s-start-no-lrck-sync",
+  "va": "0xc0565964",
+  "orig": "0130a0e38c3080e5",
+  "new": "0330a0e38c3080e5",
+  "why": "AppleS5L8900XI2SController DMA start (7E18 0xc0565928, state at +0x8c): start in state 3 (synced) instead of 1 so it does not wait for GPIO 44 edges (see 4.2.1 0x8066d490). Needs the shim's audio IRQ glue to enter this kernel's IRQ path (audio_glue.S, re-log NEXT)"
+ },
+ {
   "name": "pe-get-gmt",
   "orig": "80b500af04480068",
   "new": "004b1847@shim+0x30@",
