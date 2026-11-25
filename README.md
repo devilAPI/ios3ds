@@ -282,8 +282,10 @@ Experimental: `make sd IOS=VERSION` selects another iPod2,1 firmware from
 `scripts/versions.py` (firmware staged under `build/fw-VERSION/`); 4.2.1 stays
 the default and unchanged. See [docs/multi-version.md](docs/multi-version.md) —
 4.1 boots to the home screen in QEMU (Cydia/TLSFix are disabled there), while
-the older 3.1.3 and 2.2.1 builds are earlier bring-up experiments with no
-userland tools installed.
+the older 3.1.3 and 2.2.1 builds are earlier bring-up experiments. 3.1.3 uses
+software CoreAnimation and the ARM9 screen copy by default; for a console test
+of its experimental PICA200 compositor, build with
+`IOS3DS_GPU313=1 make sd IOS=3.1.3` (slower in QEMU, not the default).
 
 Optional:
 - `make qemu` builds the emulator, about 10 minutes.

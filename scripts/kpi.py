@@ -144,6 +144,8 @@ def resolve(staging):
         out["MIC_GAIN_Q15"] = info["mic_gain_q15"]
     if info.get("vt_bias"):
         out["VT_BIAS"] = info["vt_bias"]
+    if info.get("clcd_swap_dirty"):
+        out["CLCD_SWAP_DIRTY"] = 1
     return out
 
 

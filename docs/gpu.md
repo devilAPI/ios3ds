@@ -279,7 +279,10 @@ work (blending, texture sampling, transforms) moves to the GPU.
 call site as `[gl] trace: GL error 0x… at engine+0x…` (look it up with `nm`).
 `IOS3DS_CA_LOG_FRAMES=N` changes the `[gl] CA:` line's interval from 300 CA
 swaps to N (test hook, e.g. to see the cost before and after a scattered
-surface in a short QEMU run).
+surface in a short QEMU run). `IOS3DS_CA_SWAP_DIAG=1` logs every CA swap and
+the present / arena copy / read-back that wrote its surface (`[gl] [swapdiag]`),
+so a last frame lost after Home can be counted against the mirror's frame count
+(re-log NEXT). Both are off by default and add a line per frame when enabled.
 
 ### Switching it on, and falling back
 

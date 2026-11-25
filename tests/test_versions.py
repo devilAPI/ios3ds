@@ -7,6 +7,7 @@ import re
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
@@ -62,14 +63,41 @@ class TestVersions(unittest.TestCase):
         """Only older versions override boot.cfg lines; 4.2.1/4.1 have none."""
         self.assertNotIn("boot_cfg", versions.get())
         self.assertNotIn("boot_cfg", versions.get("4.1"))
-        # 3.1.3's CoreAnimation presents through the GL engine (EAGLServer
-        # API patch), so only 2.2.1 still needs the ARM9 copy
-        self.assertNotIn("boot_cfg", versions.get("3.1.3"))
-        self.assertEqual(versions.get("2.2.1")["boot_cfg"]["gpu_mirror"][0], "0")
+        # 3.1.3's PICA200 CoreAnimation path is opt-in: default software CA
+        # needs the ARM9 copy, like 2.2.1. The opt-in build keeps the
+        # generated gpu_mirror=1 and CA_ENABLE_OGL=1 (test below).
+        self.assertEqual(versions.boot_cfg("3.1.3")["gpu_mirror"][0], "0")
+        self.assertEqual(versions.boot_cfg("2.2.1")["gpu_mirror"][0], "0")
+        self.assertFalse(versions.gpu313("3.1.3"))
+        self.assertFalse(versions.gpu313("4.2.1"))
         for v in versions.VERSIONS:
-            for key, (val, why) in versions.get(v).get("boot_cfg", {}).items():
+            for key, (val, why) in versions.boot_cfg(v).items():
                 self.assertRegex(key, r"^[a-z0-9_]+$")
                 self.assertTrue(why)
+
+    def test_3_1_3_gpu_path_is_opt_in(self):
+        """IOS3DS_GPU313=1 turns on the dyld patch, CA env and the mirror."""
+        with tempfile.TemporaryDirectory() as td:
+            path = versions.recipe_path("3.1.3", td)
+            with open(path) as f:
+                plain = json.load(f)
+            offsets = [fp["offset"] for fp in plain["file_patches"]]
+            self.assertNotIn("0x1bde788", offsets)   # EAGLServer API patch
+            sb = "/System/Library/LaunchDaemons/com.apple.SpringBoard.plist"
+            self.assertEqual(plain["plist_set"][sb]["EnvironmentVariables"]["CA_ENABLE_OGL"], "0")
+            self.assertEqual(plain["plist_set"][sb]["EnvironmentVariables"]["LK_ENABLE_OGL"], "0")
+        with mock.patch.dict(os.environ, {"IOS3DS_GPU313": "1"}):
+            self.assertTrue(versions.gpu313("3.1.3"))
+            self.assertFalse(versions.gpu313("4.2.1"))
+            self.assertEqual(versions.boot_cfg("3.1.3"), {})
+            with tempfile.TemporaryDirectory() as td:
+                path = versions.recipe_path("3.1.3", td)
+                with open(path) as f:
+                    recipe = json.load(f)
+                self.assertIn("0x1bde788", [fp["offset"] for fp in recipe["file_patches"]])
+                env = recipe["plist_set"][sb]["EnvironmentVariables"]
+                self.assertEqual(env["CA_ENABLE_OGL"], "1")
+                self.assertNotIn("LK_ENABLE_OGL", env)
 
     def test_replace_marker_in_overlay(self):
         base = {"a": {"x": 1, "y": 2}, "b": [1, 2]}
@@ -119,8 +147,8 @@ class TestVersions(unittest.TestCase):
                                      ["0x176a008", "0x1767600", "0x176a358",
                                       "0x176a3dc", "0x1769eb0", "0x176a1c4",
                                       "0x176a210", "0x176a260",
-                                      "0x95760", "0x1bde74c", "0x1bde788", "0x2f91bb8",
-                                      "0xfa800"])  # VirtualAudio N72/N82 swap (mic)
+                                      "0x95760", "0x1bde74c", "0x2f91bb8",
+                                      "0xfa800"])  # EAGLServer API patch is opt-in; VirtualAudio N72/N82 swap (mic)
                     # SpringBoard skips DataMigrator only when this matches
                     # the running build (re-log 125).
                     self.assertIn("<key>SBLastSystemVersion</key>\n\t<string>7E18</string>",
@@ -261,6 +289,14 @@ class TestShimKpi(unittest.TestCase):
             m = re.search(r"#define IOS3DS_KPI_%s 0x([0-9a-f]+)" % macro, text)
             self.assertIsNotNone(m, macro)
             self.assertEqual(int(m.group(1), 16), fallback, macro)
+
+    def test_clcd_swap_dirty_is_version_flagged(self):
+        """The mirror's CLCD-swap fix must stay out of the 4.2.1 shim."""
+        self.assertFalse(versions.get().get("clcd_swap_dirty", False))
+        self.assertFalse(versions.get("4.1").get("clcd_swap_dirty", False))
+        self.assertTrue(versions.get("3.1.3")["clcd_swap_dirty"])
+        text = open(os.path.join(ROOT, "kernel", "shim", "kpi.h")).read()
+        self.assertIn("#define IOS3DS_KPI_CLCD_SWAP_DIRTY 0", text)
 
     def test_literals_have_defaults(self):
         text = open(os.path.join(ROOT, "kernel", "shim", "kpi.h")).read()

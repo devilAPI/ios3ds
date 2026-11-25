@@ -502,6 +502,22 @@ static int glesPresentView(void *g)
     return 1;
 }
 
+/* IOS3DS_CA_SWAP_DIAG=1 counts CA swaps and the presents behind them in the
+ * console log. Only for bring-up: it adds a line per swap, so it is off by
+ * default (hardware logs with diag=1 can set it in SpringBoard's plist). */
+static void swap_diag(unsigned n, uint32_t transaction, void *layer)
+{
+    static int on = -1;
+    PicaStats s;
+    if (on < 0)
+        on = getenv("IOS3DS_CA_SWAP_DIAG") != NULL;
+    if (!on)
+        return;
+    pica_backend_stats2(&s);
+    gl_log("[swapdiag] swap #%u: transaction %u layer %p; presents %u, arena copies %u, read-backs %u",
+           n, transaction, layer, s.presents, s.bounces, s.readbacks);
+}
+
 /* CA's own GL renderer reports a finished frame; the MBX engine queued
  * this behind the GPU work, which here is already done. 4.2.1's
  * IOMobileFramebufferGetID is no longer an IOConnect port, so signal the
@@ -510,8 +526,9 @@ static int glesSwapNotification(void *gc, uint32_t fb_id, uint32_t transaction, 
 {
     static void *fb;
     static unsigned calls;
+    unsigned n = ++calls;
     (void)fb_id;
-    if (!calls++)
+    if (n == 1)
         log_callers("first SwapNotification");
     if (gc) {
         /* decide the stereo frame (and wipe a non-home frame's class map)
@@ -521,6 +538,7 @@ static int glesSwapNotification(void *gc, uint32_t fb_id, uint32_t transaction, 
             ((GC *)gc)->be->flush_all(gc);      /* the display surface must be current before the swap */
     }
     ca_frame();
+    swap_diag(n, transaction, layer);
     io_init();
     if (!fb && io.fb_main)
         io.fb_main(&fb);

@@ -410,8 +410,8 @@ def build(staging, outdir, cmdline=None, patches=True, verbose=True,
     ]
     if version != versions.DEFAULT:
         cfg.insert(1, "# iOS %s (%s)" % (version, versions.get(version)["build"]))
-        # per-version boot.cfg values (scripts/versions.py "boot_cfg"); 4.2.1 has none
-        for key, (val, why) in sorted(versions.get(version).get("boot_cfg", {}).items()):
+        # per-version boot.cfg values (scripts/versions.py); 4.2.1 has none
+        for key, (val, why) in sorted(versions.boot_cfg(version).items()):
             hit = [i for i, l in enumerate(cfg) if l.startswith(key + "=")]
             if len(hit) != 1:
                 raise SystemExit("[mkboot] boot_cfg override %r: no unique line" % key)

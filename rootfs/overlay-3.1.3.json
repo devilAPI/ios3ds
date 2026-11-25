@@ -27,7 +27,8 @@
    "StandardOutPath": "/dev/console",
    "EnvironmentVariables": {
     "DYLD_PRINT_LIBRARIES": "1",
-    "CA_ENABLE_OGL": "1",
+    "CA_ENABLE_OGL": "0",
+    "LK_ENABLE_OGL": "0",
     "MBX2D_PAGE_FLIP": "0",
     "CA_ENABLE_MBX2D": "0",
     "LK_ENABLE_MBX2D": "0",

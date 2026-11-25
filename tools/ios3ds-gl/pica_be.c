@@ -475,6 +475,18 @@ static int force_scatter(void)
     return on;
 }
 
+/* The swap/present counter used by IOS3DS_CA_SWAP_DIAG (iface.c). Logs the
+ * path each surface took, so a last frame lost after Home can be counted
+ * against the mirror's frame counter. Off by default. */
+static void present_diag(const char *what, void *surface, uint32_t st)
+{
+    static int on = -1;
+    if (on < 0)
+        on = getenv("IOS3DS_CA_SWAP_DIAG") != NULL;
+    if (on)
+        gl_log("[swapdiag] %s: surface %p status %u", what, surface, st);
+}
+
 /*
  * Write a surface target back without the CPU: one more GPU pass turns the
  * colour buffer (sampled as a power-of-two texture, 1:1, nearest) into a
@@ -600,6 +612,7 @@ static int present_target(PTarget *t)
     flags = PPF_IN_FMT(PICA_FB_RGBA8) | PPF_OUT_FMT(PICA_FB_RGBA8) | (t->rt.flip ? 0 : PPF_FLIP_V) |
             (force_scatter() ? PICA_PRESENT_TEST_SCATTER : 0);
     st = t->bounce ? PICA_ERR_NOT_CONTIG : P.dev->present(t->swz_pa, dim, t->rt.color, sbytes, flags);
+    present_diag(t->bounce ? "bounced" : "present", t->rt.color, st);
     if (st == PICA_ERR_NOT_CONTIG) {
         /* A surface in scattered pages (CA's second 320x480 surface after an
            app returns to the home screen; hardware runs 21/25/29, New 2DS XL
@@ -617,6 +630,7 @@ static int present_target(PTarget *t)
         st = P.dev->transfer(t->swz_pa, dim, t->bnc_pa, dim, flags);
         if (st == PICA_OK)
             st = P.dev->scatter(t->bnc_pa, t->rt.color, sbytes);
+        present_diag("scatter", t->rt.color, st);
         if (st == PICA_OK) {
             P.bounces++;
             P.presents++;
@@ -750,13 +764,15 @@ static void sync_target(PTarget *t)
         gpu_fail("reading a frame back", st);
     else if (st == (uint32_t)-1)
         gl_log("pica: no memory to read a %dx%d target back: its last GPU frame is lost", t->w, t->h);
-    else if (t->rt.surface)
+    else if (t->rt.surface) {
         /* The read-back wrote the final frame straight into the IOSurface
            from userland. PRESENT/SCATTER tell the mirror about their frames
            themselves, but this path needs an explicit announcement too:
            stereo3d=1 keeps the stamp by reading the display target back,
            and a refused present switches every surface to this path. */
+        present_diag("read-back", t->rt.color, 0);
         P.dev->dirty();
+    }
 }
 
 /* bring rt->color into the GPU buffer */

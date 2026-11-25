@@ -129,6 +129,26 @@ volatile uint32_t m_dirty;              /* also set by pica_stereo.c's PDC switc
 /* ---- the ARM9 <-> ARM11 display mailbox (gmbox_t at shim+0x7F00) ---- */
 extern uint32_t cfg_clcd_pa;                /* entry.S: fake CLCD page (PA), patched in by mkboot */
 
+#if IOS3DS_KPI_CLCD_SWAP_DIRTY
+/* 7E18's last CA swap after Home can switch the CLCD to the other IOSurface
+   *after* the GL present that marked the frame dirty. Remember which source
+   we actually mirrored: a later swap to a different surface is new content
+   even though no further present announced it. Off on 4.x/2.x (kpi.py). */
+static uint32_t m_last_src_pa;
+
+static uint32_t m_clcd_src_pa(void)
+{
+    vu32 *clcd = (vu32 *)(cfg_clcd_pa - AXI_PA + AXI_VA);
+    uint32_t pa = clcd[0x24 / 4];
+    if (!(clcd[0] & 1) || clcd[0x28 / 4] != GM_SRC_W ||
+        clcd[0x30 / 4] != (GM_SRC_W << 16 | GM_SRC_H) ||
+        pa < PICA_VRAM_PA || pa + GM_SRC_W * GM_SRC_H * 4 > GM_IOS_VRAM_HI || (pa & 7))
+        return 0;
+    return pa;
+}
+#endif
+
+
 static void dc_clean(volatile void *p, uint32_t len)
 {
     uint32_t a = (uint32_t)p & ~31u, end = (uint32_t)p + len;
@@ -646,6 +666,9 @@ static int m_begin_frame(void)
     f.top[1] = m_fb[1];
     f.bot[0] = m_fb[2];
     f.bot[1] = m_fb[3];
+#if IOS3DS_KPI_CLCD_SWAP_DIRTY
+    m_last_src_pa = f.src_pa;          /* the surface this frame will show */
+#endif
     m_dirty = 0;
     pm_begin(&mir, &f);
     GM->mirror_busy = 1;
@@ -888,6 +911,13 @@ PICA_HOT void shim_gpu_irq(uint32_t id)
         m_pending = 1;
         return;
     }
+#if IOS3DS_KPI_CLCD_SWAP_DIRTY
+    if (!m_dirty) {
+        uint32_t src = m_clcd_src_pa();
+        if (src && src != m_last_src_pa)
+            m_dirty = 1;               /* CA switched IOSurfaces after the present */
+    }
+#endif
     if (!m_dirty) {
         /* nothing new since the last frame: the LCDs already hold the current
            picture. Skip the GPU work but keep the liveness counter moving so

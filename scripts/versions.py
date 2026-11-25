@@ -64,10 +64,18 @@ VERSIONS = {
               # no +23.65 dB like 4.2.1's N81 route, so the shim passes the
               # 3DS mic at unity (QEMU: 1000 -> 46.6 with 4.2.1's 2151)
               "mic_gain_q15": 32768,
-              # CoreAnimation composites through our GL engine on 3.1.3 since
-              # the EAGLServer API patch (rootfs/overlay-3.1.3.json, re-log
-              # NEXT): GL presents mark new frames, so the PICA200 mirror
-              # (the default gpu_mirror=1) works as on 4.2.1. No override.
+              # 7E18's final CA swap can switch the CLCD to the other
+              # IOSurface after the GL present that marked the frame dirty;
+              # the mirror must notice the new source PA as well (re-log NEXT)
+              "clcd_swap_dirty": True,
+              # The PICA200 CoreAnimation path is opt-in on 3.1.3 (re-log
+              # NEXT): it is slower than the software compositor in QEMU and
+              # the last frame after Home can be missed. The default is
+              # software CA + the ARM9 copy (gpu_mirror=0, CA_ENABLE_OGL=0);
+              # IOS3DS_GPU313=1 at build time selects the GPU path, with the
+              # EAGLServer API patch and the display mirror on.
+              "boot_cfg": {"gpu_mirror": ("0", "3.1.3 defaults to software CoreAnimation + the ARM9 "
+                                          "screen copy; build with IOS3DS_GPU313=1 for the PICA200 path")},
               "patch_set": "kernel/patchsets/3.1.3.json", "overlay": "rootfs/overlay-3.1.3.json",
               "status": "experimental: Darwin 10.0, archived IPSW; see docs/multi-version.md"},
     "4.0": {"build": "8A293", "ipsw": "iPod2,1_4.0_8A293_Restore.ipsw",
@@ -95,6 +103,30 @@ def get(version=DEFAULT):
         raise SystemExit("[versions] unknown iOS version %r (known: %s)"
                          % (version, ", ".join(VERSIONS)))
     return VERSIONS[version]
+
+
+def gpu313(version=DEFAULT):
+    """Is the experimental 3.1.3 PICA200 CoreAnimation path enabled?
+
+    A build-time switch, not a boot.cfg key: the EAGLServer API fix is a
+    dyld-cache patch and SpringBoard's CA_ENABLE_OGL comes from the rootfs
+    recipe, so both have to be baked into the image. Off by default on every
+    version except when IOS3DS_GPU313=1 is exported for 3.1.3.
+    """
+    return version == "3.1.3" and os.environ.get("IOS3DS_GPU313", "").lower() in (
+        "1", "yes", "on", "true")
+
+
+def boot_cfg(version=DEFAULT):
+    """boot.cfg overrides for `version` (the 4.2.1 default has none).
+
+    The opt-in 3.1.3 GPU path keeps the generated gpu_mirror=1; otherwise
+    the version's gpu_mirror=0 override turns the display mirror off.
+    """
+    cfg = dict(get(version).get("boot_cfg") or {})
+    if gpu313(version):
+        cfg.pop("gpu_mirror", None)
+    return cfg
 
 
 def patch_files(version=DEFAULT):
@@ -158,7 +190,28 @@ def recipe_path(version=DEFAULT, workdir=None):
     extra = overlay.pop("extra_file_patches", [])
     fp_offsets = overlay.pop("file_patch_offsets", None)
     by_base = overlay.pop("file_patch_offsets_by_base", None)
+    if version == "3.1.3" and not gpu313(version):
+        # The EAGLServer API patch only belongs to the opt-in GPU image.
+        # Software CA never asks that server for an OGL renderer.
+        kept = [fp for fp in extra if fp.get("offset") != "0x1bde788"]
+        if len(kept) == len(extra):
+            raise SystemExit("[versions] 3.1.3 overlay lost the EAGLServer API patch")
+        extra = kept
     recipe = _merge(base, overlay)
+    if version == "3.1.3":
+        # The overlay describes the default (software CA + ARM9 copy). The
+        # opt-in build flips SpringBoard to the GL compositor. No 4.x recipe
+        # or overlay is touched by either branch.
+        env = recipe["plist_set"]["/System/Library/LaunchDaemons/com.apple.SpringBoard.plist"][
+            "EnvironmentVariables"]
+        if gpu313(version):
+            env["CA_ENABLE_OGL"] = "1"
+            env.pop("LK_ENABLE_OGL", None)
+            if os.environ.get("IOS3DS_GPU313_DIAG") in ("1", "yes", "on", "true"):
+                env["IOS3DS_CA_SWAP_DIAG"] = "1"
+        else:
+            env["CA_ENABLE_OGL"] = "0"
+            env["LK_ENABLE_OGL"] = "0"
     if by_base is not None:
         # Key by the *base* recipe's fixed offset, not by list position: patches
         # are added to rootfs/recipe.json in other branches/versions, and a

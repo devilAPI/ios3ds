@@ -211,6 +211,12 @@
 #ifndef IOS3DS_KPI_KERNEL_IRQ_CONT
 #define IOS3DS_KPI_KERNEL_IRQ_CONT 0x80066494
 #endif
+/* 1: a CA swap can switch the CLCD's source IOSurface after the GL present
+   marked the frame dirty (3.1.3's opt-in GPU path); a new source PA is then
+   itself a reason to mirror a frame. Off everywhere else, including 4.2.1. */
+#ifndef IOS3DS_KPI_CLCD_SWAP_DIRTY
+#define IOS3DS_KPI_CLCD_SWAP_DIRTY 0
+#endif
 
 /* AppleARMPlatform device-tree function lookup (no symbol; scripts/kpi.py LITERALS) */
 #ifndef IOS3DS_KPI_ARM_FUNCTION_LOOKUP
