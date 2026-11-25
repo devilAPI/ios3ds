@@ -137,6 +137,14 @@
    "new": "18bd0e00",
    "why": "7E18 -[SBUIController init] (IMP 0xe141) sends orderFront: to its UIWindow at 0xe344, then sends makeKey: with NO to the status bar window at 0xe374; the main window is never made key, so no CA context/render server starts and the boot spinner stays up (re-log 120). 4.2.1 instead makes the SBUIController window key in init. Repoint the literal pool word at VA 0xe478 (file 0xd478) from the orderFront: selref 0xe9b50 to the makeKeyAndVisible selref 0xebd18, so the existing message send makes the window key+visible. The r2=0 argument that orderFront: used is ignored by makeKeyAndVisible. Verified in QEMU: with this patch the 7E18 CA compositor draws the boot spinner through a real key UIWindow (re-log 121); before it the screen stayed black/spinner with no CA render. Original word 0x000e9b50 verified in the 7E18 executable; no 4.x recipe or shim byte changes.",
    "mode": "0755"
+  },
+  {
+   "path": "/System/Library/CoreServices/SpringBoard.app/SpringBoard",
+   "offset": "0x1c47c",
+   "orig": "034b1b68",
+   "new": "00207047",
+   "why": "7E18 -[SBAwayController isLocked] -> NO (Thumb IMP 0x1d47d, file 0x1c47c; original push {r4,lr}/ldr r3 verified). -[SBUIController restoreIconList:] (IMP 0xc975) goes straight to frontLocked:animate:automatically: and returns when the away controller is locked, so the icon list is never restored. With this patch SpringBoard advances from the CA-drawn spinner to the Apple-logo/progress-bar (reset) view (re-log 121 scratch, re-log NEXT); no restart loop or crash with this patch alone. The companion stubs isDeviceLockedOrBlocked -> NO and isMakingEmergencyCall -> NO were tried and caused 3-5 SpringBoard restarts, so they are NOT shipped.",
+   "mode": "0755"
   }
  ]
 }

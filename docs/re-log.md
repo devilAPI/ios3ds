@@ -4003,3 +4003,113 @@ Only `rootfs/overlay-3.1.3.json` and this log change in the tree.
   Kernel/devtree hashes `e2613577…` / `29ebba25…` match §5.3; `boot.cfg`
   is `5851eebe…` after the later main-branch boot-option changes (4.1 is not
   required to be byte-identical).
+
+## NEXT. Older-version round 9: `transition:toView:` is an alert, the icon-list gate is the away controller and the power-down restore (2026-11-25)
+
+Continues §121. Both archived IPSWs were fetched again into this worktree's
+`build/fw-3.1.3/` and `build/fw-2.2.1/` (sha1 `5f4f5c01…` / `9af5625e…`
+verified by `fwprep.py`), plus 4.1 (`97abde62…`). All Apple files, images,
+scratch scripts and disassembly dumps stay under `build/`. Only
+`rootfs/overlay-3.1.3.json`, `tests/test_versions.py` and this log change in
+the tree; no 4.x recipe, patch set, shim or GPU file is touched.
+
+### Static analysis: the §119 `transition:toView:` breakpoint was a red herring
+
+- **[V]** Parsed 7E18 SpringBoard's real ObjC metadata instead of guessing IMPs:
+  class at +0x10 points at `class_ro_t`; `class_ro_t` has name at +0x10,
+  `baseMethods` at +0x14, ivars at +0x1c; `method_list_t` is
+  `{entsize=0xc, count, [SEL, types, IMP]…}` from +8. This gives 231 classes
+  and ~3400 instance methods with consistent names/IMP addresses.
+- **[V]** `transition:toView:` has exactly one selref (`0xeadc8`) and one
+  literal-pool word (`0x344f8`). The enclosing Thumb function starts at
+  `0x342f4`: it sends `_replyView` to `self`, then `transition:8 toView:result`
+  to that reply view. The enclosing method is
+  `-[_SBAwayAlertView _replyClicked]` (IMP `0x342f5`); this is a UIKit alert
+  transition on the lock-screen alert, **not** the boot-LCD → icon-list swap.
+  The §119 breakpoint at `0xc0f64` was inside unrelated code.
+- **[V]** The icon list is restored by `-[SBUIController restoreIconList:]`
+  (IMP `0xc975`, Thumb; file `0xc974`, class `0xe7628`). Its first checks are
+  `[[SBAwayController sharedAwayController] isLocked]`,
+  `isDeviceLockedOrBlocked` and `isMakingEmergencyCall` (selrefs `0xcb20`,
+  `0xcb24`, `0xcb28`). If any is true it calls
+  `frontLocked:animate:automatically:` and returns at `0xcb02`, so the icon
+  list is never inserted. If those pass, helper `0xe9a8` reads three `__bss`
+  flags at `0x107220/1/2`; any non-zero flag also returns early. Only then
+  does `restoreIconList:` insert/order the lists, unscatter and show the
+  button bar.
+- **[V]** The only in-binary call chain to it is
+  `-[SBPowerDownController activate]` (IMP `0x465a1`) →
+  `performSelector:withObject:afterDelay:` of
+  `_restoreIconListIfNecessary` (IMP `0x466fd`) → four state checks
+  (`0x46702`–`0x46720`) → `[[SBUIController sharedInstance] restoreIconList:NO]`
+  at `0x46734`. This controller is not activated by the 7E18 boot path in our
+  harness, which explains why §119/§121 never saw the icon swap.
+
+### What the Apple logo + progress bar actually is
+
+- **[V]** SpringBoard contains `SBResetManager`, `SBResetView` and
+  `SBResetProgressView` (`beginReset` `0x8c98d`, `_beginReset:` `0x8cbad`,
+  `_resetFinished` `0x8c8e1`, `SBResetView _updateProgress` `0x921ed`,
+  `_resetStarted:` `0x92231`, `drawRect:` `0x927e5`). The vertical bar drawn
+  next to the Apple logo is that reset view, not the activation spinner.
+  `beginReset` maps reset mode 3/4 to `beginResetting:` on the shared manager.
+- **[V]** With the shipped §120/§121 CA patches plus
+  `isLocked -> NO`, a fresh 240 s 3.1.3 run stays on Apple logo + progress
+  bar (screenshots at 90/150/210 s identical); one dyld pass, no crash loop.
+  Patching `SBResetManager beginReset` and `SBResetView _resetStarted:` to
+  return immediately changed nothing with those CA patches. With the CA
+  patches *removed*, the same lock/reset patches produce the "Connect to
+  iTunes" LCD screen instead, i.e. that state can also be drawn by the boot
+  LCD view. Neither variant reached icons.
+
+### Shipped patch and rejected experiments
+
+- **[V]** Shipped: a 4-byte version-only patch at SpringBoard file offset
+  `0x1c47c` (`034b1b68` → `00207047`, Thumb `movs r0,#0; bx lr`) makes
+  `-[SBAwayController isLocked]` return NO. This is the first of the three
+  gates in `restoreIconList:`; it advances the picture from the spinner to
+  the reset view and is stable by itself. `tests/test_versions.py` now
+  expects the extra offset. No 4.x file changed.
+- **[G]/[V]** Not shipped: (a) `isDeviceLockedOrBlocked -> NO`
+  (`0x1de1c`) and `isMakingEmergencyCall -> NO` (`0x1c4e4`) each make
+  SpringBoard restart 3–5 times in 120 s (490 dyld lines instead of 98) and
+  leave only a spinner; (b) an ARM trampoline hooked at
+  `appleIconViewRemoved` (`0x58bc`) calling
+  `[[SBUIController sharedInstance] restoreIconList:NO]`, plus forcing the
+  three-flag early return in `restoreIconList:` (`0xb9f0` `beq`→`b`) and
+  disabling the four early returns in `_restoreIconListIfNecessary`, left
+  the Apple/progress picture unchanged and the shim-memory marker was not
+  observed, so no claim is made that those hooks ran; (c) reset no-ops as
+  above. All scratch overlays were reverted before the shipped patch was
+  added.
+- **[G]** The next gate is upstream of `restoreIconList:`: find what should
+  activate `SBPowerDownController` at boot (or call
+  `_restoreIconListIfNecessary` directly from a known-to-run boot method),
+  then check the three `0x107220/1/2` flags. Do not stub the other two
+  `SBAwayController` lock queries: they are used elsewhere and crash the
+  process.
+- **[V]** 2.2.1 has no new code this round; the 5H11a anchors in §119/§121
+  still need a 2.x signature-safe mechanism (per-page `ldid -Hsha1`
+  re-signing) before any of this can be reused there.
+
+### Verification of this round's tree
+
+- **[V]** `make test`: all offline tests plus host harnesses, stub-symbol and
+  conflict-marker checks pass with the new expected 3.1.3 patch list.
+- **[V]** Fresh default build (`make userland`, `rm -f build/sd.img`,
+  `make sdimg`) produced the six unchanged 4.2.1 boot-file hashes:
+  `kernel.bin 505f451a…`, `devtree.bin 25b1bd23…`, `fakeio.bin e5fecd66…`,
+  `shim.bin e0609de9…`, `gpu.bin 7e696f65…`, `boot.cfg 8d4079cf…`.
+- **[V]** Exact fresh-image sequence
+  `rm -f build/sd.img && make sdimg && python3 emu/soak.py --cycles 5 --icount 2`
+  → **Result: PASS** (SpringBoard + input after 70 s, home reference after
+  140 s, five app/home cycles, zero panic/stall/md0/log/crash/watchdog/GPU
+  failures).
+- **[V]** Exact documented 4.1 sequence after staging 8B117:
+  `rm -f build/sd.img && make sdimg IOS=4.1 && python3 emu/soak.py --cycles 5 --icount 2`
+  → **Result: PASS** (five cycles, zero failures).
+- **[V]** Fresh 3.1.3 image with the shipped overlay
+  (`python3 scripts/mksd.py --image build/sd313-final9.img --ios 3.1.3
+  --staging build/fw-3.1.3/staging --no-cydia --no-tlsfix`) boots to the
+  Apple/progress reset view described above. No 3.1.3/2.2.1 soak PASS is
+  claimed: neither version reaches a home screen.
