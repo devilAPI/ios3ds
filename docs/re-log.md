@@ -3876,3 +3876,28 @@ traces stay under `build/`.
   cannot pass while the screen is the boot spinner. This is the unfinished
   part of the round; the code change and the traced condition are the
   deliverable.
+
+### Final verification for this round
+
+- **[V]** `make test`: 94 offline tests plus host harnesses, stub-symbol check
+  and `test_blkcache` all pass.
+- **[V]** Fresh default build after the overlay change produced the same six
+  4.2.1 SHA-256 values recorded in §119: `kernel.bin 505f451a…`,
+  `devtree.bin 25b1bd23…`, `fakeio.bin e5fecd66…`, `shim.bin e0609de9…`,
+  `gpu.bin 7e696f65…`, `boot.cfg 8d4079cf…`. No kernel, shim or GPU source
+  was touched by this branch.
+- **[V]** Exact fresh-image sequence `rm -f build/sd.img && make sdimg &&
+  python3 emu/soak.py --cycles 5 --icount 2` → **Result: PASS**: SpringBoard
+  + input after 70 s, `[sbwarm]` after 135 s, home reference after 145 s
+  (stddev 53.6), five app/home cycles, zero panic/stall/md0/log/crash/
+  watchdog/GPU failures. (An earlier attempt in this round raced with a
+  concurrent 3.1.3 image build and failed during HFS+ file addition; the
+  standalone rerun above is the valid one.)
+- **[V]** Exact documented 4.1 sequence, after refetching 8B117
+  (`sha1 97abde620766…` verified): `rm -f build/sd.img && make sdimg IOS=4.1
+  && python3 emu/soak.py --cycles 5 --icount 2` → **Result: PASS**:
+  SpringBoard + input after 60 s, warm-up after 125 s, home reference after
+  135 s (stddev 53.3), five cycles, zero failures.
+- **[V]** No 3.1.3/2.2.1 soak PASS is claimed. The shipped 3.1.3 overlay
+  builds cleanly and reaches CA display setup, but the screen still shows
+  the boot spinner; a five-cycle home-screen soak cannot pass yet.
