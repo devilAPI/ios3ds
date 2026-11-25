@@ -814,8 +814,8 @@ All items below were ported or shown unnecessary; kept for the history.
 |---|---|---|
 | 4.2.1 (8C148) | home screen, apps, input, Cydia/TLSFix | **PASS** (5 cycles) |
 | 4.1 (8B117) | home screen, apps, input, Cydia/TLSFix (APT against the local repo, Cydia opens); all re-log 101/111 open items resolved (re-log 131, iOS 4.1 completeness) | **PASS**, 10 cycles with `--require-app` |
-| 3.1.3 (7E18) | **home screen, apps open and render, clock runs, taps and buttons.** DataMigrator skipped (`SBLastSystemVersion`), shim `mrs sp,spsr` IRQ replay, 822-slot GSEvent input daemon; software CoreAnimation + ARM9 screen copy by default, PICA200 path opt-in with `IOS3DS_GPU313=1` at build time (re-log NEXT) | **PASS**, 5 cycles with `--require-app` on the default image; GPU-opt-in image also soaked (re-log NEXT) |
-| 2.2.1 (5H11a) | **home screen, apps open and render, taps and buttons.** Kernel `cs-invalid-page-allow`, fixed liblockdown stubs, `CA_ENABLE_MBX2D=0`, 2.x tool ABI (classic binding, r9, 48-byte GSEvents) | **PASS**, 10 cycles with `--require-app` |
+| 3.1.3 (7E18) | **home screen, apps open and render, clock runs, taps, buttons, lock/wake and brightness (re-log 132).** DataMigrator skipped (`SBLastSystemVersion`), shim `mrs sp,spsr` IRQ replay, 822-slot GSEvent input daemon; software CoreAnimation + ARM9 screen copy by default, PICA200 path opt-in with `IOS3DS_GPU313=1` at build time (re-log NEXT) | **PASS**, 5 cycles with `--require-app` on the default image; GPU-opt-in image also soaked (re-log NEXT) |
+| 2.2.1 (5H11a) | **home screen, apps open and render, taps and buttons, battery, lock/wake and brightness (re-log 132).** Kernel `cs-invalid-page-allow`, fixed liblockdown stubs, `CA_ENABLE_MBX2D=0`, 2.x tool ABI (classic binding, r9, 48-byte GSEvents) | **PASS**, 10 cycles with `--require-app` |
 
 Driver matrix (QEMU-verified unless marked [G]; "off" = cleanly not installed
 or not registered, with the reason):
