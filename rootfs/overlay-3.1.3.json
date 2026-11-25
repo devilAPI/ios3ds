@@ -8,7 +8,7 @@
   "/etc/fstab": "/dev/md0 / hfs rw 0 0\n",
   "/etc/syslog.conf": "*.*\t/var/log/syslog\n",
   "/var/log/syslog": "",
-  "/private/var/mobile/Library/Preferences/com.apple.springboard.plist": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict>\n\t<key>SBLastSystemVersion</key>\n\t<string>7E18</string>\n\t<key>SBDisableAutoDim</key>\n\t<true/>\n\t<key>SBDontLockAfterCrash</key>\n\t<true/>\n\t<key>SBDidShowReorderText</key>\n\t<true/>\n\t<key>SBDisableMailAutoLaunch</key>\n\t<true/>\n\t<key>SBNoWatchdogs</key>\n\t<true/>\n</dict>\n</plist>\n"
+  "/private/var/mobile/Library/Preferences/com.apple.springboard.plist": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict>\n\t<key>SBLastSystemVersion</key>\n\t<string>7E18</string>\n\t<key>SBAutoLockTime</key>\n\t<integer>-1</integer>\n\t<key>SBDisableAutoDim</key>\n\t<true/>\n\t<key>SBDontLockAfterCrash</key>\n\t<true/>\n\t<key>SBDidShowReorderText</key>\n\t<true/>\n\t<key>SBDisableMailAutoLaunch</key>\n\t<true/>\n\t<key>SBNoWatchdogs</key>\n\t<true/>\n</dict>\n</plist>\n"
  },
  "remove": [
   "/System/Library/Caches/com.apple.datadetectorscore.cache.full.system"

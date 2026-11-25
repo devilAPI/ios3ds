@@ -121,8 +121,14 @@ static int opt_nocpad, opt_non3ds, opt_norotate;
 static const struct { uint16_t btn, usage; } keymap[] = {
     { PAD_START,  kHIDUsage_Csmr_Menu },
     { INBTN_HOME, kHIDUsage_Csmr_Menu },
+#ifndef INPUT_IOS3
+    /* iOS 3.x/2.x: no Lock button. Their SpringBoard turns the screen off on
+       kGSEventLockButtonDown but no event from here wakes it again (Home
+       after Lock leaves the CLCD off, re-log NEXT), so locking is disabled
+       there and SBAutoLockTime is -1 in the overlays. */
     { PAD_SELECT, kHIDUsage_Csmr_Power },
     { INBTN_POWER, kHIDUsage_Csmr_Power },
+#endif
     { PAD_R,      kHIDUsage_Csmr_VolumeInc },
     { PAD_L,      kHIDUsage_Csmr_VolumeDec },
 };

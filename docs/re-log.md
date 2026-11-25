@@ -4722,3 +4722,22 @@ hardware breakpoints on QEMU's gdbstub (private port); `exception_triage`
   Calculator, Clock and Contacts opened (app diffs 163.4/128.1/84.3/109.8/
   173.6), home diff 0.0 after every Home, 0 restarts, 0 panics, no crash
   reports, lock round passed (screens: `build/emu-s221d/`, not committed).
+
+### Lock/wake on 3.1.3 and 2.2.1, and the ten-cycle soaks
+
+- **[V]** A 10-cycle 3.1.3 soak exposed a hollow lock round: after Lock
+  (`[power] iOS screen off`) the Home GSEvent never brought the CLCD back,
+  the ARM9 kept showing the last home frame (so the screenshot test passed),
+  and every later tap opened nothing. 2.2.1 behaves the same. Not fixed:
+  the 3.x/2.x input build (`INPUT_IOS3`) no longer maps SELECT/POWER to the
+  Lock button and both overlays set `SBAutoLockTime = -1` (Never). The
+  4.2.1 input daemon is byte-identical. **[G]** The wake path (SpringBoard
+  undim → AppleM2CLCD enable on these kernels) is the next thing to trace.
+- **[V]** Fresh images, `emu/soak.py --cycles 10 --icount 2 --require-app
+  --crashlogs` (lock rounds on cycles 4 and 9, the latter 130 s):
+  **3.1.3 PASS** (40 s to input, ten apps opened, app diffs 78.8–161.5,
+  home diff 0.0, 0 restarts, 0 crashes) and **2.2.1 PASS** (50 s to input,
+  ten apps opened, app diffs 54.1–173.6, home diff 0.0, 0 restarts,
+  0 crashes). Screenshots: `build/shots/{313,221}-{home,apps}.png` (not
+  committed).
+- **[V]** `make test` passes. Driver matrix: docs/multi-version.md §6.9.

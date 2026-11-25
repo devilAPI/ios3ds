@@ -805,28 +805,36 @@ here produce the same bytes.)
   signing check. Needed for activation, audio routing, gyro and Music
   respectively; not for the home screen.
 
-### 6.9 Current status and userland/driver matrix (2026-11-24)
+### 6.9 Current status and userland/driver matrix (2026-11-25)
 
-| Version | QEMU state | Fresh-image 5-cycle soak |
+| Version | QEMU state | Fresh-image soak |
 |---|---|---|
-| 4.2.1 (8C148) | home screen, apps, input, Cydia/TLSFix | **PASS** (70 s to SpringBoard + input, 0 failures) |
-| 4.1 (8B117) | home screen with stock icons; Cydia/TLSFix disabled | **PASS** after the soak harness stopped accepting the green boot console as a home reference (60 s to SpringBoard + input, 0 failures) |
-| 3.1.3 (7E18) | **Home screen.** `/dev/md0` mounts, launchd + daemons, SpringBoard draws the stock icon grid. The earlier Apple-logo/progress-bar screen was DataMigrator (fixed by `SBLastSystemVersion = 7E18` in com.apple.springboard.plist); the shim now replays Darwin 10's `mrs sp,spsr` after the IRQ hook; a `-DGL_IOS3` build of our GL engine fills 7E18's 822-slot dispatch table; a `-DINPUT_IOS3` input daemon sends GSEvents. Open: CoreAnimation composites only the first frame, so apps launched by a tap do not appear (re-log 125) | no five-cycle PASS yet (apps do not render) |
-| 2.2.1 (5H11a) | `/dev/md0` mounts, launchd + mDNSResponder, display; GDB confirms SpringBoard's app delegate and `finishLaunching` run, so the `libCGFreetype` console tail is not a dyld failure, but no CA render server is created and no UI is drawn | not meaningful until the home screen appears |
+| 4.2.1 (8C148) | home screen, apps, input, Cydia/TLSFix | **PASS** (5 cycles) |
+| 4.1 (8B117) | home screen with stock icons; Cydia/TLSFix disabled | **PASS** (earlier round; not re-run) |
+| 3.1.3 (7E18) | **home screen, apps open and render, clock runs, taps and buttons.** DataMigrator skipped (`SBLastSystemVersion`), shim `mrs sp,spsr` IRQ replay, 822-slot GL dispatch, GSEvent input daemon; CoreAnimation composites in software and the ARM9 copies the screen (`gpu_mirror=0`, re-log NEXT) | **PASS**, 10 cycles with `--require-app` (every tap opened an app) |
+| 2.2.1 (5H11a) | **home screen, apps open and render, taps and buttons.** Kernel `cs-invalid-page-allow`, fixed liblockdown stubs, `CA_ENABLE_MBX2D=0`, 2.x tool ABI (classic binding, r9, 48-byte GSEvents) | **PASS**, 10 cycles with `--require-app` |
 
-**What works on the older versions.** The kernel-side shim is shared by all
-four firmwares: timers/IRQ, the ARM9 block server, the MCU/RTC hooks, audio
-I2C bridging and the CLCD framebuffer copy are active on 3.1.3 and 2.2.1. The
-bottom-screen touch copy and iOS display come up; on these two versions the
-PICA200 GPU mirror stays off and the ARM9 CPU copy drives the LCD.
+Driver matrix (QEMU-verified unless marked [G]; "off" = cleanly not installed
+or not registered, with the reason):
 
-**What is deliberately not installed on 3.1.3/2.2.1.** All 4.2.1 userland
-binaries (input daemon, `ios3ds-wifid`/a80211, mcud/gyrotest, camera `vcd`,
-GPS, GL/MBXGLEngine, applog, keychain, Cydia/TLSFix) use 4.2.1 private APIs or
-4.x-only frameworks. Their overlays keep `add` empty, so they are cleanly
-absent rather than crashing at launch. Activation is handled at the liblockdown
-level instead: dyld-cache patches on 7E18, direct dylib patches + re-sign on
-5H11a. Consequently Wi-Fi scanning/joining, Cydia Substrate, CoreMotion and
-Camera.app are not available on the older builds even though the hardware
-bridges exist in the shim. There is no separate 1.x backend: see §4 for the
-S5L8900 plan.
+| Driver | 3.1.3 | 2.2.1 |
+|---|---|---|
+| Touch + Home/Power/volume buttons | works: `ios3ds-input -DINPUT_IOS3`, GSEvents to PurpleSystemEventPort | works: `-DINPUT_IOS2` (48-byte records), 2.x link |
+| Display | works: software CA, ARM9 CPU copy every frame | works: same |
+| GPU (PICA200) | mirror off (no GL present marks CA frames); `MBXGLEngine -DGL_IOS3` installed for EAGL apps [G: no EAGL app tested]; CA's own GL path unused (`EAGLServer::renderer()` gets no context) | off: 2.x OpenGLES talks to MBX directly, no engine bundle; MBX2D disabled |
+| Battery | works: shim IOPMPowerSource, refreshed by mcud polling | off: registering the IOPMPowerSource panics 5H11a (`IORegistryEntry::free`); status bar shows no level |
+| Volume slider | works: mcud `-DMCU_OLD` → AVSystemController | works (same) |
+| No-sleep assertion | works: mcud | works: mcud |
+| Lock / auto-lock | off: SpringBoard turns the screen off on Lock, but Home never wakes it (CLCD stays off); the 3.x/2.x input daemon sends no Lock event and `SBAutoLockTime = -1` | off: same |
+| Brightness | off: no IOHIDEventSystemClient properties to read on 3.x; LCD stays at Luma's level | off: same |
+| Accelerometer / gyro | off: needs IOHIDEventSystemClient (4.x) / CoreMotion (4.x); iPod2,1 3.x has no gyro API | off: same |
+| Audio | off: kernel bridge loads, but DMA start stays "device is not ready"; relocating 4.2.1's `i2s-start-no-lrck-sync` hangs both kernels before root mount (re-log NEXT) | off: same |
+| Wi-Fi (`ios3ds-wifid`/a80211) | off: built against 4.2.1 private Apple80211/IOKit APIs | off: same |
+| Camera (`vcd`) | off: iPod2,1 has no camera stack before 4.x | off: same |
+| GPS | off: 4.x CoreLocation hooks | off: same |
+| Cydia / TLSFix | off: packages built for 8C148 | off |
+
+The 4.2.1 and 4.1 builds are unchanged by all of this: every older-version
+switch is either in `rootfs/overlay-*.json`, `kernel/patchsets/*.json`, or a
+`versions.py` flag that only non-default versions set (six 4.2.1 hashes
+re-checked, re-log NEXT).
