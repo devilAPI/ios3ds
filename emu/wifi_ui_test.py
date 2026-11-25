@@ -87,6 +87,11 @@ def main():
     ap.add_argument("--out", default=os.path.join(ROOT, "build", "emu-wifi-ui"))
     ap.add_argument("--boot-timeout", type=float, default=400)
     ap.add_argument("--nwm", action="store_true", help="nwm.code instead of wifi-fw.bin")
+    ap.add_argument("--keep-ca", action="store_true",
+                    help="leave boot.cfg's ca_gpu alone (4.1: software CA draws a black home screen)")
+    ap.add_argument("--psk", default=PSK,
+                    help="access point passphrase typed in Settings (letters only avoids the "
+                         "123 keyboard page, whose layout differs between iOS versions)")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     tmp = tempfile.mkdtemp(prefix="ios3ds-wifi-ui-")
@@ -104,7 +109,8 @@ def main():
         wifi_test.mtools(["mcopy", "-o", fw, "::/ios3ds/wifi-fw.bin"], a.sd)
     cfg = os.path.join(tmp, "boot-ca0.cfg")
     with open(cfg_saved) as f, open(cfg, "w") as g:
-        g.write(re.sub(r"(?m)^ca_gpu=1$", "ca_gpu=0", f.read()))
+        t = f.read()
+        g.write(t if a.keep_ca else re.sub(r"(?m)^ca_gpu=1$", "ca_gpu=0", t))
     wifi_test.mtools(["mcopy", "-o", cfg, "::/ios3ds/boot.cfg"], a.sd)
 
     checks = []
@@ -116,7 +122,10 @@ def main():
 
     t0 = time.time()
     try:
-        sess("start", "--wifi", "--sd", a.sd)
+        if a.psk != PSK:
+            sess("start", "--wifi", "--sd", a.sd, "--extra=-global ctr-wifi.psk=" + a.psk)
+        else:
+            sess("start", "--wifi", "--sd", a.sd)
         if not check("boot to SpringBoard", wait_log(r"\[input\] connected to SpringBoard", a.boot_timeout)):
             return 1
         check("chip idle without wifi.cfg", wait_log(r"\[wifi\] idle: no network configured", 30))
@@ -173,7 +182,7 @@ def main():
         time.sleep(15)
         shot(a.out, "04-password-prompt")
         first = True
-        for chunk in re.findall(r"[a-z]+|[^a-z]+", PSK):
+        for chunk in re.findall(r"[a-z]+|[^a-z]+", a.psk):
             if first:
                 sess("type", chunk, "--page", "abc")
                 first = False
