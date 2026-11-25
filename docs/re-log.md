@@ -4936,7 +4936,13 @@ Closes the 4.1 (8B117) open items of re-log 101/111 (docs/multi-version.md
   Darwin 9.4.1, CF 478.29). The date fix also matters here (2009 dates).
 - **[V]** 3.1.3: Cydia icon on page 2; tapping it opens Cydia (tab bar,
   "Network Error ... Invalid argument" with no network).
-- 2.2.1: see result below.
+- **[V]** 2.2.1: **not feasible with this package set.** Cydia installed and
+  its icon appeared (page 1, row 4), but tapping it (`[input] down 123,314`)
+  launched nothing in 180 s, with no console line or crash report. The armv6
+  slice of Cydia 1.1.30 (and of the apt7/dpkg builds) carries
+  `LC_DYLD_INFO_ONLY`, which 5H11a's dyld does not support (re-log 129).
+  `overlay-2.2.1.json` keeps `cydia: false`; a 2.x set needs Cydia/APT builds
+  linked for iPhoneOS 2.x (classic binding).
 - **[G]** No APT refresh test on 3.x/2.x: ios3ds-wifid is not built for them
   (Wi-Fi owner). Hardware: open Cydia, Installed tab lists 34 packages.
 
@@ -4957,3 +4963,7 @@ backlight log/retry patches (above).
 - **[V]** 4.2.1 byte-identical: kernel `505f451a…`, devtree `25b1bd23…`,
   fakeio `e5fecd66…`, shim `a35631eb…`, gpu `6bdaf617…`, boot.cfg `8d4079cf…`
   from this branch and from `git archive origin/main` (2ee022f).
+- **[V]** Fresh 3.1.3 image with Cydia, `emu/soak.py --cycles 5 --icount 2
+  --require-app --crashlogs --targets "47,314;123,226;199,226;275,226;123,50"`
+  -> **Result: PASS** (input after 50 s, five apps opened, 0 restarts, no
+  crash reports; the audio DMA lines are the known stock state).

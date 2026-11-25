@@ -834,7 +834,7 @@ or not registered, with the reason):
 | Wi-Fi (`ios3ds-wifid`/a80211) | off: built against 4.2.1 private Apple80211/IOKit APIs | off: same |
 | Camera (`vcd`) | off: iPod2,1 has no camera stack before 4.x | off: same |
 | GPS | off: 4.x CoreLocation hooks | off: same |
-| Cydia / TLSFix | Cydia 1.1.30 + APT/dpkg installed and Cydia opens [V]; TLSFix left out (needs Substrate via ios3ds-applog, not installed on 3.x); refresh untested (no Wi-Fi on 3.x) | Cydia installed; open: see re-log NEXT |
+| Cydia / TLSFix | Cydia 1.1.30 + APT/dpkg installed and Cydia opens [V]; TLSFix left out (needs Substrate via ios3ds-applog, not installed on 3.x); refresh untested (no Wi-Fi on 3.x) | off: Cydia 1.1.30/APT binaries use LC_DYLD_INFO_ONLY, which 2.x dyld cannot load (icon appeared, tap launched nothing) |
 
 The 4.2.1 and 4.1 builds are unchanged by all of this: every older-version
 switch is either in `rootfs/overlay-*.json`, `kernel/patchsets/*.json`, or a
