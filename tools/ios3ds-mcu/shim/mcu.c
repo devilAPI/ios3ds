@@ -211,10 +211,6 @@ static void *ps;
 static u32 ps_seen = 0xFFFFFFFFu;
 static void *sym_fully, *sym_rawv;
 
-#if IOS3DS_KPI_MCU_PS_RETAIN
-#define PS_RC(o) ((int (*)(void *))(*(void ***)(o))[(0x0c + IOS3DS_KPI_VT_BIAS) / 4])(o)
-static int rc[3];
-#endif
 static void ps_update(void)
 {
     volatile mcubox_t *b = BOX;
@@ -229,17 +225,11 @@ static void ps_update(void)
     if (!ps) {
         ps = ps_powerSource();
         if (!ps) return;
-#if IOS3DS_KPI_MCU_PS_RETAIN
-        rc[0] = PS_RC(ps);
-#endif
         sym_fully = sym_withCStringNoCopy("FullyCharged");
         sym_rawv = sym_withCStringNoCopy("AppleRawBatteryVoltage");
         void *prov = getPlatform();
         if (!prov) prov = getResourceService();
         svc_attach(ps, prov);
-#if IOS3DS_KPI_MCU_PS_RETAIN
-        rc[1] = PS_RC(ps);
-#endif
         ps_setBatteryInstalled(ps, 1);
         ps_setMaxCapacity(ps, 100);
     }
@@ -256,18 +246,11 @@ static void ps_update(void)
             ((void (*)(void *))(*(void ***)n)[(0x14 + IOS3DS_KPI_VT_BIAS) / 4])(n);  /* release (dict keeps it) */
         }
     }
-#if IOS3DS_KPI_MCU_PS_RETAIN
-    rc[2] = PS_RC(ps);
-#endif
     ps_updateStatus(ps);
     if (ps_seen == 0xFFFFFFFFu) {
         svc_registerService(ps, 0);
-#if IOS3DS_KPI_MCU_PS_RETAIN
-        IOLog("ps %p rc %d %d %d %d\n", ps, rc[0], rc[1], rc[2], PS_RC(ps));
-#else
         IOLog("ios3ds-mcu: battery %u%%%s%s, %u mV: IOPMPowerSource registered\n", (unsigned)pct,
               ext ? ", charger" : "", chg ? ", charging" : "", (unsigned)mv);
-#endif
     }
     ps_seen = key;
 }

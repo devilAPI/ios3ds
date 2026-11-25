@@ -127,5 +127,12 @@
   "new": "0030a0e34832c6e50000a0e1",
   "why": "AppleS5L8720XClockController: after starting a performance-state change it sleeps on its command gate until byte +0x248 is cleared by the change-done interrupt, which the fake clock/power page never raises (the 8C148 s5l-perf-nowait, +0x38c there). Every display sleep (Lock) lowers the performance state, so the CLCD power path blocked here and Home never turned the display back on (re-log 128/129). ldrb r3,[rX,#0x248]; cmp r3,#0; bne wait -> mov r3,#0; strb r3,[rX,#0x248]; nop",
   "va": "0xc05e2b40"
+ },
+ {
+  "name": "audio-pm-msg-no-store",
+  "orig": "0000a0e30240a0e1040086e5",
+  "new": "0000a0e30240a0e10000a0e1",
+  "why": "AppleEmbeddedAudio's IOPMrootDomain interest handler (ARM, 0xc03efb08) stores 0 to messageArgument+4 (IOPowerStateChangeNotification.returnValue) for every message before it checks the type. publishFeature() (from IOPMrootDomain::batteryPublished, when an IOPMPowerSource registers) sends kIOPMMessageFeatureChange with the root domain itself as the argument, so the store zeroed IOPMrootDomain's retain count; the next registry iterator release freed it ('IOPMrootDomain: attached at free()', re-log NEXT; QEMU watchpoint on rootDomain+4). The senders of the sleep messages pre-zero returnValue, so the store is dropped (mov r4,r2 kept; str r0,[r6,#4] -> nop)",
+  "va": "0xc03efb28"
  }
 ]

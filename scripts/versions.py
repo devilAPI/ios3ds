@@ -31,10 +31,8 @@ VERSIONS = {
               "sha1": "9af5625ea34acdd8abeb6fce71a72651d0c815d5", "ba_version": 3,
               "virt_base": 0xC0000000, "irq_cont": 0xC006540C, "irq_spsr": True,
               "dt_delete": ["arm-io/usb-otg"],
-              # the shim's IOPMPowerSource made 5H11a IOPanic in
-              # IORegistryEntry::free (freed while attached) on the first
-              # registry match after it registered: no battery service
-              "ps_retain": True,
+              # (no_battery_ps is gone: the IOPMrootDomain free was
+              # AppleEmbeddedAudio's PM handler, patch audio-pm-msg-no-store)
               # Darwin 9 vtable pointers point at __ZTV itself (+8 on 3.x/4.x)
               "vt_bias": 8,
               # no GL engine on 2.x: CoreAnimation composites in software and
