@@ -4114,7 +4114,7 @@ the tree; no 4.x recipe, patch set, shim or GPU file is touched.
   Apple/progress reset view described above. No 3.1.3/2.2.1 soak PASS is
   claimed: neither version reaches a home screen.
 
-## NEXT. 3.1.3: call the icon-list restore from a boot method, and why the picture still stops (2026-11-25)
+## 123. 3.1.3: call the icon-list restore from a boot method, and why the picture still stops (2026-11-25)
 
 Continues §122. Both archived IPSWs and 8B117 were fetched again into this
 worktree's `build/fw-*/` (sha1 `5f4f5c01…` / `9af5625e…` / `97abde62…`
