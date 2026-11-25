@@ -25,7 +25,12 @@
    "StandardErrorPath": "/dev/console",
    "StandardOutPath": "/dev/console",
    "EnvironmentVariables": {
-    "DYLD_PRINT_LIBRARIES": "1"
+    "DYLD_PRINT_LIBRARIES": "1",
+    "CA_ENABLE_OGL": "1",
+    "MBX2D_PAGE_FLIP": "0",
+    "CA_ENABLE_MBX2D": "0",
+    "LK_ENABLE_MBX2D": "0",
+    "IOS3DS_CA": "1"
    }
   }
  },
@@ -107,6 +112,22 @@
    "orig": "90402de904708de2",
    "new": "0000a0e31eff2fe1",
    "why": "7E18 lockdown_disconnect -> 0 (SpringBoard calls it on the fake handle; without the stub it faults. 8C148 0x684bbe4, same 8-byte context and original bytes verified).",
+   "mode": "0644"
+  },
+  {
+   "path": "/System/Library/CoreServices/SpringBoard.app/SpringBoard",
+   "offset": "0x95760",
+   "orig": "f0b503af",
+   "new": "00207047",
+   "why": "7E18 -[SBTetherController isTethered] -> NO. The stock method calls IOServiceMatching(\"AppleTetheredDevice\") via _demoCardConnection; on the 3DS there is no such service, and the affirmative branch keeps SpringBoard on the boot LCD path. Returning 0 makes UIKit call +[CAWindowServer server] (GDB: 0 hits before, 3 after) and IOMobileFramebufferOpen. Thumb IMP 0x96761, file offset 0x95760; original prologue push {r4,r5,r6,r7,lr} verified in the extracted executable (re-log NEXT).",
+   "mode": "0755"
+  },
+  {
+   "path": "/System/Library/Caches/com.apple.dyld/dyld_shared_cache_armv6",
+   "offset": "0x1bde74c",
+   "orig": "d04095e5",
+   "new": "0240a0e3",
+   "why": "7E18 QuartzCore CA::WindowServer::M2Display::new_server: replace ldr r4,[r5,#0xd0] (display kind from the M2CLCD display) with mov r4,#2, forcing the EAGLServer path. On the 3DS the kind is neither 1 (MBXServer) nor 2 (EAGLServer), so new_server fell through to the plain Server constructor and no render server/display context was created. With this patch GDB hits EAGLServer::EAGLServer (0x31bda5a0) and CAWindowServer::Server::Server (0x31bdf010); verified original bytes at cache VA 0x31bde74c (re-log NEXT). 4.x caches and overlays are untouched.",
    "mode": "0644"
   }
  ]

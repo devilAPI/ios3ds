@@ -3786,3 +3786,93 @@ Apple file is committed. All scratch overlays and GDB harnesses live under
   still stop on the boot spinner, so a five-cycle home-screen soak cannot
   pass. The deliverable is the traced stop point above, plus verified addresses
   for the next attempt.
+
+## NEXT. 3.1.3: the tethered-display gate and the missing EAGL display server (2026-11-25)
+
+Continues §119. This round ships a version-only rootfs change for 7E18;
+`scripts/versions.py`, all 4.x recipes, kernel patch sets, the shim and the
+4.2.1 boot files are untouched. Both archived IPSWs were fetched again
+(`5f4f5c01…` / `9af5625e…` verified by `fwprep.py`); Apple files and all GDB
+traces stay under `build/`.
+
+### Two GDB addresses in §119 were strings, not methods
+
+- **[V]** In the extracted 7E18 SpringBoard, VA `0xcd064` is inside
+  `__cstring` and contains `beginRestoring…`; `0xbdc88` contains
+  `setPlaying:`. They cannot be `-[UIWindow makeKeyAndVisible]` or
+  `-[TPLCDView initWithLCDView:]` IMPs. The §119 "no hit" result for those two
+  breakpoints says nothing about whether the methods ran.
+- **[V]** Real IMPs were recovered from the images' own ObjC method lists and
+  `LC_SYMTAB`: 7E18 UIKit `makeKeyAndVisible` `0x3206b6ac`, `makeKeyWindow`
+  `0x3203e930`, `orderFront:` `0x3203e858`; QuartzCore
+  `+[CAWindowServer server]` `0x31bf025c`, `-[CAWindowServer _detectDisplays]`
+  `0x31bf008c`, `CA::WindowServer::M2Display::new_server` `0x31bde71c`,
+  `EAGLServer::EAGLServer` `0x31bda5a0`, `_CARenderServerStart` `0x31bae990`,
+  `_IOMobileFramebufferOpen` `0x332e9964`. A scripted GDB trace with these
+  addresses and a fresh 180 s image is the evidence below.
+
+### The condition: `SBTetherController isTethered`, then the display kind
+
+- **[V]** `-[SBTetherController _demoCardConnection]` (7E18 SpringBoard
+  `0x965dd`) calls `IOServiceMatching("AppleTetheredDevice")`, gets matching
+  services and opens a user client; `-[SBTetherController isTethered]`
+  (`0x96761`) reports that ivar. Our fake IO registry has no
+  `AppleTetheredDevice`, so the negative branch leaves SpringBoard on the
+  boot-LCD path. With the stock binary, `+[CAWindowServer server]` had **0**
+  GDB hits in a full boot.
+- **[V]** Patching only `isTethered` to return NO (Thumb `movs r0,#0; bx lr`,
+  file offset `0x95760`, original `f0b503af` verified) changes that: GDB sees
+  `+[CAWindowServer server]` at 52 s (3 hits), `_detectDisplays`,
+  `M2Display::M2Display`, `IOMobileFramebufferOpen` returning 0 (success),
+  `M2Display::new_server` and `CA::WindowServer::Server::Server`. The server
+  object is returned to UIKit (`r0 = 0x21bf80`). This is the first 7E18 boot
+  that reaches CoreAnimation display setup.
+- **[V]** `M2Display::new_server` reads the display kind from `this+0xd0`:
+  kind 1 picks `MBXServer`, kind 2 picks `EAGLServer`, anything else falls
+  through to the plain `CA::WindowServer::Server` constructor. On our M2CLCD
+  display the kind is neither, and GDB confirmed the fall-through (no EAGL or
+  MBX constructor). Replacing `ldr r4,[r5,#0xd0]` with `mov r4,#2` at dyld
+  cache VA `0x31bde74c` (file `0x1bde74c`, original `d04095e5` verified)
+  makes `EAGLServer::EAGLServer` fire once per server creation, with no panic
+  or restart. Both patches plus the 4.2.1-style CA environment variables are
+  now shipped in `rootfs/overlay-3.1.3.json`.
+
+### Still not a picture — exact remaining stop
+
+- **[V]** After both shipped patches the 180 s screenshot is still the Apple
+  logo + progress bar (mean brightness 7.4, unchanged at 60/120/170 s).
+  `-[UIWindow makeKeyAndVisible]`/`makeKeyWindow` and `_CARenderServerStart`
+  still have **0** GDB hits, so no CA context is created and the LCD keeps
+  showing the boot spinner. The two patches are necessary to reach display
+  setup but are not sufficient to create the key window.
+- **[V]** Scratch-only experiments, all reverted: (a) the 4.2.1
+  `MBXGLEngine.bundle`, dyld override marker and AppleMBXDevice→IOResources
+  patches with the CA environment produced five SpringBoard restarts, no
+  `[gl] CA compositor` line and no picture — the 4.2.1-linked bundle still
+  cannot render on 3.1.3; (b) patching `-[SBAwayController isLocked]` to NO
+  (`0x1d47d`, file `0x1c47d`) changed nothing; (c) branching UIKit's
+  `orderFront:` to `makeKeyAndVisible` and stubbing `makeKey:` changed
+  nothing; (d) a trampoline from `+[CAWindowServer server]` that also called
+  `_CARenderServerStart` changed nothing. None is shipped.
+- **[G]** The next gate is further upstream: find what makes 7E18 UIKit call
+  `makeKeyWindow` (the 4.2.1 `SBUIController init` does it directly; 3.x uses
+  `orderFront:`/`makeKey:` and neither reaches UIKit's IMPs in our traces),
+  or drive an LCD view directly. Re-log §119's "activation is not the gate"
+  still holds: no `SBLockdownManager` method fires.
+- **[V]** 2.2.1 has the same `SBTetherController isTethered` method
+  (`0x9bbe9`, file `0x9abe9`) and its QuartzCore has
+  `CADisplayCoreSurface::CADisplayCoreSurface` (`0x31e389d4`) with an
+  `_mbx2DInitialize` call at `0x31e394bc`. No 2.x patch is shipped until a
+  3.x image actually draws, because 2.x page signatures invalidate naive
+  dylib patches (§116).
+
+### Verification of this round's tree
+
+- **[V]** `make test` passes with the enlarged 3.1.3 patch list; only
+  `rootfs/overlay-3.1.3.json` and `tests/test_versions.py` changed outside the
+  docs. 4.x generated boot files are byte-identical (hashes in the final
+  verification subsection below).
+- **[V]** No 3.1.3/2.2.1 soak was run: their five-cycle home-screen check
+  cannot pass while the screen is the boot spinner. This is the unfinished
+  part of the round; the code change and the traced condition are the
+  deliverable.

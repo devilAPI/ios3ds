@@ -98,7 +98,8 @@ class TestVersions(unittest.TestCase):
                     self.assertEqual([fp["offset"] for fp in recipe["file_patches"]],
                                      ["0x176a008", "0x1767600", "0x176a358",
                                       "0x176a3dc", "0x1769eb0", "0x176a1c4",
-                                      "0x176a210", "0x176a260"])
+                                      "0x176a210", "0x176a260",
+                                      "0x95760", "0x1bde74c"])
                 elif v == "2.2.1":
                     # 2.x has no dyld cache. Patching + re-signing liblockdown
                     # made dyld stop after CoreSurface (re-log 115), so the
