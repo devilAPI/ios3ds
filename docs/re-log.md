@@ -5595,3 +5595,102 @@ worktree into this worktree's `build/fw-3.1.3`; 2.2.1 was staged by copying
   after a present; QEMU's model and the loaded host could not isolate that
   race from a swallowed Home / slow close animation, so the hardware log is
   the deciding evidence for the fix.
+
+## NEXT. 2.2.1 accelerometer: the I2C probe was there all along (2026-11-26)
+
+Re-log 135 said 5H11a's AppleLIS302DL never sent an I2C transfer. That was a
+false negative from a short observation, not a device-tree or probe gap in the
+current tree (main 40b5704). No code change was needed; this section records
+the evidence and corrects the driver matrix.
+
+- **[V]** Fresh `make sdimg IOS=2.2.1`, boot with
+  `IOS3DS_QEMU=/tmp/opencode/qemu-compat2/b/qemu-system-arm python3 emu/run.py
+  --sd build/sd.img --time 150 --icount 2` (log kept as
+  `build/base221a-run.log`, not committed): the shim sees
+  `ios3ds-mcu: accelerometer read reg 0x0f len 1` (WHO_AM_I) and `reg 0x22`
+  during kernel start, then, once SpringBoard asks for reports,
+  `accelerometer read reg 0x20/0x21/0x22`,
+  `accelerometer powered on by AppleLIS302DL (CTRL_REG1 0x40)`, `[mcu]
+  accelerometer on` and `accelerometer sample #1: 0 -55 0 counts`. The ARM9
+  log has `[mcu] accelerometer on` too. The transfers arrive through the
+  patched `AppleARMIICDevice::transfer` and are recognized by
+  `nub_is_acc()` (the `getProperty("reg")` vtable slot is
+  `0x9c + IOS3DS_KPI_VT_BIAS`, bias 8 on Darwin 9).
+- **[V]** Static comparison: the 5H11a device tree (staged
+  `devicetree.txt`) has `/arm-io/i2c0/accelerometer` with
+  `compatible 'accelerometer,lis331dl|accelerometer,lis302dl'`, `reg 0x1d`,
+  `interrupts 0x63 flags 3`, `orientation 5`. `tools/ios3ds-mcu/dt_mcu.py`
+  narrows `compatible` to `accelerometer,lis302dl` and verifies address
+  `0x1d`; no property is deleted for 2.x. The 5H11a kernelcache has exactly
+  one `AppleEmbeddedAccelerometer` personality: class/IOClass
+  `AppleLIS302DL`, provider `AppleARMIICDevice`, `IONameMatch
+  accelerometer,lis302dl` (read from `__PRELINK/__info` with IDREFs expanded).
+  7E18/8B117 use the same match/address, so there is no 2.x bus or address
+  difference to fix. `orientation 5` versus 4 only changes the axis-sign
+  mapping, not probe or power.
+- **[V]** Orientation actually reaches SpringBoard: with
+  `--hmp "120=qom-set /machine mcu-orient 1;150=qom-set /machine mcu-orient 2"`
+  (log `build/base221orient-run.log`), the samples flip from `0 -55 0` to
+  `0 55 0` and mcud logs `[mcud] SpringBoard device orientation 0 -> 4`.
+  That is the same notification UIKit/Safari uses on 3.1.3/4.2.1
+  (`com.apple.springboard.rawOrientation`), so the 2.2.1 rotation path is
+  alive end to end. **[G]** The Safari window itself was not screenshot-tested
+  in 2.x QEMU: its home page 1 has no Safari icon and `emu/session.py drag`
+  does not change pages with the 2.x GSEvent layout. On hardware: open Safari,
+  rotate the console 90°, and check that the page turns landscape; `diag=1`
+  `log.txt` should contain `accelerometer read reg 0x0f`,
+  `powered on by AppleLIS302DL`, `accelerometer sample #N` and mcud's
+  `SpringBoard device orientation 0 -> 4` (or 1/2 for the other poses).
+- **[V]** No repository file was changed for this item: `scripts/versions.py`,
+  `kernel/dtgen.py`, `tools/ios3ds-mcu/{dt_mcu.py,shim/mcu.c}` and the shim
+  binary are unchanged. The 4.2.1 build is therefore byte-identical.
+
+## NEXT. 2.2.1 microphone: why the VirtualAudio product swap cannot work alone (2026-11-26)
+
+The 5H11a mic route is still **not working**; this section replaces the open
+"[G]" in re-log 134 with the binary-level reason and three tested patches.
+No VirtualAudio patch is shipped for 2.2.1: all tested variants either break
+category activation or leave `input available 0`.
+
+- **[V]** 5H11a's `/Library/Audio/Plug-Ins/HAL/VirtualAudio.plugin/VirtualAudio`
+  (AudioDriverPlugIns-141.11, 706,336 bytes) has a four-entry product table at
+  file offset `0x9a350`: `M68 N45 N72 N82` (12 CFStrings at `0xa4dbc`…
+  `0xa4dec`). `GetProductID` at `0x5da4c` calls `CFStringHasPrefix` for each
+  entry and writes the product-ID words `m68p`, `n54p`, `n72p`, `n82p` from
+  the literals at `0x5dce0`, `0x5dcec`, `0x5dcf8`, `0x5dd04` into a writable
+  buffer; the `RoutingSettingsFactory_Aspen` code then selects a per-model
+  routing handler from that ID. There is no N81 slot (the 4.2.1 mic donor) and
+  no `UnknownProduct` fallback: renaming the N72 entry leaves
+  `hw.model=N72AP` unrecognised, which is the category failure of re-log 134.
+- **[V]** Patch A (built and booted): re-log 130's swap at `0x9a358`
+  (`N72 N82` -> `X72 N72`) plus an `n82p` -> `n72p` result at `0x5dd04`, so
+  `hw.model=N72AP` still yields product ID `n72p`. Result: no
+  `Unable to set category` / `Routing Not Supported` in mediaserverd's console
+  (stdout was enabled in a scratch image), but `ios3ds-tone rec` still logs
+  `input available 0, route "Speaker"` and no `rx start` (logs
+  `build/mic221a-run.log`, `build/mic221b-run.log`). The plug-in follows the
+  product result back to the **N72** database, which has no built-in-mic port.
+- **[V]** Patch B (built and booted): point the N45 slot at N72
+  (`0x9a354: N45 -> N72`) and change its ID word at `0x5dcec`
+  (`n54p -> n72p`). N45 has a `PlaybackAndRecord_N45` handler and a built-in
+  mic; category still activates cleanly, but `input available 0` again
+  (`build/mic221c-run.log`). N82 (re-log 134's donor) has no
+  `PlaybackAndRecord` handler at all in 141.11 (only Playback/Record/Call/
+  Broadcast), so its category is refused.
+- **[G]** A real fix needs either (a) a patch to the 5H11a N72 routing
+  database that *adds* `kVirtualAudioPortTypeMicrophoneBuiltIn` to the ports
+  of `RoutingHandler_PlaybackAndRecord_N72` (the handler at `0x88dbc` looks
+  ports up by type at `+0xc`, and the N72 handler's exception strings are at
+  `0x9e844`…`0x9e8a0`; the port-construction code still needs to be mapped),
+  or (b) headset emulation including the 3-contact microphone / `mikey`
+  contact, not just the headphone GPIO bit. Both are beyond a byte swap; no
+  such patch is committed. The stock 5H11a N72 database is left in place, as
+  re-log 134 concluded.
+- **[G]** Hardware checklist (a console with a wired 3-contact headset):
+  `diag=1` `log.txt` should show `input available 1` and a route containing
+  `MicrophoneWired` from `ios3ds-tone rec`, followed by `[audio] mic on` and
+  `ios3ds-audio: rx start`. If it does, a 3-contact jack route (option b) is
+  worth implementing; if not, the N72 database needs option (a).
+- **[V]** Reverting the experiments leaves the 2.2.1 overlay exactly as on
+  main: no `VirtualAudio` entry in `rootfs/overlay-2.2.1.json`. All four
+  version soaks and the six 4.2.1 hashes were re-checked afterwards.
