@@ -142,6 +142,10 @@ def resolve(staging):
         out["MCU_NO_PMPS"] = 1
     if info.get("mic_gain_q15"):
         out["MIC_GAIN_Q15"] = info["mic_gain_q15"]
+    if info.get("vt_bias"):
+        out["VT_BIAS"] = info["vt_bias"]
+    if info.get("ps_retain"):
+        out["MCU_PS_RETAIN"] = 1
     return out
 
 

@@ -87,6 +87,9 @@ int IOPMAssertionCreateWithName(CFStringRef type, uint32_t level, CFStringRef na
 #define IOHIDEventSystemClientDispatchEvent(c, e) ((void)(c), (void)(e))
 #define IOHIDEventCreateAccelerometerEvent(a, t, x, y, z, o) ((void)(x), (void)(y), (void)(z), (IOHIDEventRef)0)
 #define SB_UP 1
+#define OLD_BL 1
+static void sb_prefs_poll(void);
+static int sb_als;
 #else
 IOHIDEventSystemClientRef IOHIDEventSystemClientCreate(const void *allocator);
 CFTypeRef IOHIDEventSystemClientCopyProperty(IOHIDEventSystemClientRef client, CFStringRef key);
@@ -96,6 +99,7 @@ void IOHIDEventSystemClientDispatchEvent(IOHIDEventSystemClientRef client, IOHID
 IOHIDEventRef IOHIDEventCreateAccelerometerEvent(const void *allocator, uint64_t timeStamp,
         float x, float y, float z, uint32_t options);
 #define SB_UP client
+#define OLD_BL 0
 #endif
 
 /* ---- Objective-C (AVSystemController lives in Celestial.framework) ------- */
@@ -207,6 +211,10 @@ static CFStringRef k_bright, k_factor;
    then says there is no sensor), so both kill switches have the same effect. */
 static int als_pref(void)
 {
+#ifdef MCU_OLD
+    sb_prefs_poll();
+    return sb_als;
+#endif
     static CFStringRef key, app;
     if (!key) {
         key = CFStringCreateWithCString(0, "SBEnableALS", kCFStringEncodingUTF8);
@@ -225,12 +233,67 @@ static int als_pref(void)
     return on;
 }
 
+#ifdef MCU_OLD
+/* iOS 2.x/3.x brightness. SpringBoard keeps DisplayBrightness in its own
+   in-process IOHIDEventSystem (IOHIDEventSystemSetProperty) and no client
+   can read it, but it saves the Settings slider as SBBacklightLevel2 in
+   mobile's com.apple.springboard.plist. We run as root (other CFPreferences
+   home), so read that file directly whenever its mtime changes. */
+typedef const void *CFDataRef;
+typedef const void *CFDictionaryRef;
+CFDataRef CFDataCreate(const void *alloc, const uint8_t *bytes, long len);
+CFTypeRef CFPropertyListCreateFromXMLData(const void *alloc, CFDataRef data, unsigned long opt, CFStringRef *err);
+const void *CFDictionaryGetValue(CFDictionaryRef d, const void *key);
+unsigned long CFDictionaryGetTypeID(void);
+/* legacy armv6 struct stat: st_mtimespec.tv_sec at +32 (dev 4, ino 4, mode 2,
+   nlink 2, uid 4, gid 4, rdev 4, atimespec 8) */
+int stat(const char *path, void *st);
+#define SB_PLIST "/private/var/mobile/Library/Preferences/com.apple.springboard.plist"
+static float sb_level = -1;             /* SBBacklightLevel2, -1 = absent */
+static int sb_als = -1;                 /* SBEnableALS, -1 = absent */
+static void sb_prefs_poll(void)
+{
+    static long mtime = -1;
+    static CFStringRef k_lvl, k_als;
+    static unsigned polls;
+    uint32_t st[32];
+    /* HFS+ mtimes have 1 s resolution: re-read every ~20 polls anyway */
+    if (stat(SB_PLIST, st) != 0 || ((long)st[8] == mtime && (++polls % 20) != 0)) return;
+    mtime = (long)st[8];
+    if (!k_lvl) {
+        k_lvl = CFStringCreateWithCString(0, "SBBacklightLevel2", kCFStringEncodingUTF8);
+        k_als = CFStringCreateWithCString(0, "SBEnableALS", kCFStringEncodingUTF8);
+    }
+    int fd = open(SB_PLIST, O_RDONLY);
+    if (fd < 0) return;
+    static uint8_t buf[65536];
+    long n = read(fd, buf, sizeof buf);
+    close(fd);
+    if (n <= 0 || n >= (long)sizeof buf) return;
+    CFDataRef d = CFDataCreate(0, buf, n);
+    if (!d) return;
+    CFTypeRef pl = CFPropertyListCreateFromXMLData(0, d, 0, 0);
+    CFRelease(d);
+    if (!pl) return;
+    if (CFGetTypeID(pl) == CFDictionaryGetTypeID()) {
+        CFTypeRef v = CFDictionaryGetValue((CFDictionaryRef)pl, k_lvl);
+        float f;
+        sb_level = (v && CFGetTypeID(v) == CFNumberGetTypeID() &&
+                    CFNumberGetValue((CFNumberRef)v, kCFNumberFloatType, &f)) ? f : -1;
+        v = CFDictionaryGetValue((CFDictionaryRef)pl, k_als);
+        sb_als = !v ? -1 : CFGetTypeID(v) == CFBooleanGetTypeID() ? CFBooleanGetValue((CFBooleanRef)v) != 0 : 1;
+    }
+    CFRelease(pl);
+}
+#endif
+
 static als_smooth_t als;
 static float als_factor = 1.0f;       /* kept between loops: the shim is written on every slider change */
 static int als_on = -1, als_pref_last = -1, als_paused_logged;
 static uint8_t als_luma_last;
 static float als_factor_last = -1;
 
+#ifndef MCU_OLD
 static int copy_float(CFStringRef key, float *out)
 {
     CFTypeRef v = client ? IOHIDEventSystemClientCopyProperty(client, key) : 0;
@@ -242,6 +305,7 @@ static int copy_float(CFStringRef key, float *out)
     }
     return ok;
 }
+#endif
 
 int main(int argc, char **argv)
 {
@@ -417,9 +481,18 @@ int main(int argc, char **argv)
         }
 
         /* iOS brightness -> LCD backlight, 2x per second */
-        if (!opt_nobl && client && (scr_off || (loops % 5) == 0)) {
+        if (!opt_nobl && (client || OLD_BL) && (scr_off || (loops % 5) == 0)) {
             float b = -1, fa = -1;
+#ifdef MCU_OLD
+            /* level from the saved slider; factor from the ARM9's view of
+               the CLCD (off after Lock / auto-lock, powersave=1) */
+            sb_prefs_poll();
+            int hb = 1, hf = 1;
+            b = sb_level >= 0.0f ? sb_level : 0.5f;   /* SpringBoard's default until the slider moves */
+            fa = box.screen_off ? 0.0f : 1.0f;
+#else
             int hb = copy_float(k_bright, &b), hf = copy_float(k_factor, &fa);
+#endif
             if (hb && !hf) fa = 1;
             float af = als_on ? als_factor : 1.0f;
             if (hb && (fabsf(b - bright) > 0.005f || fabsf(fa - factor) > 0.005f)) {

@@ -199,6 +199,16 @@
 #ifndef IOS3DS_KPI_MCU_NO_PMPS
 #define IOS3DS_KPI_MCU_NO_PMPS 0
 #endif
+/* Darwin 9 (5H11a) objects point at their __ZTV symbol itself; later
+   kernels point 8 bytes in (past offset-to-top and RTTI). Add this to a 4.x
+   vtable offset to call the same virtual on Darwin 9. */
+#ifndef IOS3DS_KPI_VT_BIAS
+#define IOS3DS_KPI_VT_BIAS 0
+#endif
+/* 1 = log the battery IOPMPowerSource's retain count (2.2.1 bring-up) */
+#ifndef IOS3DS_KPI_MCU_PS_RETAIN
+#define IOS3DS_KPI_MCU_PS_RETAIN 0
+#endif
 #ifndef IOS3DS_KPI_KERNEL_IRQ_SPSR
 #define IOS3DS_KPI_KERNEL_IRQ_SPSR 0
 #endif

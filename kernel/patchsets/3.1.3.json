@@ -179,5 +179,12 @@
   "new": "64e0",
   "why": "7E18 commpage_set_timestamp: beq -> b, never publish the gettimeofday timestamp",
   "va": "0xc006d1d8"
+ },
+ {
+  "name": "s5l-perf-nowait",
+  "orig": "4832d5e5000053e3f6ffff1a",
+  "new": "0030a0e34832c5e50000a0e1",
+  "why": "AppleS5L8720XClockController: after starting a performance-state change it sleeps on its command gate until byte +0x248 is cleared by the change-done interrupt, which the fake clock/power page never raises (the 8C148 s5l-perf-nowait, +0x38c there). Every display sleep (Lock) lowers the performance state, so the CLCD power path blocked here and Home never turned the display back on (re-log 128/129). ldrb r3,[rX,#0x248]; cmp r3,#0; bne wait -> mov r3,#0; strb r3,[rX,#0x248]; nop",
+  "va": "0xc05f30ec"
  }
 ]

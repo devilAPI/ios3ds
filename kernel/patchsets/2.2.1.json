@@ -120,5 +120,12 @@
   "new": "00207047",
   "why": "5H11a cs_invalid_page (Thumb, called from vm_fault_enter at 0xc003c50e for a tainted page or an executable page without a validated hash) -> return 0 (movs r0,#0; bx lr). The page is mapped and the process is neither killed (CS_KILL) nor refused (CS_HARD), so byte-patched Apple dylibs keep their stock signature blob and still load (the blob itself stays valid; only the patched pages miss their hash). Re-log 116 showed that re-signing breaks dyld and that patched pages killed SpringBoard; this is the 2.x equivalent of the cs_enforcement_disable boot-arg, which xnu-1228 does not have.",
   "va": "0xc01046f6"
+ },
+ {
+  "name": "s5l-perf-nowait",
+  "orig": "4832d6e5000053e3f6ffff1a",
+  "new": "0030a0e34832c6e50000a0e1",
+  "why": "AppleS5L8720XClockController: after starting a performance-state change it sleeps on its command gate until byte +0x248 is cleared by the change-done interrupt, which the fake clock/power page never raises (the 8C148 s5l-perf-nowait, +0x38c there). Every display sleep (Lock) lowers the performance state, so the CLCD power path blocked here and Home never turned the display back on (re-log 128/129). ldrb r3,[rX,#0x248]; cmp r3,#0; bne wait -> mov r3,#0; strb r3,[rX,#0x248]; nop",
+  "va": "0xc05e2b40"
  }
 ]

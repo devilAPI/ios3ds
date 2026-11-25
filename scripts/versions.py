@@ -34,7 +34,9 @@ VERSIONS = {
               # the shim's IOPMPowerSource made 5H11a IOPanic in
               # IORegistryEntry::free (freed while attached) on the first
               # registry match after it registered: no battery service
-              "no_battery_ps": True,
+              "ps_retain": True,
+              # Darwin 9 vtable pointers point at __ZTV itself (+8 on 3.x/4.x)
+              "vt_bias": 8,
               # no GL engine on 2.x: CoreAnimation composites in software and
               # nothing marks a new frame for the PICA200 mirror (see 3.1.3)
               "boot_cfg": {"gpu_mirror": ("0", "CoreAnimation composites in software (no GL "

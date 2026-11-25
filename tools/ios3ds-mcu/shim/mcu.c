@@ -138,7 +138,7 @@ long shim_mcu_get_gmt(void)
               (unsigned)BOX->state);
     void *pe = gIOPlatform;
     if (!pe) return 0;
-    return ((long (*)(void *))(*(void ***)pe)[0x390 / 4])(pe);
+    return ((long (*)(void *))(*(void ***)pe)[(0x390 + IOS3DS_KPI_VT_BIAS) / 4])(pe);
 }
 
 /* PESetGMTTimeOfDay(secs): iOS set the clock (Settings, settimeofday). The
@@ -168,7 +168,7 @@ void shim_mcu_set_gmt(long secs)
 void *shim_mcu_wait_rtc(void *matching, void *timeout)
 {
     if (rtc_known()) {
-        if (matching) ((void (*)(void *))(*(void ***)matching)[0x14 / 4])(matching);  /* ->release() */
+        if (matching) ((void (*)(void *))(*(void ***)matching)[(0x14 + IOS3DS_KPI_VT_BIAS) / 4])(matching);  /* ->release() */
         IOLog("ios3ds-mcu: 3DS RTC present: not waiting for IORTC\n");
         return 0;
     }
@@ -202,7 +202,7 @@ int shim_mcu_halt_restart(void *pe, unsigned type)
         IOLog("ios3ds-mcu: no answer from the ARM9; platform halt\n");
     }
     if (!pe) return -1;
-    return ((int (*)(void *, unsigned))(*(void ***)pe)[0x388 / 4])(pe, type);
+    return ((int (*)(void *, unsigned))(*(void ***)pe)[(0x388 + IOS3DS_KPI_VT_BIAS) / 4])(pe, type);
 }
 
 /* ---- battery: an IOPMPowerSource ------------------------------------------ */
@@ -211,6 +211,10 @@ static void *ps;
 static u32 ps_seen = 0xFFFFFFFFu;
 static void *sym_fully, *sym_rawv;
 
+#if IOS3DS_KPI_MCU_PS_RETAIN
+#define PS_RC(o) ((int (*)(void *))(*(void ***)(o))[(0x0c + IOS3DS_KPI_VT_BIAS) / 4])(o)
+static int rc[3];
+#endif
 static void ps_update(void)
 {
     volatile mcubox_t *b = BOX;
@@ -225,11 +229,17 @@ static void ps_update(void)
     if (!ps) {
         ps = ps_powerSource();
         if (!ps) return;
+#if IOS3DS_KPI_MCU_PS_RETAIN
+        rc[0] = PS_RC(ps);
+#endif
         sym_fully = sym_withCStringNoCopy("FullyCharged");
         sym_rawv = sym_withCStringNoCopy("AppleRawBatteryVoltage");
         void *prov = getPlatform();
         if (!prov) prov = getResourceService();
         svc_attach(ps, prov);
+#if IOS3DS_KPI_MCU_PS_RETAIN
+        rc[1] = PS_RC(ps);
+#endif
         ps_setBatteryInstalled(ps, 1);
         ps_setMaxCapacity(ps, 100);
     }
@@ -243,14 +253,21 @@ static void ps_update(void)
         void *n = num_withNumber(mv, 32);
         if (n) {
             ps_setPSProperty(ps, sym_rawv, n);
-            ((void (*)(void *))(*(void ***)n)[0x14 / 4])(n);           /* release (dict keeps it) */
+            ((void (*)(void *))(*(void ***)n)[(0x14 + IOS3DS_KPI_VT_BIAS) / 4])(n);  /* release (dict keeps it) */
         }
     }
+#if IOS3DS_KPI_MCU_PS_RETAIN
+    rc[2] = PS_RC(ps);
+#endif
     ps_updateStatus(ps);
     if (ps_seen == 0xFFFFFFFFu) {
         svc_registerService(ps, 0);
+#if IOS3DS_KPI_MCU_PS_RETAIN
+        IOLog("ps %p rc %d %d %d %d\n", ps, rc[0], rc[1], rc[2], PS_RC(ps));
+#else
         IOLog("ios3ds-mcu: battery %u%%%s%s, %u mV: IOPMPowerSource registered\n", (unsigned)pct,
               ext ? ", charger" : "", chg ? ", charging" : "", (unsigned)mv);
+#endif
     }
     ps_seen = key;
 }
@@ -357,7 +374,7 @@ static int nub_is_acc(void *nub)
     for (unsigned i = 0; i < sizeof iic_nubs / sizeof iic_nubs[0]; i++) {
         if (iic_nubs[i].nub == nub) return iic_nubs[i].acc;
         if (!iic_nubs[i].nub) {
-            void *d = ((void *(*)(void *, const char *))(*(void ***)nub)[0x9c / 4])(nub, "reg");
+            void *d = ((void *(*)(void *, const char *))(*(void ***)nub)[(0x9c + IOS3DS_KPI_VT_BIAS) / 4])(nub, "reg");
             int acc = 0;
             if (d && data_length(d) >= 4) {
                 const u8 *p = data_bytes(d);
@@ -417,7 +434,7 @@ void shim_gyro_dispatch(void *svc, u32 ts_lo, u32 ts_hi, u32 x, u32 y, u32 z, u3
     /* AppleEmbeddedHIDEventService::dispatchGyroEvent (IOHIDFamily 0x80546718):
        ts, x, y, z, type, subtype, 4 more fields, options */
     ((void (*)(void *, u32, u32, int32_t, int32_t, int32_t, u32, u32, u32, u32, u32, u32, u32))
-        (*(void ***)svc)[0x3c4 / 4])(svc, ts_lo, ts_hi, b->gyro[0], b->gyro[1], b->gyro[2], 0, 0, 0, 0, 0, 0, opt);
+        (*(void ***)svc)[(0x3c4 + IOS3DS_KPI_VT_BIAS) / 4])(svc, ts_lo, ts_hi, b->gyro[0], b->gyro[1], b->gyro[2], 0, 0, 0, 0, 0, 0, opt);
     if (++gyro_logged == 1 || gyro_logged == 1000)
         IOLog("ios3ds-mcu: gyro event #%u: %d %d %d deg/s/65536 (ARM9 sample %u)\n", (unsigned)gyro_logged,
               (int)b->gyro[0], (int)b->gyro[1], (int)b->gyro[2], (unsigned)b->gyro_samples);
