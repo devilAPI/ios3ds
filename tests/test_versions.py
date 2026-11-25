@@ -89,8 +89,10 @@ class TestVersions(unittest.TestCase):
             # dropped, the rest use fixed offsets. Two MBX patches were added
             # to the base recipe after the original positional map and are
             # relocated here too (unique string hits in the 8B117 cache).
-            # 23: VirtualAudio's N72/N81 product swap (mic input) relocated too
-            self.assertEqual(len(recipe["file_patches"]), 23)
+            # 24: VirtualAudio's N72/N81 product swap (mic input) and the
+            # 8B117 MusicLibrary .cbk patch (re-log NEXT, 4.1 completeness)
+            self.assertEqual(len(recipe["file_patches"]), 24)
+            self.assertIn("0x5708c4", [fp["offset"] for fp in recipe["file_patches"]])
             self.assertTrue(all("offset" in fp and "search" not in fp
                                 for fp in recipe["file_patches"]))
             offsets = [fp["offset"] for fp in recipe["file_patches"]]
@@ -175,8 +177,10 @@ class TestVersions(unittest.TestCase):
                         "/System/Library/LaunchDaemons/com.apple.SpringBoard.plist"][
                             "StandardOutPath"], "/dev/console")
                 self.assertEqual(recipe["disable_daemons"], [])
-                self.assertFalse(recipe["cydia"])
+                # Cydia without TLSFix (no Substrate loader on 3.x/2.x)
+                self.assertEqual(recipe["cydia"], "rootfs/cydia.json")
                 self.assertFalse(recipe["tlsfix"])
+                self.assertEqual(recipe["cydia_pseudo"]["firmware"], v)
                 self.assertEqual(recipe["write"]["/etc/fstab"], "/dev/md0 / hfs rw 0 0\n")
                 self.assertNotIn("/System/Library/Caches/com.apple.dyld/enable-dylibs-to-override-cache",
                                  recipe["write"])

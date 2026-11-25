@@ -4870,3 +4870,90 @@ hardware breakpoints on QEMU's gdbstub (private port); `exception_triage`
   "could not start DMA").
 - **[V]** 2.2.1 `--cycles 5 --require-app --targets "275,226;199,226;123,226;47,226;275,50" --crashlogs`
   → **Result: PASS**.
+## NEXT. iOS 4.1 completeness, and Cydia on 3.1.3/2.2.1 (2026-11-25)
+
+Closes the 4.1 (8B117) open items of re-log 101/111 (docs/multi-version.md
+§6.8) and turns Cydia on for the older versions.
+
+### 4.1: the six skipped kernel patches
+
+- **[V]** `clkctl-voltage-quiet` ported: 8B117 literal `0x807040a4`
+  (`0x802e3815`), found by its pool neighbours (`function-core_voltage_%ld`
+  string, "Bad DPSM Tables" panic string). The AppleARMPlatform lookup the shim
+  calls is byte-identical at 8B117 `0x802e3814` (8C148 `0x802e4814`); it has no
+  symbol, so `scripts/kpi.py` LITERALS gained `ARM_FUNCTION_LOOKUP` (default =
+  the 4.2.1 value, `kernel/shim/kpi.h` fallback) and `quiet.c` uses the macro.
+- **[V]** `iortc-wait-mcu` ported: IOKitInitializeTime is the same 0x30-byte
+  function at `0x801a75dc`; its waitForService literal `0x801a7608`
+  (`0x801b0eb9`) -> `@shim+0x34@`. Boot log: `ios3ds-mcu: 3DS RTC present: not
+  waiting for IORTC`.
+- **[G] not mine, reported:** `clcd-backlight-log-enable` and
+  `clcd-backlight-retry-off` (lock/wake owner) and `gyro-usage`/`gyro-dispatch`
+  (sensors owner) remain unported on 4.1.
+
+### 4.1: the six skipped dyld-cache patches
+
+- **[V]** `lockdown_copy_buid_identity`: **unnecessary**. 8B117's liblockdown
+  has no such function (the cache has no `_lockdown_copy_buid_identity`
+  string; 8C148 has two): `lockdown_copy_value` (0x4fbde4) is followed directly
+  by `lockdown_copy_identity` (0x4fbe24). The two other unmapped liblockdown
+  entries (copy_value body + table) were already replaced by the 8B117
+  stub/table (re-log 101).
+- **[V]** MusicLibrary `.cbk` check ported: 8B117 has no `_AOU243378_7_1`;
+  the logic is inlined in `MLSSqliteVFSOpen` (0x30570718). The `bne` at
+  0x305708c4 (file offset 0x5708c4) that sets the file's `.cbk` path and
+  checksum flag for names in AOU243378_5's signed set -> `nop`, so every
+  library file opens as a plain sqlite file (same effect as the 8C148 patch).
+- **[G] not mine, reported:** VirtualAudio N72->N81 routing (audio owner) and
+  the CoreMotion gyro capability mask (sensors owner) remain unported.
+
+### Cydia/TLSFix on 4.1, and the hfsplus date bug
+
+- **[V]** The base package set (Cydia 1.1.30, iOS >= 2.0) installs as is;
+  the "built for 8C148" note was wrong. `overlay-4.1.json` enables Cydia and
+  TLSFix, drops the 4.2.1 IconState layout (Cydia lands on page 2) and sets the
+  virtual packages to 8B117's values (new recipe key `cydia_pseudo`: firmware
+  4.1, Darwin 10.3.1, CoreFoundation 550.38.1; 4.2.1 has none).
+- **[V]** First boot with Cydia stalled after launchctl (`launch_msg(): Socket
+  is not connected`, EROFS on `/`): `/sbin/fsck*`, `mount*`, `fstyp*`,
+  `newfs_hfs` were **0 bytes**. `scripts/cydia.py`'s `hfsplus ls` parser split
+  the date on whitespace; 4.1's stock files are dated ` 7/ 5/2010` (space
+  padded), so no stock file was seen and firmware-sbin's empty placeholders
+  overwrote them (keep_stock never applied). The regex now matches the date.
+  4.2.1's rootfs lists the same /sbin and identical dpkg status before/after.
+- **[V]** Local repo (re-log 105 harness), fresh 4.1 image,
+  `emu/cydia_perf.py --icount 2`: network after 66 s, `apt-get update` 0.83 s,
+  download 0.23 s, `dpkg -i` 0.79 s, all rc=0, ALL DONE.
+- **[V]** Cydia opens on 4.1 (`emu/tap.py`, page 2, slot 1): Cydia's home tab
+  with "Network Error ... Cannot allocate memory" (offline run, no Wi-Fi
+  config; same OOM family as re-log 75/112 for TLSFix pages).
+
+### Cydia on 3.1.3 and 2.2.1
+
+- **[V]** Both overlays enable the same package set without TLSFix (its
+  Substrate is loaded by ios3ds-applog, which old versions do not install),
+  with per-firmware virtual packages (3.1.3: Darwin 10.0.0, CF 478.52; 2.2.1:
+  Darwin 9.4.1, CF 478.29). The date fix also matters here (2009 dates).
+- **[V]** 3.1.3: Cydia icon on page 2; tapping it opens Cydia (tab bar,
+  "Network Error ... Invalid argument" with no network).
+- 2.2.1: see result below.
+- **[G]** No APT refresh test on 3.x/2.x: ios3ds-wifid is not built for them
+  (Wi-Fi owner). Hardware: open Cydia, Installed tab lists 34 packages.
+
+### 4.1 driver list vs 4.2.1 (fresh-image soak log)
+
+Touch/buttons, display, GPU (PICA200 arena ready), volume slider, no-sleep,
+battery (IOPMPowerSource registered), mcud brightness path, Wi-Fi (cydia_perf
+associated and fetched), Music library all as on 4.2.1. Gaps to the other
+owners: gyro kernel/CoreMotion patches, VirtualAudio mic routing, CLCD
+backlight log/retry patches (above).
+
+### Results
+
+- **[V]** Fresh 4.1 image, `emu/soak.py --cycles 10 --icount 2 --require-app
+  --crashlogs` -> **Result: PASS** (input after 90 s, ten apps opened, app
+  diffs 41.0-112.2, home diff <= 5.1, 0 restarts, lock rounds ok, no crash
+  reports).
+- **[V]** 4.2.1 byte-identical: kernel `505f451a…`, devtree `25b1bd23…`,
+  fakeio `e5fecd66…`, shim `a35631eb…`, gpu `6bdaf617…`, boot.cfg `8d4079cf…`
+  from this branch and from `git archive origin/main` (2ee022f).

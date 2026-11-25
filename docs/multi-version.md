@@ -787,7 +787,9 @@ PICA host build works). Every hash matched:
 main gained GPU/boot-option changes after that table was written; both trees
 here produce the same bytes.)
 
-### 6.8 4.1 open items (not changed here)
+### 6.8 4.1 open items (resolved, re-log NEXT "iOS 4.1 completeness")
+
+All items below were ported or shown unnecessary; kept for the history.
 
 - **Cydia/TLSFix:** still disabled. The downloaded `.deb` files and Substrate
   tweak are built against 8C148's dyld cache and SpringBoard; making a 8B117
@@ -810,7 +812,7 @@ here produce the same bytes.)
 | Version | QEMU state | Fresh-image soak |
 |---|---|---|
 | 4.2.1 (8C148) | home screen, apps, input, Cydia/TLSFix | **PASS** (5 cycles) |
-| 4.1 (8B117) | home screen with stock icons; Cydia/TLSFix disabled | **PASS** (earlier round; not re-run) |
+| 4.1 (8B117) | home screen, apps, input, Cydia/TLSFix (APT against the local repo, Cydia opens); all re-log 101/111 open items resolved (re-log NEXT, iOS 4.1 completeness) | **PASS**, 10 cycles with `--require-app` |
 | 3.1.3 (7E18) | **home screen, apps open and render, clock runs, taps and buttons.** DataMigrator skipped (`SBLastSystemVersion`), shim `mrs sp,spsr` IRQ replay, 822-slot GL dispatch, GSEvent input daemon; CoreAnimation composites in software and the ARM9 copies the screen (`gpu_mirror=0`, re-log 128) | **PASS**, 10 cycles with `--require-app` (every tap opened an app) |
 | 2.2.1 (5H11a) | **home screen, apps open and render, taps and buttons.** Kernel `cs-invalid-page-allow`, fixed liblockdown stubs, `CA_ENABLE_MBX2D=0`, 2.x tool ABI (classic binding, r9, 48-byte GSEvents) | **PASS**, 10 cycles with `--require-app` |
 
@@ -832,7 +834,7 @@ or not registered, with the reason):
 | Wi-Fi (`ios3ds-wifid`/a80211) | off: built against 4.2.1 private Apple80211/IOKit APIs | off: same |
 | Camera (`vcd`) | off: iPod2,1 has no camera stack before 4.x | off: same |
 | GPS | off: 4.x CoreLocation hooks | off: same |
-| Cydia / TLSFix | off: packages built for 8C148 | off |
+| Cydia / TLSFix | Cydia 1.1.30 + APT/dpkg installed and Cydia opens [V]; TLSFix left out (needs Substrate via ios3ds-applog, not installed on 3.x); refresh untested (no Wi-Fi on 3.x) | Cydia installed; open: see re-log NEXT |
 
 The 4.2.1 and 4.1 builds are unchanged by all of this: every older-version
 switch is either in `rootfs/overlay-*.json`, `kernel/patchsets/*.json`, or a
