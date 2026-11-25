@@ -242,7 +242,12 @@ static int play(int ms, int hz, int amp)
     T.phase = 0;
     T.step = 2 * M_PI * hz / RATE;
     T.amp = amp;
+#ifdef TONE_OLD
+    /* 2.x's compiler-rt division helpers use r9, which is the TLS base there. */
+    T.left = (uint32_t)(RATE * (ms / 1000.0));
+#else
     T.left = (uint32_t)((int64_t)RATE * ms / 1000);
+#endif
     T.drained = 0;
     for (i = 0; i < NBUF; i++) {
         st = AQAllocateBuffer(aq, FRAMES * 4, &b[i]);
@@ -391,7 +396,12 @@ static int record(int ms)
     f.mChannelsPerFrame = 1;
     f.mBitsPerChannel = 16;
     memset(&R, 0, sizeof R);
+#ifdef TONE_OLD
+    /* 2.x's compiler-rt division helpers use r9, which is the TLS base there. */
+    R.want = (uint32_t)(RATE * (ms / 1000.0));
+#else
     R.want = (uint32_t)((int64_t)RATE * ms / 1000);
+#endif
     st = AQNewInput(&f, rec_callback, NULL, NULL, NULL, 0, &aq);
     if (st) return st;
     for (i = 0; i < NBUF; i++) {
@@ -435,7 +445,14 @@ static int rec_main(int argc, char **argv)
     int i, tries;
 
     sleep((unsigned)delay);
+#ifdef TONE_OLD
+    for (tries = 0; (st = ASInitialize(NULL, NULL, NULL, NULL)) && tries < 60; tries++) {
+        say("tone: AudioSessionInitialize attempt %d -> %d", tries + 1, (int)st);
+        if (st) sleep(2);
+    }
+#else
     for (tries = 0; (st = ASInitialize(NULL, NULL, NULL, NULL)) && tries < 60; tries++) sleep(2);
+#endif
     if (st) say("tone: AudioSessionInitialize %d (carrying on)", (int)st);
     st = ASSetProperty(kAudioSessionProperty_AudioCategory, sizeof cat, &cat);
     if (st) say("tone: rec category %d (carrying on)", (int)st);
@@ -477,7 +494,14 @@ int main(int argc, char **argv)
 #endif
     if (argc > 1 && !strcmp(argv[1], "rec")) return rec_main(argc, argv);
     sleep((unsigned)delay);                         /* let SpringBoard and mediaserverd settle */
+#ifdef TONE_OLD
+    for (tries = 0; (st = ASInitialize(NULL, NULL, NULL, NULL)) && tries < 60; tries++) {
+        say("tone: AudioSessionInitialize attempt %d -> %d", tries + 1, (int)st);
+        if (st) sleep(2);
+    }
+#else
     for (tries = 0; (st = ASInitialize(NULL, NULL, NULL, NULL)) && tries < 60; tries++) sleep(2);
+#endif
     if (st) say("tone: AudioSessionInitialize %d (carrying on)", (int)st);
     st = ASSetProperty(kAudioSessionProperty_AudioCategory, sizeof cat, &cat);
     if (st) say("tone: audio category %d (carrying on)", (int)st);

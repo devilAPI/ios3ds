@@ -5246,3 +5246,95 @@ and 2.2.1.
   values), `make test` passes, 3.1.3 `wifi_test --case ok` **PASS**, fresh
   3.1.3 soak (`--require-app`, §128 targets) **PASS**, fresh 4.2.1 soak
   **PASS**.
+## NEXT. 2.2.1 audio: mediaserverd is alive, a TLS-clobbering test client was the wall (2026-11-25)
+
+### mediaserverd / IOAudio on 5H11a
+
+- **[V]** A scratch launchd job running `/bin/launchctl list` to `/dev/console`
+  (as in §117) lists `com.apple.mediaserverd` with pid 14 on a fresh 5H11a
+  image. Setting `StandardOutPath`/`StandardErrorPath` to `/dev/console` in its
+  plist shows it running, loading VirtualAudio and reaching the emulated
+  audio CODEC over I2C (`ios3ds-audio: iic … dev=2c00` from
+  `AppleCS42L58Audio::start`): the daemon and the kernel audio driver both run.
+- **[V]** SELECT+START thread dump: mediaserverd has 7 live threads, idle in
+  `mach_msg`; the tone process dies with signal 10 (no `AudioSessionInitialize`
+  result). With the §130 VirtualAudio product-table swap installed,
+  mediaserverd logs `RoutingManager::ActivateRoute(): Routing Not Supported`,
+  `CreateVirtualAudioDevice(): … Unable to set category`, `cmsmVADRouteChangeListener:
+  new route has no ports`, and `AudioQueueServer` reports sample rate 0 /
+  `AudioOutputUnitStart` error 560227702. Without the swap none of those lines
+  appear (the 5H11a routing database accepts the category), yet the tone still
+  died before its first `AudioSessionInitialize` attempt.
+- **[V]** GDB (`exception_triage` 0xc001b6a0, saved user state from
+  `[0xc0208d5c] + 0x1cc`) named the crash: pc `0x2fe1e724`
+  (`dyld:_pthread_getspecific`, `ldr r0,[r0,#0x48]`), lr `0x2fe1eddc`
+  (`__gthread_getspecific`), **r9 = 0**. On iOS 2, r9 is the thread/TLS base;
+  a scratch build with r9 printed at start, after `dlopen` and just before the
+  call had `r9=394346d0` each time, so a callee zeroed it inside the call.
+- **[V]** Root cause is in the *test client*, not the audio stack: linking the
+  2.x `ios3ds-tone` pulled in
+  `__divdi3`/`__udivmoddi4`/`__udivsi3` (the `RATE * ms / 1000` expressions),
+  and those compiler-rt helpers use r9 as scratch. Their `mov r9,#0` is visible
+  in the 2.x Mach-O. With `-ffixed-r9` on our code but not on compiler-rt, the
+  first `AudioSessionInitialize`/`AudioSessionGetProperty` faulted in dyld.
+  `TONE_OLD` builds now use a double multiply for the frame count, so no
+  compiler-rt division helper is linked (`mov r9,#0` is gone from the binary).
+  **[V]** The default 4.2.1 `__text` is byte-identical to `origin/main`'s
+  (all `#ifdef TONE_OLD` guards), and `make test` passes.
+
+### Result: output on 2.2.1
+
+- **[V]** Fresh 5H11a image, scratch test job `ios3ds-tone 2 5 1500 1000 6000 5`,
+  plain TCG + `--icount 2`: `tone: #1 … route "Speaker"`,
+  `ios3ds-audio: tx start ch5`, `[audio] iOS output stream #1 started`,
+  `[audio] stream stopped: 145380 words, peak 5999, TC IRQs 5 (5 injected),
+  bad addr 0`, then stream #2 with 10/10 TC IRQs (cumulative) and peak 5999.
+  `IOS3DS_CSND_WAV` recorded a 9.28 s stereo 44,097 Hz WAV, peak **5999**,
+  261,824 non-silent frames. No panic, no `AudioQueue error`, no DMA error.
+  The shipped job is still not installed; this one is for test images only.
+
+### The mic patch at 0x9a358 is harmful on 5H11a
+
+- **[V]** §130's `N72\0N82\0` -> `X72\0N72\0` swap at VirtualAudio file offset
+  0x9a358 **removes** the N72 product prefix. 5H11a's `GetProductID`
+  (`sysctlbyname("hw.model")` + `CFStringHasPrefix` at 0x5da4c/0x5da70/
+  0x5da9c/0x5dac8) uses those same strings, so `hw.model=N72AP` becomes an
+  unknown product: category activation fails as above. The newer 3.1.3 plug-in
+  (AudioDriverPlugIns-186.3) has an `UnknownProduct` routing handler; 2.2.1's
+  (141.11) does not. Setting the N72 slot to `N82` instead, and patching the
+  product-ID literal at 0x5dcf8 (`n72p` -> `n82p`) while keeping the table,
+  were both tried: both still fail to set a category.
+- **[V]** With the patch removed, `ios3ds-tone rec` reaches
+  `input available 0, route "Speaker"`; forcing `qom-set /machine headphones on`
+  gives `[audio] iOS route -> headphones` but still `input available 0`
+  (5H11a's N72 database wants a wired *headset* contact, which QEMU's jack
+  model does not provide). **[G]** The 2.2.1 mic is therefore off in this
+  build: no VirtualAudio byte patch is shipped for 5H11a. It needs either a
+  routing-database patch that adds a built-in mic port to N72, or an emulated
+  3-contact headset jack; both remain open.
+
+### Other versions
+
+- **[V]** **4.1**: `ios3ds-tone rec` with `IOS3DS_MIC=sine:440:1000`:
+  `input available 1, route "SpeakerAndMicrophone"`, `ios3ds-audio: rx start`,
+  `rec 88200 of 88200 frames`, sine fit 440.03 Hz / amplitude 1002.5,
+  `[mic] 1 s: FIFO peak 1000 … iOS peak 66` (the 4.x +23.65 dB chain with
+  2151/32768 gain), `rx stop … underruns=0 resyncs=0`, TC IRQs 20/20.
+  The 0x1c9d40 VirtualAudio relocation works.
+- **[V]** **3.1.3**: same run: `input available 1`, route
+  `SpeakerAndMicrophone`, 88,200/88,200 frames, sine fit 440.03 Hz /
+  amplitude 995.4, no clipping. The new `mic_gain_q15=32768` (unity) level is
+  correct for 7E18; QEMU peak matches the FIFO peak of 1000.
+
+### Hardware checklist (diag=1 log.txt)
+
+1. 2.2.1 boot with a test tone job: `[audio] iOS output stream #N started`
+   paired with `stream stopped: … TC IRQs n (n injected), bad addr 0`; the
+   unlock/tap clicks and the tone should be audible from the speaker.
+2. 2.2.1 `ios3ds-tone rec`: expect `input available 0`, no `[audio] mic on`
+   line and no `rx start`. If a real 3DS with a wired headset gives
+   `input available 1`, report the route and whether `ios3ds-audio: rx start`
+   appears — that would point at a 3-contact jack route instead of N72's
+   missing built-in mic.
+3. 4.1/3.1.3: `[mic] 1 s: FIFO peak P, iOS peak Q`; on 4.1 Q should be about
+   P/15, on 3.1.3 about P. Loudness on a real console still needs a check.

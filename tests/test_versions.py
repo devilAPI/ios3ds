@@ -129,11 +129,12 @@ class TestVersions(unittest.TestCase):
                     # cs-invalid-page-allow accepts the patched pages.
                     self.assertEqual([fp["offset"] for fp in recipe["file_patches"]],
                                      ["0x2ea8", "0x2c20", "0x544", "0x2be4", "0x30a8",
-                                      "0x30f4", "0x3144", "0x2c60", "0x9a358"])
+                                      "0x30f4", "0x3144", "0x2c60"])
                     self.assertTrue(all(fp["path"] == "/usr/lib/liblockdown.dylib"
-                                        for fp in recipe["file_patches"][:-1]))
-                    # plus VirtualAudio's N72/N82 product swap (mic input)
-                    self.assertTrue(recipe["file_patches"][-1]["path"].endswith("/VirtualAudio"))
+                                        for fp in recipe["file_patches"]))
+                    # 5H11a's VirtualAudio N72->X72 swap (re-log 130) is gone:
+                    # it makes GetProductID miss N72 and the routing manager
+                    # refuses every category, so no audio stream starts.
                     # lockdown_copy_value's table literal is at +0x28 (re-log 128)
                     self.assertTrue(recipe["file_patches"][1]["new"].startswith("20c09fe5"))
                     self.assertNotIn("resign", recipe)

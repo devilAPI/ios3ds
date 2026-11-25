@@ -125,13 +125,6 @@
    "new": "0000a0e31eff2fe1",
    "why": "5H11a lockdown_copy_identity -> NULL (ARM; symbol VA 0x30893c60). No pairing identity offline; 7E18 stubs the same function.",
    "mode": "0755"
-  },
-  {
-   "path": "/Library/Audio/Plug-Ins/HAL/VirtualAudio.plugin/VirtualAudio",
-   "offset": "0x9a358",
-   "orig": "4e3732004e383200",
-   "new": "583732004e373200",
-   "why": "5H11a VirtualAudio product table at 0x9a350 (M68 N45 N72 N82): as on 3.1.3, the N72 slot -> 'X72' and the N82 (iPhone 3G) slot -> 'N72', so this N72 routes with a built-in microphone (docs/audio.md section 7, re-log 130)"
   }
  ],
  "_cydia_pseudo": "Cydia stays off on 2.2.1: Cydia 1.1.30's armv6 slice (and the apt7/dpkg builds) use LC_DYLD_INFO_ONLY, which 5H11a's dyld cannot load (re-log 129); the icon showed but a tap launched nothing (re-log 131, 4.1 completeness). A 2.x set needs pre-3.1-linked Cydia/APT packages. The values below apply if one is added.",
