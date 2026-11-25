@@ -4452,7 +4452,7 @@ byte-identical (see the verification list).
 - **[G]** The 4.1 soak was not re-run this round (8B117 not staged in this
   worktree); 4.1 keeps `irq_spsr` unset, so its shim source path is unchanged.
 
-## NEXT. Issue #9 round 2: the chainloader still runs the old payload, and nothing updates it (2026-11-25)
+## 126. Issue #9 round 2: the chainloader still runs the old payload, and nothing updates it (2026-11-25)
 
 Retrow26 retested with a new build (6 labelled logs, 2026-11-25 13:31Z):
 hbmenu boots, every chainloader boot fails or shows the graphics error,
