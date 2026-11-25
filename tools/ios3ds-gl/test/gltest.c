@@ -485,6 +485,7 @@ static void compare(const char *what, const unsigned char *a, const unsigned cha
 /* An offscreen framebuffer: RGBA8 colour + 16-bit depth renderbuffers. */
 static GLuint off_fb;
 
+#ifdef GL_HOST
 /* The stereo depth stamp (docs/stereo3d.md) lives in the target's alpha
    byte and must survive the write-back into the surface: with
    IOS3DS_GL_PRESENT_ALL=1 that is the GPU's direct present (the path the
@@ -528,6 +529,7 @@ static void alpha_stamp_check(const char *backend)
            bad ? "FAIL" : "ok");
     fails += bad != 0;
 }
+#endif
 
 static int offscreen(void)
 {

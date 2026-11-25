@@ -86,17 +86,33 @@ Frames that are not the home screen are wiped flat at the end of the frame
 (one full-screen quad setting alpha to `SA_FLAT` everywhere), so the screen
 copy sees a uniform frame and gives both eyes the same image.
 
-Pass 1 is CoreAnimation's own draw, untouched. Pass 2 stamps alpha only.
-`gl_be_triangles()` runs pass 1 then, when classified, pass 2.
+Pass 1 is CoreAnimation's own draw, untouched. The stamp is **deferred and
+batched** (re-log NEXT): `gl_be_triangles()` runs pass 1 and, when the draw
+is classified, records its triangles in the target's window space with the
+class as vertex alpha. At the end of the frame (`stereo_end_frame()`, from
+`glFlush`/the CA swap) a home frame gets *one* alpha-only draw with every
+stamp of the frame in submission order (a new segment only where CA changed
+the scissor box, so a partial update stamps exactly what it drew); a frame
+that is not the home screen gets only the wipe and its stamps are dropped.
+Before, every classified CA draw was followed by its own alpha-only draw:
+twice the GPU state changes and command-list words per frame, and app frames
+paid for stamps that the wipe then erased. Draws with an alpha test are
+still not stamped (their discarded fragments would be). A target freed in
+mid-frame drops its pending stamps (`stereo_forget()` from `pica_forget()`).
 
-The final CA frame normally goes straight from the render target into the
-display IOSurface through the GPU (`PICA_OP_PRESENT`, docs/gpu.md §7). That
-swizzle uses the render target's alpha byte for the surface's blue channel,
-so it would throw the class map away. With `stereo3d=1` the display target
-therefore uses the CPU read-back instead: it writes BGRA with the stamped
-alpha intact, which is what the GPU mirror's two-eye list (and the ARM9
-fallback copy) reads. Only that target takes the detour; with the flag off
-the direct GPU present is unchanged.
+The final CA frame goes straight from the render target into the display
+IOSurface through the GPU (`PICA_OP_PRESENT`, docs/gpu.md §7), **with
+`stereo3d=1` too**. The swizzle pass writes the target's alpha into the
+surface's alpha byte (output R = sample alpha, and the GPU word R<<24 is the
+surface's A), so the class map survives it; `gltest`'s
+`alpha_stamp_check` proves it on the PICA200 model for the direct present
+and the arena-copy (scattered surface) path, and the
+`IOS3DS_GLTEST_STEREO=1` host run checks a SpringBoard-like frame end to end
+(wallpaper 0x33, icons 0x66, dock/status bar 0x99, RGB untouched, an app
+frame wiped to 0). Rounds 106-113 used the CPU read-back for the stereo
+display target instead: a 600 KiB copy per CA frame on the ARM11
+(re-log 78 measured 31-37 ms per frame for read-back against 13.5-16 ms for
+the GPU present on hardware). That detour is gone.
 
 ## 5. Real hardware: the two-eye mirror and the display registers
 
@@ -178,19 +194,34 @@ the slider-down fallback).
 ## 6. Cost
 
 With the flag off the normal path is unchanged: `stereo_prepare()` returns -1
-immediately and no stamp pass runs. With the flag on the CA render server
-logs `CA stereo3D: N frames, N home (stamped), ...` and the usual
-`CA: ... per frame ...` line in `sd:/ios3ds/log.txt` (enable `diag=1` for the
-per-draw classifier log). Flat frames still use the ordinary one-eye GPU
-mirror, so slider-down frame times are those of `stereo3d=0`. Home frames
-with the slider up add the alpha-only stamp pass on the ARM11 and the GPU
-two-eye list (one baseline plus three alpha-tested quads per eye) instead of
-the flat list; no ARM9 copy runs. If the mirror falls back, the ARM9 two-eye
-copy is cached per screen column (§5): only rows that changed are rebuilt,
-at most 120 columns per copy, and every 30 s the log adds
-`[monitor] stereo eye columns: N rebuilt, N reused`. Every 30 s
-`[stereo] active path: ...` reports which side built the eyes. Measured
-numbers are in docs/re-log.md, sections 90 and 109.
+immediately and no stamp is recorded. With the flag on:
+
+- **CA render thread (ARM11):** one extra alpha-only draw per home frame
+  (the batch) or per app frame (the wipe); the display target is written
+  by the GPU present exactly as with the flag off. No CPU read-back.
+  `[gl] CA stereo3D: N frames, N home (stamped), N flat (wiped), N stamped
+  draws in N batched alpha draws (N vertices), N wipes; display written back
+  by the GPU present` every report period, next to the usual
+  `[gl] CA: ... per frame ...` line (its `CPU read-backs` column must stay
+  at ~0.1 with stereo on now; before it was ~1 per frame).
+- **GPU mirror:** slider down or a flat frame use the flat list (the same
+  cost as `stereo3d=0`). A stamped home frame with the slider up uses the
+  two-eye list: per eye a baseline quad and three alpha-tested class quads
+  (BG, FRONT, ALERT), plus one clear of the right eye's target - about five
+  times the flat list's draw stage. Damage tracking (re-log 113) means this
+  is paid only for frames CA actually changed: an idle home screen in 3D
+  costs no GPU time at all. Every 30 s the ARM9 logs
+  `[stereo] mirror GPU cost: 3D N frames, avg X us (draw Y us); 2D N frames,
+  avg X us (draw Y us) in N s` from per-mode counters the shim keeps in the
+  mailbox (`st_n/st_sum/st_sum_3d`, `fl_*`), so a hardware log shows the
+  real two-eye cost next to the flat one.
+- **ARM9:** nothing per frame while the mirror runs (`[stereo] active path:
+  PICA200 two-eye mirror`). If the mirror falls back, the ARM9 two-eye copy
+  is cached per screen column (§5): only rows that changed are rebuilt, at
+  most 120 columns per copy, and every 30 s the log adds
+  `[monitor] stereo eye columns: N rebuilt, N reused`.
+
+Measured numbers are in docs/re-log.md, sections 90, 109 and NEXT.
 
 ## 7. QEMU
 

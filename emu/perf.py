@@ -57,6 +57,8 @@ def main():
     ap.add_argument("--icount", default="")
     ap.add_argument("--safari", action="store_true")
     ap.add_argument("--boot-timeout", type=float, default=1200)
+    ap.add_argument("--slider3d", type=int, default=-1,
+                    help="set the 3D slider (QOM mcu-3d-slider, e.g. 255) after boot, for stereo3d=1 images")
     ap.add_argument("--settle-limit", type=float, default=45,
                     help="seconds an open/close has to settle before it counts as failed")
     a = ap.parse_args()
@@ -136,6 +138,10 @@ def main():
     home_ref = None
     if booted is not None:
         log("SpringBoard + input up after %.0f s" % booted)
+        if a.slider3d >= 0:
+            # as emu/soak.py: set after boot (a machine reset can clear an early write)
+            q.cmd("qom-set", path="/machine", property="mcu-3d-slider", value=a.slider3d)
+            log("3D slider set to %d" % a.slider3d)
         prev = None
         for _ in range(60):
             time.sleep(5)
