@@ -4508,7 +4508,7 @@ shows exactly which file ran.
 - **[V]** Fresh soak `rm -f build/sd.img && make sdimg && IOS3DS_QEMU=… python3 emu/soak.py --cycles 5 --icount 2` printed **Result: PASS**.
 - **[HW]** (1) Boot once via hbmenu: the log must show `payload check: 0:/luma/payloads/<name>.firm is an older ios3ds build, updating it` then `… updated`. (2) Chainload: the first log line must be the same version as the hbmenu log, `argv0=` must name the payloads file, and SpringBoard must show with working buttons. If the chainloaded log *still* shows an old version, the chainloader is booting a file outside `luma/payloads/` and `argv0` names it.
 
-## NEXT. Stereo 3D on the Old 3DS: GPU present for the stamped frame, batched stamps, per-mode mirror cost (2026-11-25)
+## 127. Stereo 3D on the Old 3DS: GPU present for the stamped frame, batched stamps, per-mode mirror cost (2026-11-25)
 
 Goal: SpringBoard in real 3D on the Old 3DS, about as smooth as 2D. Input:
 hardware run 3 (`stereo3d=1`: 229-301 ms ARM9 copies, slider "did nothing")

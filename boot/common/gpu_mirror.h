@@ -108,7 +108,7 @@ typedef struct {
     uint32_t idle_frames;   /* VBlanks skipped because nothing changed: the ARM9
                                counts these as liveness too (the LCDs already
                                hold the current picture) */
-    /* per-mode GPU cost (re-log NEXT): completed frames and the sums of their
+    /* per-mode GPU cost (re-log 127): completed frames and the sums of their
        whole-frame and draw-stage times (watchdog ticks, wrapping), so the
        ARM9 can print 3D and 2D frame costs side by side */
     uint32_t st_n, st_sum, st_sum_3d;

@@ -87,7 +87,7 @@ Frames that are not the home screen are wiped flat at the end of the frame
 copy sees a uniform frame and gives both eyes the same image.
 
 Pass 1 is CoreAnimation's own draw, untouched. The stamp is **deferred and
-batched** (re-log NEXT): `gl_be_triangles()` runs pass 1 and, when the draw
+batched** (re-log 127): `gl_be_triangles()` runs pass 1 and, when the draw
 is classified, records its triangles in the target's window space with the
 class as vertex alpha. At the end of the frame (`stereo_end_frame()`, from
 `glFlush`/the CA swap) a home frame gets *one* alpha-only draw with every
@@ -324,11 +324,11 @@ slider up leaves the barrier off and the flat GPU mirror running; the
 soak's 3D run logged 30 such on/off pairs across app launches. These are
 emulator timings, not hardware predictions; section 8 still applies.
 
-### Stereo round 3 (2026-11-25, re-log NEXT)
+### Stereo round 3 (2026-11-25, re-log 127)
 
 GPU present for the stamped display target (no CPU read-back), one batched
 alpha-only stamp draw per frame, and a `[stereo] mirror GPU cost` line.
 Fresh-image soaks: `stereo3d=0` PASS, `stereo3d=1 --slider3d 255` PASS.
 `emu/perf.py --slider3d 255` folder animation: 25-28 frames/s avg 35-46 ms
 before, 39-40 frames/s avg 24-26 ms after (guest time; the same pace as
-stereo off). The hardware checklist is at the end of re-log NEXT.
+stereo off). The hardware checklist is at the end of re-log 127.

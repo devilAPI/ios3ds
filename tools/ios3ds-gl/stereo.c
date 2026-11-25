@@ -179,7 +179,7 @@ int stereo_tex_opaque(Tex *t)
     return 1;
 }
 
-/* The stamp is deferred and batched (re-log NEXT). Pass 1 is CoreAnimation's
+/* The stamp is deferred and batched (re-log 127). Pass 1 is CoreAnimation's
    draw, untouched. Its triangles are recorded here in the target's own
    window space (one viewport for all of them) with the class as vertex
    alpha; stereo_end_frame() then draws every stamp of the frame as one

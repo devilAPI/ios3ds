@@ -861,7 +861,7 @@ static PTarget *get_target(const RT *rt)
            the surface's alpha byte unchanged (gltest's alpha_stamp_check),
            so the stereo display target keeps the GPU present too; the CPU
            read-back it used before (re-log 106) cost a 600 KiB copy per
-           frame on the ARM11 (re-log NEXT). */
+           frame on the ARM11 (re-log 127). */
         int present = (rt->surface || getenv("IOS3DS_GL_PRESENT_ALL")) && !P.no_present && !(rt->w & 7) && !(rt->h & 7) && rt->pitch == rt->w &&
                       !((uintptr_t)rt->color & 7) && !getenv("IOS3DS_GL_NO_PRESENT");
         t = lru;
