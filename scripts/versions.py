@@ -60,6 +60,10 @@ VERSIONS = {
               # device tree and HFS+ rootfs, so it is the genuine restore file.
               "sha1": "5f4f5c01eda2f811f73167e7d1f82dbeed82367b", "ba_version": 5,
               "virt_base": 0xC0000000, "irq_cont": 0xC0068458, "irq_spsr": True,
+              # mic input: 7E18's VirtualAudio route (N82 slot, overlay) adds
+              # no +23.65 dB like 4.2.1's N81 route, so the shim passes the
+              # 3DS mic at unity (QEMU: 1000 -> 46.6 with 4.2.1's 2151)
+              "mic_gain_q15": 32768,
               # 7E18's EAGLServer::renderer() finds no GL display context, so
               # CoreAnimation composites in software and swaps through
               # IOMobileFramebuffer; our GL engine never presents, and the

@@ -136,6 +136,8 @@ def resolve(staging):
         out["KERNEL_IRQ_SPSR"] = 1
     if info.get("no_battery_ps"):
         out["MCU_NO_PMPS"] = 1
+    if info.get("mic_gain_q15"):
+        out["MIC_GAIN_Q15"] = info["mic_gain_q15"]
     return out
 
 

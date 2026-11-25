@@ -173,7 +173,12 @@ typedef struct {
 /* iOS's input chain (VirtualAudio, route SpeakerAndMicrophone) applies a fixed
    +23.65 dB (x15.23, measured in QEMU: 1000 -> 15232); the shim takes it off
    again so apps see the 3DS mic at the level the CODEC's PGA gives it */
+#ifdef IOS3DS_KPI_MIC_GAIN_Q15
+/* versions.py mic_gain_q15: 3.1.3's chain (product slot N82) adds no such gain */
+#define AUD_MIC_GAIN_Q15  IOS3DS_KPI_MIC_GAIN_Q15
+#else
 #define AUD_MIC_GAIN_Q15  2151u
+#endif
 #define AUD_MIC_HOLD_TICKS 1047000u     /* keep the mic on 1 s after the input stream stopped */
 
 /* ---- headphone detection for iOS (tools/ios3ds-audio/dt_audio.py): audio0's

@@ -45,7 +45,8 @@
   "build/rootfs-add/ios3/ios3ds-input": "/usr/libexec/ios3ds-input",
   "tools/ios3ds-input/daemon/com.ios3ds.input.plist": "/System/Library/LaunchDaemons/com.ios3ds.input.plist",
   "build/rootfs-add/ios3/ios3ds-mcud": "/usr/libexec/ios3ds-mcud",
-  "tools/ios3ds-mcu/daemon/com.ios3ds.mcud.plist": "/System/Library/LaunchDaemons/com.ios3ds.mcud.plist"
+  "tools/ios3ds-mcu/daemon/com.ios3ds.mcud.plist": "/System/Library/LaunchDaemons/com.ios3ds.mcud.plist",
+  "build/rootfs-add/ios3/ios3ds-tone": "/usr/libexec/ios3ds-tone"
  },
  "chmod": {
   "_replace": true,
@@ -53,7 +54,8 @@
   "/usr/libexec/ios3ds-input": "0755",
   "/System/Library/LaunchDaemons/com.ios3ds.input.plist": "0644",
   "/usr/libexec/ios3ds-mcud": "0755",
-  "/System/Library/LaunchDaemons/com.ios3ds.mcud.plist": "0644"
+  "/System/Library/LaunchDaemons/com.ios3ds.mcud.plist": "0644",
+  "/usr/libexec/ios3ds-tone": "0755"
  },
  "cydia_plist_write": {
   "_replace": true
@@ -149,6 +151,13 @@
    "new": "494f5265736f7572636573000000",
    "why": "7E18 OpenGLES: the engine-bundle match string AppleMBXDevice -> IOResources, so OpenGLES loads MBXGLEngine.bundle (our PICA200 engine, built with -DGL_IOS3 for 7E18's 822-slot dispatch table) on the 3DS, which has no MBX GPU. Same change as 8C148's; verified original bytes in this cache (re-log 125).",
    "mode": "0644"
+  },
+  {
+   "path": "/Library/Audio/Plug-Ins/HAL/VirtualAudio.plugin/VirtualAudio",
+   "offset": "0xfa800",
+   "orig": "4e3732004e383200",
+   "new": "583732004e373200",
+   "why": "7E18 VirtualAudio (mediaserverd's routing plug-in) picks its routing by matching hw.model against the product table at 0xfa7f4 (M68 N18 N45 N72 N82 N88). N72 has no built-in microphone, so iOS reported input available 0 and AudioQueueNewInput failed with 'nohw'. 3.1.3 has no N81 entry (the receiver-less model 4.2.1 borrows), so swap the N72 slot to 'X72' and the N82 (iPhone 3G) slot to 'N72': input comes from the codec's 'imic' data source (dt_audio.py ain2b-intmic) and the 3DS microphone (docs/audio.md section 7, re-log NEXT)"
   }
  ]
 }

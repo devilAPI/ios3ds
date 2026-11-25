@@ -44,14 +44,16 @@
   "build/rootfs-add/ios2/ios3ds-input": "/usr/libexec/ios3ds-input",
   "tools/ios3ds-input/daemon/com.ios3ds.input.plist": "/System/Library/LaunchDaemons/com.ios3ds.input.plist",
   "build/rootfs-add/ios2/ios3ds-mcud": "/usr/libexec/ios3ds-mcud",
-  "tools/ios3ds-mcu/daemon/com.ios3ds.mcud.plist": "/System/Library/LaunchDaemons/com.ios3ds.mcud.plist"
+  "tools/ios3ds-mcu/daemon/com.ios3ds.mcud.plist": "/System/Library/LaunchDaemons/com.ios3ds.mcud.plist",
+  "build/rootfs-add/ios2/ios3ds-tone": "/usr/libexec/ios3ds-tone"
  },
  "chmod": {
   "_replace": true,
   "/usr/libexec/ios3ds-input": "0755",
   "/System/Library/LaunchDaemons/com.ios3ds.input.plist": "0644",
   "/usr/libexec/ios3ds-mcud": "0755",
-  "/System/Library/LaunchDaemons/com.ios3ds.mcud.plist": "0644"
+  "/System/Library/LaunchDaemons/com.ios3ds.mcud.plist": "0644",
+  "/usr/libexec/ios3ds-tone": "0755"
  },
  "cydia_plist_write": {
   "_replace": true
@@ -123,6 +125,13 @@
    "new": "0000a0e31eff2fe1",
    "why": "5H11a lockdown_copy_identity -> NULL (ARM; symbol VA 0x30893c60). No pairing identity offline; 7E18 stubs the same function.",
    "mode": "0755"
+  },
+  {
+   "path": "/Library/Audio/Plug-Ins/HAL/VirtualAudio.plugin/VirtualAudio",
+   "offset": "0x9a358",
+   "orig": "4e3732004e383200",
+   "new": "583732004e373200",
+   "why": "5H11a VirtualAudio product table at 0x9a350 (M68 N45 N72 N82): as on 3.1.3, the N72 slot -> 'X72' and the N82 (iPhone 3G) slot -> 'N72', so this N72 routes with a built-in microphone (docs/audio.md section 7, re-log NEXT)"
   }
  ]
 }

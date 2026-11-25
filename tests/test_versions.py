@@ -89,7 +89,8 @@ class TestVersions(unittest.TestCase):
             # dropped, the rest use fixed offsets. Two MBX patches were added
             # to the base recipe after the original positional map and are
             # relocated here too (unique string hits in the 8B117 cache).
-            self.assertEqual(len(recipe["file_patches"]), 22)
+            # 23: VirtualAudio's N72/N81 product swap (mic input) relocated too
+            self.assertEqual(len(recipe["file_patches"]), 23)
             self.assertTrue(all("offset" in fp and "search" not in fp
                                 for fp in recipe["file_patches"]))
             offsets = [fp["offset"] for fp in recipe["file_patches"]]
@@ -113,7 +114,8 @@ class TestVersions(unittest.TestCase):
                                      ["0x176a008", "0x1767600", "0x176a358",
                                       "0x176a3dc", "0x1769eb0", "0x176a1c4",
                                       "0x176a210", "0x176a260",
-                                      "0x95760", "0x1bde74c", "0x2f91bb8"])
+                                      "0x95760", "0x1bde74c", "0x2f91bb8",
+                                      "0xfa800"])  # VirtualAudio N72/N82 swap (mic)
                     # SpringBoard skips DataMigrator only when this matches
                     # the running build (re-log 125).
                     self.assertIn("<key>SBLastSystemVersion</key>\n\t<string>7E18</string>",
@@ -125,9 +127,11 @@ class TestVersions(unittest.TestCase):
                     # cs-invalid-page-allow accepts the patched pages.
                     self.assertEqual([fp["offset"] for fp in recipe["file_patches"]],
                                      ["0x2ea8", "0x2c20", "0x544", "0x2be4", "0x30a8",
-                                      "0x30f4", "0x3144", "0x2c60"])
+                                      "0x30f4", "0x3144", "0x2c60", "0x9a358"])
                     self.assertTrue(all(fp["path"] == "/usr/lib/liblockdown.dylib"
-                                        for fp in recipe["file_patches"]))
+                                        for fp in recipe["file_patches"][:-1]))
+                    # plus VirtualAudio's N72/N82 product swap (mic input)
+                    self.assertTrue(recipe["file_patches"][-1]["path"].endswith("/VirtualAudio"))
                     # lockdown_copy_value's table literal is at +0x28 (re-log 128)
                     self.assertTrue(recipe["file_patches"][1]["new"].startswith("20c09fe5"))
                     self.assertNotIn("resign", recipe)
@@ -145,7 +149,8 @@ class TestVersions(unittest.TestCase):
                         "/System/Library/LaunchDaemons/com.ios3ds.input.plist",
                         "build/rootfs-add/ios2/ios3ds-mcud": "/usr/libexec/ios3ds-mcud",
                         "tools/ios3ds-mcu/daemon/com.ios3ds.mcud.plist":
-                        "/System/Library/LaunchDaemons/com.ios3ds.mcud.plist"})
+                        "/System/Library/LaunchDaemons/com.ios3ds.mcud.plist",
+                        "build/rootfs-add/ios2/ios3ds-tone": "/usr/libexec/ios3ds-tone"})
                     self.assertEqual(list(recipe["plist_set"]),
                                      ["/System/Library/LaunchDaemons/com.apple.SpringBoard.plist"])
                     env = recipe["plist_set"]["/System/Library/LaunchDaemons/com.apple.SpringBoard.plist"][
@@ -162,7 +167,8 @@ class TestVersions(unittest.TestCase):
                         "/System/Library/LaunchDaemons/com.ios3ds.input.plist",
                         "build/rootfs-add/ios3/ios3ds-mcud": "/usr/libexec/ios3ds-mcud",
                         "tools/ios3ds-mcu/daemon/com.ios3ds.mcud.plist":
-                        "/System/Library/LaunchDaemons/com.ios3ds.mcud.plist"})
+                        "/System/Library/LaunchDaemons/com.ios3ds.mcud.plist",
+                        "build/rootfs-add/ios3/ios3ds-tone": "/usr/libexec/ios3ds-tone"})
                     self.assertEqual(list(recipe["plist_set"]),
                                      ["/System/Library/LaunchDaemons/com.apple.SpringBoard.plist"])
                     self.assertEqual(recipe["plist_set"][
