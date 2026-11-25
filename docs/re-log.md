@@ -4598,3 +4598,66 @@ claim below is tagged [V] (verified on the host model / QEMU) or [G]
    `[gl] CA stereo3D`, `[gl] CA: ... CPU read-backs` (must be ~0.1/frame),
    `GPU present check passed`, `[gpu] mirror:` (busy skips, idle VBlanks),
    any `switch FAILED`/`no shim`.
+## NEXT. 3.1.3 composites every frame: the frozen picture was the GPU mirror, not CoreAnimation (2026-11-25)
+
+Continues §125. Firmware staged from the earlier worktrees into this
+worktree's `build/fw-{3.1.3,2.2.1,4.1}/` (Apple files stay under `build/`).
+
+### What really stopped after the first frame
+
+- **[V]** Hardware breakpoints (QEMU gdbstub on a private port, `emu/gdb/rsp.py`)
+  on the 7E18 QuartzCore render path, 40 s on the shipped §125 image at the
+  home screen: `IOMFBServer::link_callback` (0x31bdc944),
+  `Server::render_for_time` (0x31bdfba0), `EAGLServer::render_update`
+  (0x31bda440), `Server::render_update` (0x31bdf56c) and
+  `CARenderOGLRenderDisplay` (0x31baee14) were each hit 15 times, plus 20
+  `IOMFBServer::set_next_update`. CoreAnimation **does** render: every
+  update goes `EAGLServer::render_update` → `renderer()` returns NULL →
+  `Server::render_update` → `sw_renderer()`, i.e. CA's software compositor,
+  which presents with `IOMobileFramebufferSwapBegin/SwapSetLayer/SwapEnd`
+  (`IOMFBDisplay::finish_update`, 0x31bdb7a4; stubs resolved from the
+  image's indirect symbol table). Vsync notifications are switched on per
+  `set_next_update` for three frames (`[this+0xf0] = 3`, decremented in
+  `link_callback`), which is why the CLCD frame-IRQ enable is clear on an
+  idle home screen.
+- **[V]** The picture froze in the **display mirror**: the shim's PICA200
+  mirror only starts a frame when `m_dirty` is set, and only a GL present
+  (`kernel/shim/pica.c` PRESENT/SCATTER) sets it. On 4.2.1 CA composites
+  through our GL engine; on 3.1.3 the software compositor never calls the
+  engine, so the mirror copied the first frame and then logged only
+  "idle VBlanks (no new CA frame)", with the ARM9 CPU copy paused.
+- **[V]** Fix: `scripts/versions.py` gains a per-version `boot_cfg`
+  table, applied by `scripts/mkboot.py` only for non-default versions (each
+  override replaces exactly one generated line and adds a comment). 3.1.3
+  sets `gpu_mirror=0`: the ARM9 copies the CLCD framebuffer every frame.
+  `tests/test_versions.py` checks that 4.2.1/4.1 have no override.
+  The default build's six hashes are unchanged (`kernel 505f451a…`,
+  `devtree 25b1bd23…`, `fakeio e5fecd66…`, `shim e0609de9…`, `gpu 7e696f65…`,
+  `boot.cfg 8d4079cf…`).
+- **[G]** Why `renderer()` gets no EAGL context (so CA could composite on
+  the PICA200 again) is not traced; the software compositor is fast enough
+  for the soak below. It is a performance item, not a blocker.
+
+### Soak harness
+
+- **[V]** `emu/soak.py --require-app` makes "the tap did not open an app" a
+  failure (and lists such taps in the report), so a frozen home screen can no
+  longer pass. Spotlight detection now also requires the frame to differ
+  from the home reference: 7E18's first icon row reaches into the top 40
+  points (mean ~40 > 35), which made every home frame look like Spotlight
+  and sent the recovery onto page 2.
+
+### Result
+
+- **[V]** One-tap check (fresh image, `gpu_mirror=0` edited into the
+  card's boot.cfg): Settings opens and renders, the status-bar clock moves
+  from 5:58 to 6:00 between frames.
+- **[V]** Fresh `make sdimg IOS=3.1.3`, `emu/soak.py --cycles 5 --icount 2
+  --require-app --targets "47,314;123,226;199,226;275,226;123,50"` →
+  **Result: PASS**: SpringBoard + input after 40 s, five cycles, app diffs
+  161.6 / 150.3 / 108.6 / 84.8 / 93.0, home diff ≤ 0.1 after every Home,
+  0 restarts, taps that opened no app: none, lock round passed. Settings,
+  Notes, World Clock and Calculator rendered (screenshots kept under
+  `build/emu-s2/`, not committed); the fifth tap came after the page-swipe
+  round and landed on Spotlight's search page (also a rendered, non-home
+  frame, left with Home).

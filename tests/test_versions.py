@@ -58,6 +58,16 @@ class TestVersions(unittest.TestCase):
         self.assertEqual(versions.get("2.2.1")["dt_delete"], ["arm-io/usb-otg"])
         self.assertEqual(versions.get().get("dt_delete", ()), ())
 
+    def test_boot_cfg_overrides(self):
+        """Only older versions override boot.cfg lines; 4.2.1/4.1 have none."""
+        self.assertNotIn("boot_cfg", versions.get())
+        self.assertNotIn("boot_cfg", versions.get("4.1"))
+        self.assertEqual(versions.get("3.1.3")["boot_cfg"]["gpu_mirror"][0], "0")
+        for v in versions.VERSIONS:
+            for key, (val, why) in versions.get(v).get("boot_cfg", {}).items():
+                self.assertRegex(key, r"^[a-z0-9_]+$")
+                self.assertTrue(why)
+
     def test_replace_marker_in_overlay(self):
         base = {"a": {"x": 1, "y": 2}, "b": [1, 2]}
         self.assertEqual(versions._merge(base, {"a": {"_replace": True, "z": 3}}),

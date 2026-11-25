@@ -52,6 +52,14 @@ VERSIONS = {
               # device tree and HFS+ rootfs, so it is the genuine restore file.
               "sha1": "5f4f5c01eda2f811f73167e7d1f82dbeed82367b", "ba_version": 5,
               "virt_base": 0xC0000000, "irq_cont": 0xC0068458, "irq_spsr": True,
+              # 7E18's EAGLServer::renderer() finds no GL display context, so
+              # CoreAnimation composites in software and swaps through
+              # IOMobileFramebuffer; our GL engine never presents, and the
+              # PICA200 mirror (which only copies after a GL present) would
+              # freeze the first frame. The ARM9 copies every frame instead.
+              "boot_cfg": {"gpu_mirror": ("0", "CoreAnimation composites in software (no GL "
+                                          "present marks a new frame): the ARM9 copies the "
+                                          "screen, re-log NEXT")},
               "patch_set": "kernel/patchsets/3.1.3.json", "overlay": "rootfs/overlay-3.1.3.json",
               "status": "experimental: Darwin 10.0, archived IPSW; see docs/multi-version.md"},
     "4.0": {"build": "8A293", "ipsw": "iPod2,1_4.0_8A293_Restore.ipsw",

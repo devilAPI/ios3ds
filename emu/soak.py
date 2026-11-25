@@ -101,6 +101,9 @@ def main():
     ap.add_argument("--settles", default="", help="comma list of per-cycle settle seconds (cycled)")
     ap.add_argument("--unlock-first", action="store_true", help="press Home and slide to unlock before taking the home-screen reference (use when the image boots to a lock screen)")
     ap.add_argument("--no-extras", action="store_true", help="skip the page swipes and lock rounds (for a one-tap-per-icon app survey)")
+    ap.add_argument("--require-app", action="store_true",
+                    help="count a tap that did not open an app as a failure (older iOS versions: "
+                         "a home screen that never changes must not pass, re-log 125)")
     ap.add_argument("--crashlogs", action="store_true", help="run scripts/crashlogs.py on the SD image afterwards and copy CrashReporter reports into --out")
     a = ap.parse_args()
     if a.new3ds:
@@ -189,8 +192,14 @@ def main():
 
     def is_spotlight(img):
         """Spotlight's light search field fills the top 40 points; the home
-        screen's status bar is dark (measured on both GPU and CPU copies)."""
-        return ImageStat.Stat(img.convert("L").crop((0, 0, 320, 40))).mean[0] > 35
+        screen's status bar is dark (measured on both GPU and CPU copies).
+        On 3.1.3 the first icon row reaches into that band (mean ~40), so a
+        frame that still matches the home reference is never Spotlight."""
+        if ImageStat.Stat(img.convert("L").crop((0, 0, 320, 40))).mean[0] <= 35:
+            return False
+        ref = home_ref_box[0]
+        return ref is None or ImageStat.Stat(ImageChops.difference(
+            img.convert("L"), ref.convert("L"))).mean[0] > 12
 
     def dismiss_spotlight(name):
         """Leave Spotlight, including the keyboard and a typed query. Home on
@@ -238,6 +247,8 @@ def main():
         q.key(qcode, True)
         time.sleep(hold)
         q.key(qcode, False)
+
+    home_ref_box = [None]                   # is_spotlight() reads the current reference
 
     # 1. boot: wait for the input daemon to reach SpringBoard
     booted = None
@@ -316,6 +327,7 @@ def main():
             log("no stable, non-black home screen within 300 s; re-acquiring later")
             home_ref, dark_ref = prev, True
         for i in range(a.cycles):
+            home_ref_box[0] = None if dark_ref else home_ref
             x, y = targets[i % len(targets)]
             c = {"cycle": i, "tap": [x, y]}
             tap(x, y)
@@ -351,6 +363,7 @@ def main():
             if app_diff > 12:
                 key("ret")                      # Home (START)
             else:
+                c["no_app"] = True
                 log("cycle %d: the tap did not open an app" % i)
             # wait until the screen stops changing (up to 30 s) instead of a
             # fixed 6 s: with --icount the guest runs slower when the host is
@@ -520,6 +533,10 @@ def main():
     results["unlock_not_home"] = bad_unlock
     if bad_unlock:
         failed = True
+    no_app = [c["cycle"] for c in results["cycles"] if c.get("no_app")]
+    results["no_app"] = no_app
+    if a.require_app and (no_app or not results["cycles"]):
+        failed = True
     results["failed"] = failed
     with open(os.path.join(a.out, "report.json"), "w") as f:
         json.dump(results, f, indent=1)
@@ -528,6 +545,8 @@ def main():
              "- cycles run: %d" % len(results["cycles"]),
              "- SpringBoard/input daemon restarts after boot: %d" % results["springboard_restarts"],
              "- not home after Home (cycle lists by what it took to recover): %s" % (rec or "never"),
+             "- taps that opened no app: %s%s" % (no_app or "none",
+                                                  " (failure: --require-app)" if a.require_app and no_app else ""),
              "- lock rounds not ending on the home screen (cycles 9, 19, ... lock for %g s): %s" % (a.long_lock, bad_unlock or "none"),
              "- last heartbeat: `%s`" % results["last_heartbeat"], "", "| check | count | first |", "|---|---|---|"]
     for name, r in results["checks"].items():
