@@ -5279,8 +5279,10 @@ and 2.2.1.
   first `AudioSessionInitialize`/`AudioSessionGetProperty` faulted in dyld.
   `TONE_OLD` builds now use a double multiply for the frame count, so no
   compiler-rt division helper is linked (`mov r9,#0` is gone from the binary).
-  **[V]** The default 4.2.1 `__text` is byte-identical to `origin/main`'s
-  (all `#ifdef TONE_OLD` guards), and `make test` passes.
+  **[V]** The default 4.2.1 `__text` is instruction-identical to
+  `origin/main`'s (all changes are behind `#ifdef TONE_OLD`; the full Mach-O
+  differs only in the linker's random UUID between two builds of the same
+  source), and `make test` passes.
 
 ### Result: output on 2.2.1
 
@@ -5338,3 +5340,25 @@ and 2.2.1.
    missing built-in mic.
 3. 4.1/3.1.3: `[mic] 1 s: FIFO peak P, iOS peak Q`; on 4.1 Q should be about
    P/15, on 3.1.3 about P. Loudness on a real console still needs a check.
+
+### Verification after rebasing onto origin/main (1add5cf)
+
+- **[V]** `make test` passes. Fresh default build: `kernel 505f451a…`,
+  `devtree 25b1bd23…`, `fakeio e5fecd66…`, `shim a35631eb…`,
+  `gpu 6bdaf617…`, `boot.cfg 8d4079cf…` — the six values printed by main
+  before this branch (re-log 131/132).
+- **[V]** Fresh images, `IOS3DS_QEMU=/tmp/opencode/qemu-compat2/b/qemu-system-arm
+  python3 emu/soak.py --cycles 5 --icount 2`:
+  - 4.2.1 (`rm -f build/sd.img && make sdimg`): **Result: PASS**.
+  - 2.2.1 (`make sdimg IOS=2.2.1`, `--require-app --crashlogs --targets
+    "275,226;199,226;123,226;47,226;275,50"`): **Result: PASS**, 0
+    audio DMA errors, no app taps that opened nothing.
+  - 3.1.3 (`make sdimg IOS=3.1.3`, `--require-app --crashlogs --targets
+    "47,314;123,226;199,226;275,226;123,50"`): **Result: PASS**.
+  - 4.1 (`make sdimg IOS=4.1`, `--require-app --crashlogs`): **Result: PASS**.
+- **[V]** Post-rebase 5H11a test image with the tone job: stream #1 and #2
+  started (`tx start ch5`), `stream stopped: … TC IRQs 18 (18 injected)` and
+  `36 (36 injected)`, peak 5999 on #2; `IOS3DS_CSND_WAV` recorded 716,355
+  frames, peak 13273 (a boot UI sound overlaps the first tone), 264,089
+  non-silent frames. A final `ios3ds-tone rec` on the same tree still logs
+  `input available 0, route "Speaker"` with no `rx start`.
