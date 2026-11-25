@@ -4505,5 +4505,5 @@ Non-ios3ds payloads are never touched. `boot/arm9/main.c` also logs
 shows exactly which file ran.
 
 - **[V]** `make test` passes; `make shim`: main part 24268/24320, GPU part 26304/32768.
-- **[V]** Fresh soak (5 cycles, icount 2): see commit message / report.
+- **[V]** Fresh soak `rm -f build/sd.img && make sdimg && IOS3DS_QEMU=… python3 emu/soak.py --cycles 5 --icount 2` printed **Result: PASS**.
 - **[HW]** (1) Boot once via hbmenu: the log must show `payload check: 0:/luma/payloads/<name>.firm is an older ios3ds build, updating it` then `… updated`. (2) Chainload: the first log line must be the same version as the hbmenu log, `argv0=` must name the payloads file, and SpringBoard must show with working buttons. If the chainloaded log *still* shows an old version, the chainloader is booting a file outside `luma/payloads/` and `argv0` names it.
