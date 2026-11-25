@@ -4507,3 +4507,94 @@ shows exactly which file ran.
 - **[V]** `make test` passes; `make shim`: main part 24268/24320, GPU part 26304/32768.
 - **[V]** Fresh soak `rm -f build/sd.img && make sdimg && IOS3DS_QEMU=… python3 emu/soak.py --cycles 5 --icount 2` printed **Result: PASS**.
 - **[HW]** (1) Boot once via hbmenu: the log must show `payload check: 0:/luma/payloads/<name>.firm is an older ios3ds build, updating it` then `… updated`. (2) Chainload: the first log line must be the same version as the hbmenu log, `argv0=` must name the payloads file, and SpringBoard must show with working buttons. If the chainloaded log *still* shows an old version, the chainloader is booting a file outside `luma/payloads/` and `argv0` names it.
+
+## NEXT. Stereo 3D on the Old 3DS: GPU present for the stamped frame, batched stamps, per-mode mirror cost (2026-11-25)
+
+Goal: SpringBoard in real 3D on the Old 3DS, about as smooth as 2D. Input:
+hardware run 3 (`stereo3d=1`: 229-301 ms ARM9 copies, slider "did nothing")
+was before re-log 109/113; this round has no new hardware log, so every
+claim below is tagged [V] (verified on the host model / QEMU) or [G]
+(reasoned, needs a console).
+
+### Design ("full 3D" as implemented)
+- Depth: five classes from the CA layer tree's draw order and position
+  (`boot/common/stereo.h`): wallpaper behind (−k), icon grid at the screen
+  (0), dock + status bar in front (+k), folders/alerts further in front
+  (+2k); k = 1..4 px from the slider. Stamped into the frame's alpha by the
+  GL engine, applied as per-class eye offsets by the PICA200 mirror. [V]
+- Slider up + home frame: both eyes on the GPU (two-eye list); slider down
+  or an app frame: flat list, barrier and 3D LED off; ARM9 copy only as
+  fallback (unchanged from 109). [V in QEMU]
+- No tearing between eyes: both eyes are built from one uploaded texture in
+  one GPU frame and read out to the two PDC0 sets together. [G on panel]
+
+### Changes
+- **The stereo display target uses the GPU present again** (`pica_be.c`).
+  The swizzle pass writes output R = sample alpha, which is the surface's
+  alpha byte, so the stamp survives; re-log 106's "alpha 0 in every word"
+  was the same round's unstamped-frame bug, not the present. New host check
+  `alpha_stamp_check` (sw, read-back, direct present, arena copy): 0 bad
+  samples. [V] This removes a 600 KiB CPU read-back per CA frame with
+  stereo on (re-log 78: 31-37 ms read-back vs 13.5-16 ms present on
+  hardware). [G: the saving on hardware]
+- **Deferred, batched stamp** (`stereo.c`): one alpha-only draw per home
+  frame instead of one per CA draw; app frames only get the wipe. Scissor
+  changes start new segments. `stereo_forget()` drops pending stamps when
+  the target is freed (found by ASan in the new host test). [V]
+- **Host test** `IOS3DS_GLTEST_STEREO=1` (in `make test`): wallpaper/icons/
+  dock/status bar get 0x33/0x66/0x99/0x99 through stamp + GPU present,
+  RGB untouched, the following app frame wiped to 0, 1 batch of 66 vertices. [V]
+- **`[stereo] mirror GPU cost`** every 30 s: 3D vs 2D frame and draw-stage
+  averages from new per-mode mailbox counters (`st_n/st_sum/st_sum_3d`,
+  `fl_*`, shim GPU part +48 bytes). [V]
+- `emu/perf.py --slider3d N`.
+
+### Sizes
+`make shim`: main 24268/24320 (unchanged), GPU part 26352/32768.
+`gpumirror.bin` unchanged (32336/32768).
+
+### Results
+- `make test` green.
+- Fresh-image soaks, `--cycles 5 --icount 2`, private QEMU
+  (`/tmp/opencode/qemu-compat2`): `stereo3d=0` **PASS**; `stereo3d=1
+  --slider3d 255` **PASS** (22 barrier-on transitions as apps closed,
+  `GPU present check passed (320x480)`, `[gl] CA: ... 0.1 CPU read-backs`,
+  `CA stereo3D: 308 frames, 198 home, 110 flat, 5597 stamped draws in 205
+  batched alpha draws, 74 wipes`).
+- Mirror cost (QEMU, instruction-clocked, not a hardware prediction):
+  `3D 158 frames avg 12648 us (draw 1936 us); 2D 78 frames avg 8079 us
+  (draw 1435 us)` and `3D 58 avg 14539 us; 2D 23 avg 10796 us`.
+- `emu/perf.py --runs 3 --icount 2 --slider3d 255`, fresh `stereo3d=1`
+  images, same firmware, only the GL engine differs:
+
+  | | before (origin/main engine) | after |
+  |---|---|---|
+  | `[perf] CA:` folder windows (guest time) | 25 frames/1167 ms avg 46 ms; 28 frames/1014 ms avg 35 ms | 39 frames/1057 ms avg 26 ms; 40 frames/1012 ms avg 24 ms |
+  | frames <17 ms | 4 / 3 | 17 / 19 |
+  | folder open/close wall (host-load noisy) | 8.1/6.2/12.1, 12.2/12.7/10.2 s | 16.3/16.4/18.4, 18.3/14.5/18.3 s |
+
+  The guest-time histogram is the robust number: stereo-on animation now
+  runs at the pace re-log 113 measured with stereo off (43-47 frames,
+  22-23 ms avg). Wall times were taken under heavier host load (two other
+  QEMUs) and are not comparable. [V in QEMU; G on hardware]
+
+### Not done / needs a console
+- The two-eye list still draws ~9 full-screen quads (4 per eye + clear) vs
+  2 for flat. Cheaper options (FRONT pass limited to the status/dock bands,
+  margin-only clear of the right eye) need ~2.5 KiB of vertices that the
+  32 KiB blob does not have; a single-pass TEV class select needs > 6 TEV
+  stages. Decide after the hardware `[stereo] mirror GPU cost` line.
+
+### Hardware test checklist (Old 3DS, `stereo3d=1`, `diag=1`)
+1. Boot, home screen, slider at max: photo straight on; wallpaper behind,
+   icons at the screen, dock/status bar in front. Slider to the bottom
+   notch: flat, 3D LED off. Slider up again: 3D within ~1 s, LED on.
+2. Open an app with the slider up: flat, barrier off; Home: 3D again.
+3. Open/close a folder and swipe pages in 3D and in 2D; compare
+   `[perf] CA:` histograms (target: 3D avg close to 2D).
+4. Lock (power), wait 10 s, unlock; close/open the shell: 3D comes back on
+   the home screen, no stale eye images.
+5. Send `log.txt` with: `[stereo] mirror GPU cost`, `[stereo] active path`,
+   `[gl] CA stereo3D`, `[gl] CA: ... CPU read-backs` (must be ~0.1/frame),
+   `GPU present check passed`, `[gpu] mirror:` (busy skips, idle VBlanks),
+   any `switch FAILED`/`no shim`.

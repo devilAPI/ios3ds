@@ -323,3 +323,12 @@ icons and 3D ones the two shifted eye images. A flat app frame with the
 slider up leaves the barrier off and the flat GPU mirror running; the
 soak's 3D run logged 30 such on/off pairs across app launches. These are
 emulator timings, not hardware predictions; section 8 still applies.
+
+### Stereo round 3 (2026-11-25, re-log NEXT)
+
+GPU present for the stamped display target (no CPU read-back), one batched
+alpha-only stamp draw per frame, and a `[stereo] mirror GPU cost` line.
+Fresh-image soaks: `stereo3d=0` PASS, `stereo3d=1 --slider3d 255` PASS.
+`emu/perf.py --slider3d 255` folder animation: 25-28 frames/s avg 35-46 ms
+before, 39-40 frames/s avg 24-26 ms after (guest time; the same pace as
+stereo off). The hardware checklist is at the end of re-log NEXT.
