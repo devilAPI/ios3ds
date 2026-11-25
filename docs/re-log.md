@@ -5482,3 +5482,8 @@ from its dyld shared cache (symbols kept in the 3.x cache) with
   (`SwapNotification` count) and whether the mirror drops the last
   `m_dirty` (it runs every 2nd VBlank). **[G]** on hardware: log `[gpu] mirror`
   counts after Home and a photo of the home screen 2 s after Home.
+- After rebasing onto origin/main (audio/Cydia rounds): `make test` passes,
+  the six 4.2.1 hashes above are unchanged (built with and without this
+  branch), and a fresh 3.1.3 soak (`--cycles 5 --require-app --crashlogs`)
+  **PASS**es: 0 panics, 0 restarts, every tap opened an app, only cycle 2
+  needed a second Home.
