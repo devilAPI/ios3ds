@@ -40,8 +40,7 @@
   "_replace": true,
   "/System/Library/LaunchDaemons/com.apple.configd.plist": {
    "EnvironmentVariables": {
-    "DYLD_INSERT_LIBRARIES": "/usr/lib/ios3ds-a80211.dylib",
-    "IOS3DS_WIFI_LOG": "2"
+    "DYLD_INSERT_LIBRARIES": "/usr/lib/ios3ds-a80211.dylib"
    }
   }
  },
@@ -55,6 +54,8 @@
   "build/rootfs-add/usr/libexec/ios3ds-nettest": "/usr/libexec/ios3ds-nettest",
   "build/rootfs-add/usr/lib/ios3ds-a80211.dylib": "/usr/lib/ios3ds-a80211.dylib",
   "tools/ios3ds-wifi/daemon/com.ios3ds.wifi.plist": "/System/Library/LaunchDaemons/com.ios3ds.wifi.plist",
+  "build/rootfs-add/usr/libexec/ios3ds-diag": "/usr/libexec/ios3ds-diag",
+  "tools/ios3ds-diag/com.ios3ds.urltest.plist": "/System/Library/LaunchDaemons/com.ios3ds.urltest.plist",
   "tools/ios3ds-mcu/daemon/com.ios3ds.mcud.plist": "/System/Library/LaunchDaemons/com.ios3ds.mcud.plist",
   "build/rootfs-add/ios3/ios3ds-tone": "/usr/libexec/ios3ds-tone"
  },
@@ -68,6 +69,8 @@
   "/usr/libexec/ios3ds-nettest": "0755",
   "/usr/lib/ios3ds-a80211.dylib": "0755",
   "/System/Library/LaunchDaemons/com.ios3ds.wifi.plist": "0644",
+  "/usr/libexec/ios3ds-diag": "0755",
+  "/System/Library/LaunchDaemons/com.ios3ds.urltest.plist": "0644",
   "/System/Library/LaunchDaemons/com.ios3ds.mcud.plist": "0644",
   "/usr/libexec/ios3ds-tone": "0755"
  },

@@ -170,13 +170,28 @@ class TestVersions(unittest.TestCase):
                         "build/rootfs-add/ios3/ios3ds-mcud": "/usr/libexec/ios3ds-mcud",
                         "tools/ios3ds-mcu/daemon/com.ios3ds.mcud.plist":
                         "/System/Library/LaunchDaemons/com.ios3ds.mcud.plist",
-                        "build/rootfs-add/ios3/ios3ds-tone": "/usr/libexec/ios3ds-tone"})
+                        "build/rootfs-add/ios3/ios3ds-tone": "/usr/libexec/ios3ds-tone",
+                        # Wi-Fi: the 4.2-built daemon and Apple80211 bridge
+                        # run on 7E18 (re-log: Wi-Fi on 4.1 and 3.1.3)
+                        "build/rootfs-add/usr/libexec/ios3ds-wifid": "/usr/libexec/ios3ds-wifid",
+                        "build/rootfs-add/usr/libexec/ios3ds-nettest": "/usr/libexec/ios3ds-nettest",
+                        "build/rootfs-add/usr/lib/ios3ds-a80211.dylib": "/usr/lib/ios3ds-a80211.dylib",
+                        "tools/ios3ds-wifi/daemon/com.ios3ds.wifi.plist":
+                        "/System/Library/LaunchDaemons/com.ios3ds.wifi.plist",
+                        "build/rootfs-add/usr/libexec/ios3ds-diag": "/usr/libexec/ios3ds-diag",
+                        "tools/ios3ds-diag/com.ios3ds.urltest.plist":
+                        "/System/Library/LaunchDaemons/com.ios3ds.urltest.plist"})
+                    self.assertEqual(recipe["plist_merge"], {
+                        "/System/Library/LaunchDaemons/com.apple.configd.plist": {
+                            "EnvironmentVariables": {"DYLD_INSERT_LIBRARIES": "/usr/lib/ios3ds-a80211.dylib"}}})
+                    self.assertEqual(recipe["disable_daemons"], ["com.apple.wifiFirmwareLoader.plist"])
                     self.assertEqual(list(recipe["plist_set"]),
                                      ["/System/Library/LaunchDaemons/com.apple.SpringBoard.plist"])
                     self.assertEqual(recipe["plist_set"][
                         "/System/Library/LaunchDaemons/com.apple.SpringBoard.plist"][
                             "StandardOutPath"], "/dev/console")
-                self.assertEqual(recipe["disable_daemons"], [])
+                if v == "2.2.1":
+                    self.assertEqual(recipe["disable_daemons"], [])
                 # Cydia without TLSFix (no Substrate loader on 3.x/2.x)
                 self.assertEqual(recipe["cydia"], "rootfs/cydia.json" if v == "3.1.3" else False)
                 self.assertFalse(recipe["tlsfix"])

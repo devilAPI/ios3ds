@@ -5118,3 +5118,112 @@ Worktree `oldwake`; firmware staged from `compat16` into this worktree's
   and SpringBoard's live value stays inside its own process.
 - 3.1.3's AppleEmbeddedAudio was not checked for the same unconditional
   store; its battery registration never hit it in any soak.
+
+## NEXT. Wi-Fi on 4.1 and 3.1.3: a shim mailbox address, the 3.x Apple80211 event device and scan-result layout (2026-11-25)
+
+Before: the driver matrix (docs/multi-version.md §6.9) had Wi-Fi "off: built
+against 4.2.1 private Apple80211/IOKit APIs" on 3.1.3 and 2.2.1; 4.1 was not
+listed. Goal: Settings toggle, scan, WPA2 join, DHCP and Safari on 4.1, 3.1.3
+and 2.2.1.
+
+### 4.1 (8B117): nothing to port
+
+- **[V]** 4.1's kernelcache prelinks IOUserEthernet, its IOKit has the
+  IOEthernetController API, and its configd WiFiManager imports the same
+  IOKit/ioctl surface as 8C148. The 4.1 overlay already keeps the base
+  recipe's `ios3ds-wifid`, `ios3ds-a80211` (configd) and `ios3ds-hwaes`
+  (securityd). Fresh `make sdimg IOS=4.1`:
+  - `emu/wifi_test.py --case ok --icount 2` → **PASS, 20/20** (SDIO, BMI,
+    WMI, scan, association, 4-way handshake with the AP's TK/GTK, en0,
+    DHCP lease, default route, DNS, HTTP fetch, no panic).
+  - `emu/wifi_ui_test.py --keep-ca --psk <letters only>` → **8/8 PASS**
+    (Settings > Wi-Fi scans and lists 3 networks, WPA2 join through the
+    on-screen keyboard, 4-way handshake, DHCP lease on en0).
+  - `emu/safari_test.py --pages 2` → page 2 **loaded in 29 s** (host served
+    the HTML and every image, screenshot shows it). Page 1, the cold start,
+    got Safari's "Cannot allocate memory" alert: the first-big-page memory
+    wall of §104 (its fix is 4.2.1's TLSFix/`/usr/lib` layout), not the
+    network path.
+- **Test harness:** with `ca_gpu=0` (what wifi_ui_test forces) 4.1 draws a
+  black home screen, and its `123` keyboard page does not match the 4.2.1
+  coordinates, so the passphrase was typed wrong (`message 2 MIC is wrong`
+  in the AP model). New options: `--keep-ca`, `--psk` (the AP model's
+  passphrase and the typed one; letters only avoids the 123 page),
+  `--wifi-row/--net-row/--join-key`, `--key-pause`.
+
+### 3.1.3 (7E18)
+
+- **Kernel panic, cause:** `ios3ds-wifid`'s first `kern.ios3ds_net` sysctl
+  took `kernel abort type 4 … fault_addr=0x808ae000` at pc `0xc0841308`
+  (shim). The shim's net code used `NET_VA` = 0x808A0000, 4.2.1's mapping
+  of `NET_PA` 0x208A0000 (virt base 0x80000000); Darwin 10 maps physical
+  0x20000000 at 0xC0000000. **Fix:** `tools/ios3ds-wifi/shim/net.c` derives
+  `NET_VA` from `IOS3DS_KPI_VIRT_BASE`. The 4.2.1 shim is byte-identical
+  (same value). The KPI addresses (sysctl_register_oid etc.) were already
+  relocated by kpi.py.
+- **[V]** After that, with the 3.1.3 overlay installing `ios3ds-wifid`,
+  `ios3ds-nettest`, `ios3ds-a80211` (configd `DYLD_INSERT_LIBRARIES`) and
+  disabling Apple's `wifiFirmwareLoader`: `emu/wifi_test.py --case ok`
+  → **PASS, 20/20**. 7E18 has IOUserEthernet and the IOEthernetController
+  API; the 4.2-built daemon runs unchanged.
+- **WiFiManager (statically linked Apple80211, symbols present):**
+  - `CARD_CAPABILITIES` (GET 12) is also asked with `len 3` (WiFiManager and
+    IPConfiguration); the bitmap is now written bytewise.
+  - No PF_SYSTEM event socket in 3.x. `Apple80211EventMonitoringInit`
+    (WiFiManager 0x1a6cc) does GET 23 (len 1023) for a device name, builds
+    `"/dev/%s"`, opens it with `CFReadStreamCreateWithFile` and reads one
+    record per callback (0x21bc4): `{u32 event, u32 length, payload}`, the
+    read must return exactly 8 + length bytes, events 1–14 filtered by a mask
+    that `Apple80211StartMonitoringEvent` enables (SET 66) for 1–10 and 14.
+    Without it the Settings list kept spinning: SET 10 went out, the scan
+    finished, no GET 11 ever followed. The dylib now answers GET 23 with its
+    own name, accepts SET 66, and interposes `CFReadStreamCreateWithFile`
+    for that path: WiFiManager gets the read end of a datagram socketpair
+    (`CFStreamCreatePairWithSocket`), fed with the same events as the 4.x
+    socket (scan done 10, association done 9, link 4, SSID 2, BSSID 3).
+  - Scan results are 144 bytes on 3.x (140 on 4.x); the IE length/pointer
+    are at 0x88/0x8C (WiFiManager 0x1f174, `ParseRSNIE` callers at
+    0x1b034) instead of 0x86/0x88. With 4.x offsets WiFiManager saw no RSN
+    IE and tried a WEP join ("key type 2 / 13 bytes"). `fill_result` picks
+    the layout by request length.
+  - The keychain works on 3.x without `ios3ds-hwaes` (no AppleKeyStore
+    wrapping before 4.0).
+- **[V]** `emu/wifi_ui_test.py --psk <letters only> --wifi-row 160,96
+  --key-pause 2` (Settings' first row is Wi-Fi on 3.x; the software
+  compositor drops keys at the default pace) → **8/8 PASS**: scan lists 3
+  networks with lock icons, WPA2 join via the keyboard, `Joined`, `Added …
+  to list of known networks`, 4-way handshake, DHCP lease, check mark in
+  the list. A second boot of the same image auto-joined from the keychain
+  ("Auto join scan found …", association done, `en0 configured` 70 s after
+  start) and the status bar shows the Wi-Fi bars.
+- **[V]** `emu/safari_test.py --pages 3 --settle 240` (overlay now also
+  installs `ios3ds-diag` + `com.ios3ds.urltest.plist`, gated by the
+  `ios3ds_urltest` boot-arg as on 4.2.1): pages 2 and 3 **loaded in 10 s**
+  each (screenshot of page 3 rendered with its images). Page 1, the cold
+  start, showed "Cannot Open Page … Invalid argument": same pattern as 4.1
+  (first load after Safari's launch fails, every later one works); not
+  investigated further.
+
+### 2.2.1 (5H11a): still off
+
+- 5H11a's kernelcache has **no IOUserEthernet** (prelinked bundles:
+  IO80211Family, IOSDIOFamily, l2tp/ppp/pptp, audio, flash, …), so
+  `ios3ds-wifid` has nothing to create en0 with; there is no tun/utun either.
+- Its Wi-Fi manager is a different plugin, `Aeropuerto.bundle`, linked
+  against a **dynamic** `Apple80211.framework` (`Apple80211Open/Scan/
+  AssociateEmbeddedAndCopyInfo/EventMonitoringInit/…`).
+- Plan: a kernel `ifnet` (Darwin 9 KPI `ifnet_allocate/ifnet_attach/
+  ifnet_input`, output callback into the netmbox) behind a
+  `IOS3DS_KPI_*` flag. The shim's main part has 52 bytes free, so it has to
+  live in the GPU part or a new 2.2.1-only area; then a 2.x variant of the
+  a80211 bridge that interposes the exported Apple80211 functions instead
+  of the ioctls. Not started in this round.
+
+### Hardware checklist (diag=1 log.txt)
+
+- 3.1.3: `[a80211] loaded into configd`, `[a80211] 3.x event stream opened`,
+  `[a80211] scan done: N networks` followed by GET 11 (with
+  `IOS3DS_WIFI_LOG=2`), `[a80211] associate … (WPA2-PSK, PMK from
+  WiFiManager …)`, `[wifid] en0 configured by configd`. Everything below the
+  mailbox is the shared ARM9 driver (§103 for the HTC credit refill).
+- 4.1: the same lines as 4.2.1 (§52).

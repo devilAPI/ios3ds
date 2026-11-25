@@ -833,10 +833,13 @@ or not registered, with the reason):
 | Brightness | works: mcud `-DMCU_OLD` reads `SBBacklightLevel2` (Settings slider) from mobile's springboard plist, factor 0 while the screen is off; auto-brightness (New 3DS camera ALS) on top | works: same |
 | Accelerometer / gyro | off: needs IOHIDEventSystemClient (4.x) / CoreMotion (4.x); iPod2,1 3.x has no gyro API | off: same |
 | Audio | works in QEMU: speaker output (UI sounds, `ios3ds-tone`; DMA TC IRQs injected through the version's IRQ path), volume → CSND, mic input via the VirtualAudio N82-slot swap at unity gain (re-log 130); [G] real sound, headphones, keyboard click; test song not shown (4.x library format) | partial: I2S patch in, kernel no longer hangs, but `AudioSessionInitialize` never returns (no stream); mic swap applied, untested (re-log 130) |
-| Wi-Fi (`ios3ds-wifid`/a80211) | off: built against 4.2.1 private Apple80211/IOKit APIs | off: same |
+| Wi-Fi (`ios3ds-wifid`/a80211) | works: Settings toggle/scan/WPA2 join/DHCP, auto-join from the keychain, status-bar bars, Safari loads pages (first cold-start page fails, later ones load); shim mailbox VA from the KPI base, 3.x event device + 144-byte scan results (re-log NEXT) [G] | off: no IOUserEthernet in 5H11a and a dynamic Apple80211.framework (Aeropuerto); needs a kernel ifnet (re-log NEXT) |
 | Camera (`vcd`) | off: iPod2,1 has no camera stack before 4.x | off: same |
 | GPS | off: 4.x CoreLocation hooks | off: same |
 | Cydia / TLSFix | Cydia 1.1.30 + APT/dpkg installed and Cydia opens [V]; TLSFix left out (needs Substrate via ios3ds-applog, not installed on 3.x); refresh untested (no Wi-Fi on 3.x) | off: Cydia 1.1.30/APT binaries use LC_DYLD_INFO_ONLY, which 2.x dyld cannot load (icon appeared, tap launched nothing) |
+
+4.1 (8B117) Wi-Fi: works with the 4.2.1 tools unchanged (wifi_test 20/20,
+Settings join 8/8, Safari loads pages; re-log NEXT).
 
 The 4.2.1 and 4.1 builds are unchanged by all of this: every older-version
 switch is either in `rootfs/overlay-*.json`, `kernel/patchsets/*.json`, or a

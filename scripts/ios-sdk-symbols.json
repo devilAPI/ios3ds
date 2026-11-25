@@ -36,6 +36,7 @@
     "_CFPreferencesCopyAppValue",
     "_CFPreferencesGetAppBooleanValue",
     "_CFPropertyListCreateFromXMLData",
+    "_CFReadStreamCreateWithFile",
     "_CFRelease",
     "_CFRetain",
     "_CFRunLoopAddSource",
@@ -44,8 +45,10 @@
     "_CFRunLoopTimerCreate",
     "_CFRunLoopWakeUp",
     "_CFSocketGetNative",
+    "_CFStreamCreatePairWithSocket",
     "_CFStringCreateWithCString",
     "_CFStringGetCString",
+    "_CFURLGetFileSystemRepresentation",
     "_kCFAllocatorDefault"
    ],
    "weak": []
