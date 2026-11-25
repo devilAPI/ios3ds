@@ -4229,3 +4229,108 @@ assembler output and GDB logs stay under `build/`; only
   (`sha1 97abde62…` verified): `rm -f build/sd.img && make sdimg IOS=4.1 &&
   python3 emu/soak.py --cycles 5 --icount 2` → **Result: PASS** (five cycles,
   zero failures).
+
+## NEXT. 3.1.3: the icon list is not off-screen — dump every candidate surface, then trace the two boot views (2026-11-25)
+
+Continues §123. The archived 7E18 IPSW was fetched again into this worktree's
+`build/fw-3.1.3/` (sha1 `5f4f5c01…` verified by `fwprep.py`), and 8B117 was
+staged for the 4.1 soak. All Apple files, memory dumps, screenshots, ObjC
+parsers and scratch overlays stay under `build/`. No 4.x recipe, patch set,
+shim or GPU file is touched by this round.
+
+### The ARM9 already mirrors the surface SpringBoard draws
+
+- **[V]** Booted the shipped 3.1.3 overlay for 230 s at `--icount 2` and used
+  QEMU HMP `pmemsave` at t=212 s to dump the fake CLCD page at PA `0x1ffba000`
+  (4 KiB), `/vram` (3 MiB at `0x18000000`), the 3DS LCD framebuffers (2 MiB at
+  `0x18300000`) and all 128 MiB of FCRAM (`0x20000000`). The CLCD page reads
+  `on=0x3, window-1 base=0x18096000, stride=320, 320x480`: AppleM2CLCD moved
+  scan-out from iBoot's `0x18000000` to the second `/vram` frame. The SD log's
+  spot check reports 0/512 LCD pixels different from that CLCD buffer, i.e.
+  the ARM9 copy is faithful; there is no second scan-out path to fix.
+- **[V]** Rendered every 320x480 slot of `/vram` as a BGRA image:
+  `0x18000000` is black (cleared back buffer), `0x18096000` and `0x1812c000`
+  both hold the Apple logo + progress bar; the remaining two slots are black.
+  No icon grid exists off-screen in `/vram`.
+- **[V]** Scanned all of FCRAM in 4 KiB steps for coherent 320x480 frames,
+  using four independent filters (dark-background/colourful-icon, uniform
+  background, adjacent-pixel smoothness in 32 bpp and in RGB565). Every hit
+  was kernel data, a dyld cache or a compressed filesystem page when rendered;
+  a byte search for a distinctive 32-byte gradient from the VRAM Apple logo
+  found no CA-owned copy elsewhere. So the icons are not being drawn into a
+  hidden CoreSurface buffer: the remaining gate is above the icon view.
+
+### Where the two boot views come from
+
+- **[V]** Parsed the 7E18 SpringBoard executable with the scratch ObjC parser
+  (`build/fw-3.1.3/objc.py`; 231 classes, ~3400 methods). `applicationDidFinishLaunching:`
+  (Thumb `0xa6f5`) sends `frontLocked:animate:automatically:` to the away
+  controller at `0xaab8` and `unlockWithSound:` at `0xaade`, and
+  `-[SBUIController wakeUp:]` (`0xaf75`) sends `frontLocked:…` again at
+  `0xafae`. `-[SBUIController finishLaunching]` (`0xc149`) removes the view
+  tagged 152 (the Apple icon image), and `-[SBUIController restoreIconList:]`
+  (`0xc975`) sets `_restoringIconList`, sends `setAlpha:1.0` and
+  `insertAndOrderIconListsForReordering:` to its `contentView`. Those calls
+  are all reached in the shipped build; they do not replace the view covering
+  the screen.
+- **[V]** `-[SpringBoard showSimulatedScreenBlank]` (`0x8989`) allocates a
+  UIWindow with `initWithContentRect:`, sets its window level and `orderFront:`s
+  it, storing it in `_simulatedBlankingWindow` (SpringBoard ivar `+0x68`);
+  `hideSimulatedScreenBlank` (`0x3da5`) does `orderOut:` + `release`. This is
+  the centred spinner that appears when the away view is skipped.
+
+### Scratch patches (all reverted; none shipped)
+
+- **[V]** `applicationDidFinishLaunching:`'s `beq` at file `0x9aae`
+  (`18d0`→`18e0`, i.e. always skip `frontLocked:`) is stable (98 dyld lines,
+  one SpringBoard pass) and changes the picture from Apple logo + progress
+  bar to the centred spinner. Forcing `unlockWithSound:` at `0x9ad0`/`0x9ad4`,
+  or returning activation state 3 from `-[SBLockdownManager lockdownState]`
+  (`0x6d450`) on top, does not reveal icons (168–180 s screenshots).
+- **[V]** Extending the shipped ARM trampoline to send
+  `[window bringSubviewToFront:contentView]` after `restoreIconList:` gives
+  784 dyld lines (8 restarts) in 200 s: rejected. Calling
+  `[self hideSimulatedScreenBlank]` from the same hook, or no-oping
+  `showSimulatedScreenBlank` (`0x7988`), is either unchanged or unstable
+  (588 dyld lines). Skipping *both* `frontLocked:` call sites
+  (`0x9aae` and `SBUIController wakeUp:`'s branch at `0x9fe8`) is stable
+  (98 dyld lines) but the Apple/progress frame remains: a third layer shows
+  it. No scratch overlay is in the tree.
+- **[G]** The away/reset view and the boot blanking window are two separate
+  layers above the icon content view. A future fix needs to remove both from
+  the window stack (or find the notification that dismisses them) before the
+  restored icon list can be seen. The framebuffer path needs no changes.
+
+### Shipped: a reusable surface dump tool
+
+- **[V]** `emu/surfaces.py` boots any SD image headlessly, takes an LCD
+  screenshot and uses QMP `pmemsave` to copy the fake CLCD page and `/vram`,
+  prints `on/base/stride/width×height` from the register page and renders
+  each 320x480 BGRA slot of `/vram` as an upright PNG under `build/`. It is
+  version-independent, changes no guest bytes and leaves the 4.2.1 boot files
+  untouched.
+
+### Verification of this round's tree
+
+- **[V]** `make test`: all 94 offline tests plus the host harnesses, stub
+  symbol check, conflict-marker checks and `test_blkcache` pass.
+- **[V]** `emu/surfaces.py` smoke run on a 3.1.3 image (8 s, `--icount 2`)
+  printed the CLCD geometry and wrote a screenshot plus the five /vram slot
+  PNGs under `build/`; the tool changes no guest bytes.
+- **[V]** Fresh default build (`make userland`, `rm -f build/sd.img`,
+  `make sdimg`) reproduced the six 4.2.1 boot hashes from §123 exactly:
+  `kernel 505f451a…`, `devtree 25b1bd23…`, `fakeio e5fecd66…`,
+  `shim e0609de9…`, `gpu 7e696f65…`, `boot.cfg 8d4079cf…`.
+- **[V]** Exact fresh-image sequence
+  `rm -f build/sd.img && make sdimg && python3 emu/soak.py --cycles 5 --icount 2`
+  → **Result: PASS** (SpringBoard + input after 70 s, home reference after
+  140 s with stddev 53.6, five app/home cycles, no "not home after Home",
+  zero panic/stall/md0/log/crash/watchdog/GPU failures).
+- **[V]** Exact documented 4.1 sequence after staging 8B117
+  (`sha1 97abde62…` verified): `rm -f build/sd.img && make sdimg IOS=4.1 &&
+  python3 emu/soak.py --cycles 5 --icount 2` → **Result: PASS** (SpringBoard +
+  input after 60 s, home reference after 130 s with stddev 53.3, five cycles,
+  no "not home after Home", zero failures).
+- **[V]** No 3.1.3/2.2.1 soak PASS is claimed: neither version reaches a home
+  screen yet. 3.1.3 is stable for 300 s with one dyld pass but keeps the
+  Apple/progress frame; the seven scratch patches above were all reverted.
