@@ -5557,26 +5557,26 @@ worktree into this worktree's `build/fw-3.1.3`; 2.2.1 was staged by copying
 
   | image | command | boot | cycles / home | result |
   |---|---|---|---|---|
-  | 3.1.3 default | `emu/soak.py --cycles 5 --require-app --crashlogs --targets "47,314;123,226;199,226;275,226;123,50"` | 50 s | 5 apps opened, app diffs 84.8–164.2, home diff 0.0–0.04, **no Home recovery**, 0 restarts | **PASS** |
-  | 3.1.3 opt-in GPU | same | 40 s | 5 apps opened, app diffs 84.8–164.1, home diff 0.0–0.04 except cycle 1 (51.9, fixed by the harness's page-swipe + Home), 0 restarts | **PASS** |
-  | 2.2.1 | same with targets `"275,226;199,226;123,226;47,226;275,50"` | 50 s | 5 apps opened, app diffs 84.4–173.6, home diff 0.0–0.04, no recovery, 0 restarts | **PASS** |
-  | 4.2.1 | `emu/soak.py --cycles 5` | 80 s | 5 apps opened, home diff 0.0–14.6 (one host-dependent second Home in cycle 1), 0 restarts | **PASS** |
+  | 3.1.3 default | `emu/soak.py --cycles 5 --require-app --crashlogs --targets "47,314;123,226;199,226;275,226;123,50"` | 40 s | 5 apps opened, app diffs 84.8–164.2, home diff 0.03–0.04, **no Home recovery**, 0 restarts | **PASS** |
+  | 3.1.3 opt-in GPU | same | 50 s | 5 apps opened, app diffs 84.8–164.1, home diff 0.04 except cycles 1 and 3 (60.9 / 60.2, recovered by second Home / page swipe + Home), 0 restarts | **PASS** |
+  | 2.2.1 | same with targets `"275,226;199,226;123,226;47,226;275,50"` | 60 s | 5 apps opened, app diffs 84.4–173.6, home diff 0.0–0.04, no recovery, 0 restarts | **PASS** |
+  | 4.2.1 | `emu/soak.py --cycles 5` | 70 s | 5 apps opened, home diff 0.0–0.02, no recovery, 0 restarts | **PASS** |
 
   The GPU image's `boot.cfg` has `gpu_mirror=1` and the generated recipe has
   `CA_ENABLE_OGL=1`; the default 3.1.3 image has `gpu_mirror=0` and
-  `CA_ENABLE_OGL=0`. All five taps opened an app in every run. The one GPU
-  recovery shows that (a) is **not fully eliminated** by the CLCD-PA fix under
+  `CA_ENABLE_OGL=0`. All five taps opened an app in every run. The two GPU
+  recoveries show that (a) is **not fully eliminated** by the CLCD-PA fix under
   a loaded host, which is a second reason (besides (b)) to keep that path off
   by default. The diagnostic run used for the swap counts above was stopped
   after its first cycle; its image was discarded and rebuilt fresh for the
   final soaks.
-- **[V]** After rebasing onto `origin/main` 1add5cf (old-version lock/wake
-  and battery work), `make test` passes, the six 4.2.1 hashes above are still
-  identical, and all four fresh-image soaks were re-run on the rebased tree
-  with the numbers in the table above. A `git archive origin/main` check was
-  not possible for the host PICA mirror build without a full source-tree
-  userland; instead the committed 4.2.1 values are compared byte for byte to
-  the hashes recorded by main's own re-log 132.
+- **[V]** After rebasing onto the final `origin/main` 1e8c2ea (old-version
+  power, Wi-Fi and audio work), `make test` passes, the six 4.2.1 hashes above
+  are still identical, and all four fresh-image soaks were re-run on that
+  exact tree with the numbers in the table above. A `git archive origin/main`
+  check was not possible for the host PICA mirror build without a full
+  source-tree userland; instead the committed 4.2.1 values are compared byte
+  for byte to the hashes recorded by main's own re-log 132.
 
 ### Needs hardware
 
