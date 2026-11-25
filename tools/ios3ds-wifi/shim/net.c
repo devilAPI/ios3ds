@@ -67,6 +67,11 @@ _Static_assert(sizeof(struct sysctl_oid) == 36, "xnu-1504 arm sysctl_oid");
 #define sysctl_handle_opaque  KPI(IOS3DS_KPI_SYSCTL_HANDLE_OPAQUE, int, struct sysctl_oid *, void *, int, void *)
 #define SYSCTL_KERN_CHILDREN  ((void *)IOS3DS_KPI_SYSCTL__KERN_CHILDREN)
 
+/* NET_VA is 4.2.1's mapping (virt base 0x80000000); Darwin 9/10 (2.2.1, 3.1.3)
+   map physical 0x20000000 at 0xC0000000, so take the base from kpi.h. For
+   4.2.1 this is NET_VA exactly. */
+#undef NET_VA
+#define NET_VA (IOS3DS_KPI_VIRT_BASE + (NET_PA - 0x20000000u))
 #define NETMBOX ((volatile netmbox_t *)NET_VA)
 #define NETIO   ((netio_t *)(NET_VA + NET_IO_OFF))
 

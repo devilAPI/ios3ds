@@ -338,10 +338,15 @@ static int a80211_get(struct apple80211req *r)
     if (wlan_read() != 0) return fail(6 /* ENXIO */);
     switch (t) {
     case 12:                        /* CARD_CAPABILITIES: bitmap (len 4), anything (len 100) */
-        if (!d || len < 4) return fail(22);
+        if (!d || !len) return fail(22);
         memset(d, 0, len);
-        /* TKIP (1), AES-CCM (3), WPA2 (14): what the ARM9 supplicant does */
-        *(uint32_t *)d = 1u << 1 | 1u << 3 | 1u << 14;
+        /* TKIP (1), AES-CCM (3), WPA2 (14): what the ARM9 supplicant does.
+           3.1.3's WiFiManager and IPConfiguration also ask with len 3 (the
+           bitmap as bytes), so write it bytewise. */
+        {
+            uint32_t caps = 1u << 1 | 1u << 3 | 1u << 14;
+            for (uint32_t i = 0; i < len && i < 4; i++) d[i] = (uint8_t)(caps >> (8 * i));
+        }
         return 0;
     case 19:                        /* POWER {version, num_radios, state[4]} */
         if (!d || len < 12) return fail(22);

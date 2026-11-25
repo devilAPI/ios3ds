@@ -37,7 +37,13 @@
   }
  },
  "plist_merge": {
-  "_replace": true
+  "_replace": true,
+  "/System/Library/LaunchDaemons/com.apple.configd.plist": {
+   "EnvironmentVariables": {
+    "DYLD_INSERT_LIBRARIES": "/usr/lib/ios3ds-a80211.dylib",
+    "IOS3DS_WIFI_LOG": "2"
+   }
+  }
  },
  "add": {
   "_replace": true,
@@ -45,6 +51,10 @@
   "build/rootfs-add/ios3/ios3ds-input": "/usr/libexec/ios3ds-input",
   "tools/ios3ds-input/daemon/com.ios3ds.input.plist": "/System/Library/LaunchDaemons/com.ios3ds.input.plist",
   "build/rootfs-add/ios3/ios3ds-mcud": "/usr/libexec/ios3ds-mcud",
+  "build/rootfs-add/usr/libexec/ios3ds-wifid": "/usr/libexec/ios3ds-wifid",
+  "build/rootfs-add/usr/libexec/ios3ds-nettest": "/usr/libexec/ios3ds-nettest",
+  "build/rootfs-add/usr/lib/ios3ds-a80211.dylib": "/usr/lib/ios3ds-a80211.dylib",
+  "tools/ios3ds-wifi/daemon/com.ios3ds.wifi.plist": "/System/Library/LaunchDaemons/com.ios3ds.wifi.plist",
   "tools/ios3ds-mcu/daemon/com.ios3ds.mcud.plist": "/System/Library/LaunchDaemons/com.ios3ds.mcud.plist",
   "build/rootfs-add/ios3/ios3ds-tone": "/usr/libexec/ios3ds-tone"
  },
@@ -54,6 +64,10 @@
   "/usr/libexec/ios3ds-input": "0755",
   "/System/Library/LaunchDaemons/com.ios3ds.input.plist": "0644",
   "/usr/libexec/ios3ds-mcud": "0755",
+  "/usr/libexec/ios3ds-wifid": "0755",
+  "/usr/libexec/ios3ds-nettest": "0755",
+  "/usr/lib/ios3ds-a80211.dylib": "0755",
+  "/System/Library/LaunchDaemons/com.ios3ds.wifi.plist": "0644",
   "/System/Library/LaunchDaemons/com.ios3ds.mcud.plist": "0644",
   "/usr/libexec/ios3ds-tone": "0755"
  },
@@ -61,7 +75,7 @@
   "_replace": true
  },
  "file_patches": [],
- "disable_daemons": [],
+ "disable_daemons": ["com.apple.wifiFirmwareLoader.plist"],
  "_todo": "Relocate 8C148 dyld-cache patches by image symbol for 7E18 (liblockdown activation, MBX2D strings), then build a version-tagged userland subset: 3.x has IOSurface/CoreMotion selectors that moved, but it does have a dyld cache and enable-dylibs-to-override-cache.",
  "extra_file_patches": [
   {
