@@ -124,7 +124,7 @@ static const struct { uint16_t btn, usage; } keymap[] = {
 #ifndef INPUT_IOS3
     /* iOS 3.x/2.x: no Lock button. Their SpringBoard turns the screen off on
        kGSEventLockButtonDown but no event from here wakes it again (Home
-       after Lock leaves the CLCD off, re-log NEXT), so locking is disabled
+       after Lock leaves the CLCD off, re-log 128), so locking is disabled
        there and SBAutoLockTime is -1 in the overlays. */
     { PAD_SELECT, kHIDUsage_Csmr_Power },
     { INBTN_POWER, kHIDUsage_Csmr_Power },
@@ -251,7 +251,7 @@ typedef struct {
 /* 5H11a GraphicsServices: no context word, so the record is 48 bytes:
    timestamp at +0x18 (GSEventGetTimestamp), infoSize at +0x2c (_GSSendEvent
    sizes the message as infoSize + 0x30 + 24), hand info at +0x30
-   (GSEventGetHandInfo), path infos at +0x54 (re-log NEXT). */
+   (GSEventGetHandInfo), path infos at +0x54 (re-log 128). */
 _Static_assert(sizeof(gsrec_t) == 48, "GSEventRecord (iOS 2)");
 #define GSREC_SIZE 48
 #else

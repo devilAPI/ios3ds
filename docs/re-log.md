@@ -4598,7 +4598,7 @@ claim below is tagged [V] (verified on the host model / QEMU) or [G]
    `[gl] CA stereo3D`, `[gl] CA: ... CPU read-backs` (must be ~0.1/frame),
    `GPU present check passed`, `[gpu] mirror:` (busy skips, idle VBlanks),
    any `switch FAILED`/`no shim`.
-## NEXT. 3.1.3 composites every frame: the frozen picture was the GPU mirror, not CoreAnimation (2026-11-25)
+## 128. 3.1.3 composites every frame: the frozen picture was the GPU mirror, not CoreAnimation (2026-11-25)
 
 Continues §125. Firmware staged from the earlier worktrees into this
 worktree's `build/fw-{3.1.3,2.2.1,4.1}/` (Apple files stay under `build/`).
@@ -4662,7 +4662,7 @@ worktree's `build/fw-{3.1.3,2.2.1,4.1}/` (Apple files stay under `build/`).
   round and landed on Spotlight's search page (also a rendered, non-home
   frame, left with Home).
 
-## NEXT. 2.2.1 reaches its home screen, opens apps and passes a soak (2026-11-25)
+## 129. 2.2.1 reaches its home screen, opens apps and passes a soak (2026-11-25)
 
 Fresh `build/sd221.img` images (`scripts/mksd.py --ios 2.2.1`) traced with
 hardware breakpoints on QEMU's gdbstub (private port); `exception_triage`

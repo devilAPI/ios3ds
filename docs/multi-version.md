@@ -811,7 +811,7 @@ here produce the same bytes.)
 |---|---|---|
 | 4.2.1 (8C148) | home screen, apps, input, Cydia/TLSFix | **PASS** (5 cycles) |
 | 4.1 (8B117) | home screen with stock icons; Cydia/TLSFix disabled | **PASS** (earlier round; not re-run) |
-| 3.1.3 (7E18) | **home screen, apps open and render, clock runs, taps and buttons.** DataMigrator skipped (`SBLastSystemVersion`), shim `mrs sp,spsr` IRQ replay, 822-slot GL dispatch, GSEvent input daemon; CoreAnimation composites in software and the ARM9 copies the screen (`gpu_mirror=0`, re-log NEXT) | **PASS**, 10 cycles with `--require-app` (every tap opened an app) |
+| 3.1.3 (7E18) | **home screen, apps open and render, clock runs, taps and buttons.** DataMigrator skipped (`SBLastSystemVersion`), shim `mrs sp,spsr` IRQ replay, 822-slot GL dispatch, GSEvent input daemon; CoreAnimation composites in software and the ARM9 copies the screen (`gpu_mirror=0`, re-log 128) | **PASS**, 10 cycles with `--require-app` (every tap opened an app) |
 | 2.2.1 (5H11a) | **home screen, apps open and render, taps and buttons.** Kernel `cs-invalid-page-allow`, fixed liblockdown stubs, `CA_ENABLE_MBX2D=0`, 2.x tool ABI (classic binding, r9, 48-byte GSEvents) | **PASS**, 10 cycles with `--require-app` |
 
 Driver matrix (QEMU-verified unless marked [G]; "off" = cleanly not installed
@@ -828,7 +828,7 @@ or not registered, with the reason):
 | Lock / auto-lock | off: SpringBoard turns the screen off on Lock, but Home never wakes it (CLCD stays off); the 3.x/2.x input daemon sends no Lock event and `SBAutoLockTime = -1` | off: same |
 | Brightness | off: no IOHIDEventSystemClient properties to read on 3.x; LCD stays at Luma's level | off: same |
 | Accelerometer / gyro | off: needs IOHIDEventSystemClient (4.x) / CoreMotion (4.x); iPod2,1 3.x has no gyro API | off: same |
-| Audio | off: kernel bridge loads, but DMA start stays "device is not ready"; relocating 4.2.1's `i2s-start-no-lrck-sync` hangs both kernels before root mount (re-log NEXT) | off: same |
+| Audio | off: kernel bridge loads, but DMA start stays "device is not ready"; relocating 4.2.1's `i2s-start-no-lrck-sync` hangs both kernels before root mount (re-log 128) | off: same |
 | Wi-Fi (`ios3ds-wifid`/a80211) | off: built against 4.2.1 private Apple80211/IOKit APIs | off: same |
 | Camera (`vcd`) | off: iPod2,1 has no camera stack before 4.x | off: same |
 | GPS | off: 4.x CoreLocation hooks | off: same |
@@ -837,4 +837,4 @@ or not registered, with the reason):
 The 4.2.1 and 4.1 builds are unchanged by all of this: every older-version
 switch is either in `rootfs/overlay-*.json`, `kernel/patchsets/*.json`, or a
 `versions.py` flag that only non-default versions set (six 4.2.1 hashes
-re-checked, re-log NEXT).
+re-checked, re-log 128).

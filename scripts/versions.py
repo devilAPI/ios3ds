@@ -38,7 +38,7 @@ VERSIONS = {
               # no GL engine on 2.x: CoreAnimation composites in software and
               # nothing marks a new frame for the PICA200 mirror (see 3.1.3)
               "boot_cfg": {"gpu_mirror": ("0", "CoreAnimation composites in software (no GL "
-                                          "engine on 2.x): the ARM9 copies the screen, re-log NEXT")},
+                                          "engine on 2.x): the ARM9 copies the screen, re-log 128")},
               "patch_set": "kernel/patchsets/2.2.1.json", "overlay": "rootfs/overlay-2.2.1.json",
               "status": "experimental: Darwin 9, no dyld cache; see docs/multi-version.md"},
     "3.0": {"build": "7A341", "ipsw": "iPod2,1_3.0_7A341_Restore.ipsw", "sha1": None,
@@ -67,7 +67,7 @@ VERSIONS = {
               # freeze the first frame. The ARM9 copies every frame instead.
               "boot_cfg": {"gpu_mirror": ("0", "CoreAnimation composites in software (no GL "
                                           "present marks a new frame): the ARM9 copies the "
-                                          "screen, re-log NEXT")},
+                                          "screen, re-log 128")},
               "patch_set": "kernel/patchsets/3.1.3.json", "overlay": "rootfs/overlay-3.1.3.json",
               "status": "experimental: Darwin 10.0, archived IPSW; see docs/multi-version.md"},
     "4.0": {"build": "8A293", "ipsw": "iPod2,1_4.0_8A293_Restore.ipsw",

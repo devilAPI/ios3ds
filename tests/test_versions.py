@@ -128,7 +128,7 @@ class TestVersions(unittest.TestCase):
                                       "0x30f4", "0x3144", "0x2c60"])
                     self.assertTrue(all(fp["path"] == "/usr/lib/liblockdown.dylib"
                                         for fp in recipe["file_patches"]))
-                    # lockdown_copy_value's table literal is at +0x28 (re-log NEXT)
+                    # lockdown_copy_value's table literal is at +0x28 (re-log 128)
                     self.assertTrue(recipe["file_patches"][1]["new"].startswith("20c09fe5"))
                     self.assertNotIn("resign", recipe)
                     self.assertIn("<key>SBLastSystemVersion</key>\n\t<string>5H11a</string>",

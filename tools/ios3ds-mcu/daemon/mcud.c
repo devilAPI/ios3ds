@@ -81,7 +81,7 @@ int IOPMAssertionCreateWithName(CFStringRef type, uint32_t level, CFStringRef na
    client: no brightness properties to read and no accelerometer events to
    send. Battery (the sysctl read refreshes the shim's IOPMPowerSource), the
    volume slider (Celestial's AVSystemController) and the no-sleep assertion
-   still work (re-log NEXT). */
+   still work (re-log 128). */
 #define IOHIDEventSystemClientCreate(a) ((IOHIDEventSystemClientRef)0)
 #define IOHIDEventSystemClientCopyProperty(c, k) ((void)(c), (void)(k), (CFTypeRef)0)
 #define IOHIDEventSystemClientDispatchEvent(c, e) ((void)(c), (void)(e))
