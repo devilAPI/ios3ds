@@ -4967,3 +4967,7 @@ backlight log/retry patches (above).
   --require-app --crashlogs --targets "47,314;123,226;199,226;275,226;123,50"`
   -> **Result: PASS** (input after 50 s, five apps opened, 0 restarts, no
   crash reports; the audio DMA lines are the known stock state).
+- **[V]** Fresh 4.2.1 image, `emu/soak.py --cycles 5 --icount 2` -> **Result:
+  PASS** (input after 90 s, five apps opened, 0 restarts).
+- 2.2.1 was not re-soaked: its effective recipe is unchanged (`cydia: false`;
+  `cydia_pseudo` and the cydia.py parser only run with Cydia enabled).
