@@ -4904,8 +4904,9 @@ Closes the 4.1 (8B117) open items of re-log 101/111 (docs/multi-version.md
   0x305708c4 (file offset 0x5708c4) that sets the file's `.cbk` path and
   checksum flag for names in AOU243378_5's signed set -> `nop`, so every
   library file opens as a plain sqlite file (same effect as the 8C148 patch).
-- **[G] not mine, reported:** VirtualAudio N72->N81 routing (audio owner) and
-  the CoreMotion gyro capability mask (sensors owner) remain unported.
+- VirtualAudio N72->N81 routing: ported by the audio round (re-log 130).
+  **[G] not mine, reported:** the CoreMotion gyro capability mask (sensors
+  owner) remains unported.
 
 ### Cydia/TLSFix on 4.1, and the hfsplus date bug
 
@@ -4951,8 +4952,8 @@ Closes the 4.1 (8B117) open items of re-log 101/111 (docs/multi-version.md
 Touch/buttons, display, GPU (PICA200 arena ready), volume slider, no-sleep,
 battery (IOPMPowerSource registered), mcud brightness path, Wi-Fi (cydia_perf
 associated and fetched), Music library all as on 4.2.1. Gaps to the other
-owners: gyro kernel/CoreMotion patches, VirtualAudio mic routing, CLCD
-backlight log/retry patches (above).
+owners: gyro kernel/CoreMotion patches, CLCD
+backlight log/retry patches (above); mic routing landed with re-log 130.
 
 ### Results
 
