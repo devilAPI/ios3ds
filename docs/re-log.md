@@ -3902,7 +3902,7 @@ traces stay under `build/`.
   builds cleanly and reaches CA display setup, but the screen still shows
   the boot spinner; a five-cycle home-screen soak cannot pass yet.
 
-## NEXT. 3.1.3: make the main UIWindow key, and where the home view still stops (2026-11-25)
+## 121. 3.1.3: make the main UIWindow key, and where the home view still stops (2026-11-25)
 
 Continues §120. Both archived IPSWs were fetched again into this worktree's
 `build/fw-*/` (sha1 `5f4f5c01…` / `9af5625e…` verified by `fwprep.py`); all
