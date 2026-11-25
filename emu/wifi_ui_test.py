@@ -92,7 +92,17 @@ def main():
     ap.add_argument("--psk", default=PSK,
                     help="access point passphrase typed in Settings (letters only avoids the "
                          "123 keyboard page, whose layout differs between iOS versions)")
+    ap.add_argument("--wifi-row", default="%d,%d" % WIFI_ROW,
+                    help="x,y of the Wi-Fi row in Settings (3.1.3: 160,96, the first row)")
+    ap.add_argument("--net-row", default="%d,%d" % NET_ROW, help="x,y of the second listed network")
+    ap.add_argument("--join-key", default="%d,%d" % JOIN_KEY, help="x,y of the keyboard's Join key")
+    ap.add_argument("--key-pause", type=float, default=0,
+                    help="type one key at a time with this pause (s): 3.1.3's software "
+                         "compositor drops keys typed at the default pace")
     a = ap.parse_args()
+    wifi_row = a.wifi_row.split(",")
+    net_row = a.net_row.split(",")
+    join_key = a.join_key.split(",")
     os.makedirs(a.out, exist_ok=True)
     tmp = tempfile.mkdtemp(prefix="ios3ds-wifi-ui-")
     cfg_saved = os.path.join(tmp, "boot.cfg")
@@ -159,7 +169,7 @@ def main():
                     break
                 prev = img
             time.sleep(15)                          # the launch image is stable too
-            sess("tap", *map(str, WIFI_ROW))
+            sess("tap", *wifi_row)
             t1 = time.time()
             while time.time() - t1 < 45:
                 time.sleep(3)
@@ -178,11 +188,16 @@ def main():
         check("scan lists 3 networks", m and int(m[-1]) >= 3, "(%s)" % (m[-1] if m else "none"))
         # join with the on-screen keyboard
         n_assoc = len(re.findall(r"association (done|failed)", text))
-        sess("tap", *map(str, NET_ROW))
+        sess("tap", *net_row)
         time.sleep(15)
         shot(a.out, "04-password-prompt")
         first = True
-        for chunk in re.findall(r"[a-z]+|[^a-z]+", a.psk):
+        chunks = list(a.psk) if a.key_pause else re.findall(r"[a-z]+|[^a-z]+", a.psk)
+        for chunk in chunks:
+            if a.key_pause and not first:
+                sess("type", chunk)
+                time.sleep(a.key_pause)
+                continue
             if first:
                 sess("type", chunk, "--page", "abc")
                 first = False
@@ -191,7 +206,7 @@ def main():
             time.sleep(4)
         time.sleep(6)
         shot(a.out, "05-password-typed")
-        sess("tap", *map(str, JOIN_KEY))
+        sess("tap", *join_key)
         t1 = time.time()
         res = None
         while time.time() - t1 < 90 and res is None:

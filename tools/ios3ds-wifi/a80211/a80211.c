@@ -134,6 +134,12 @@ CFMutableDictionaryRef IOBSDNameMatching(mach_port_t, uint32_t, const char *);
 kern_return_t IOObjectRelease(io_object_t);
 char *getenv(const char *);
 #define kCFStringEncodingUTF8 0x08000100u
+typedef const struct __CFURL *CFURLRef;
+typedef struct __CFReadStream *CFReadStreamRef;
+typedef struct __CFWriteStream *CFWriteStreamRef;
+CFReadStreamRef CFReadStreamCreateWithFile(CFAllocatorRef, CFURLRef);
+Boolean CFURLGetFileSystemRepresentation(CFURLRef, Boolean, uint8_t *, long);
+void CFStreamCreatePairWithSocket(CFAllocatorRef, int, CFReadStreamRef *, CFWriteStreamRef *);
 
 /* ---- logging ------------------------------------------------------------------ */
 static void say(const char *fmt, ...)
@@ -227,8 +233,24 @@ static int ev_wr[EV_MAX];
 static uint32_t ev_id;
 enum { EV_POWER = 1, EV_SSID = 2, EV_BSSID = 3, EV_LINK = 4, EV_ASSOC_DONE = 9, EV_SCAN_DONE = 10 };
 
+/* iOS 3.x's Apple80211 has no PF_SYSTEM socket: Apple80211EventMonitoringInit
+   asks the driver for a device name (GET 23), opens "/dev/<name>" with
+   CFReadStreamCreateWithFile and reads one record per callback,
+   {u32 event, u32 payload length, payload}; a read that does not return
+   exactly 8 + length bytes is dropped. WiFiManager's CFReadStreamCreateWithFile
+   for our name is answered with the read end of a datagram socketpair, so each
+   record arrives as one read. */
+#define EV3_NAME "ios3ds-a80211ev"
+static int ev3_wr[EV_MAX];
+
 static void post_event(uint32_t code)
 {
+    uint32_t r3[2] = { code, 0 };
+    for (int i = 0; i < EV_MAX; i++)
+        if (ev3_wr[i] > 0 && send(ev3_wr[i], r3, sizeof r3, 0) < 0 && errno != 35 /* EAGAIN */) {
+            close(ev3_wr[i]);
+            ev3_wr[i] = 0;
+        }
     uint32_t m[10];
     memset(m, 0, sizeof m);
     m[0] = 40; m[1] = 1; m[2] = 6; m[3] = 1; m[4] = ++ev_id; m[5] = code;
@@ -279,9 +301,13 @@ static uint32_t chan_of(uint32_t mhz)
 /* struct scan_result (0x8C, WiFiManager's parser at 0x23628) from one BSS */
 static void fill_result(uint8_t *r, uint32_t cap, const wlan_bss_t *b)
 {
-    uint8_t *ie = *(uint8_t **)(r + 0x88);
-    uint16_t ie_cap = *(uint16_t *)(r + 0x86);
-    memset(r, 0, 0x88);
+    /* iOS 4: 140 bytes, u16 IE length at 0x86, IE pointer at 0x88.
+       iOS 3.x: 144 bytes, u16 IE length at 0x88, IE pointer at 0x8C
+       (3.1.3 WiFiManager+1f174); the fields before 0x86 are the same. */
+    uint32_t len_off = cap >= 0x90 ? 0x88 : 0x86, ptr_off = cap >= 0x90 ? 0x8C : 0x88;
+    uint8_t *ie = *(uint8_t **)(r + ptr_off);
+    uint16_t ie_cap = *(uint16_t *)(r + len_off);
+    memset(r, 0, ptr_off);
     *(uint32_t *)(r + 0x04) = 1;
     *(uint32_t *)(r + 0x08) = chan_of(b->channel_mhz);
     *(uint32_t *)(r + 0x0C) = 2 | 8;                /* 2.4 GHz, 20 MHz */
@@ -296,7 +322,7 @@ static void fill_result(uint8_t *r, uint32_t cap, const wlan_bss_t *b)
     r[0x5C] = b->ssid_len;
     memcpy(r + 0x5D, b->ssid, b->ssid_len);
     uint16_t n = b->ie_len;
-    if (cap < 0x8C || !ie) n = 0;
+    if (cap < ptr_off + 4 || !ie) n = 0;
     if (n > ie_cap) n = ie_cap;
     /* WiFiManager on iOS 4 cannot handle the SAE AKM in a WPA2+WPA3 RSN IE;
        show it a WPA2-only view. The ARM9 still sees the original IE and
@@ -305,7 +331,7 @@ static void fill_result(uint8_t *r, uint32_t cap, const wlan_bss_t *b)
         memcpy(ie, b->ie, n);
         n = (uint16_t)wlan_ie_wpa2_view(ie, n);
     }
-    *(uint16_t *)(r + 0x86) = n;
+    *(uint16_t *)(r + len_off) = n;
 }
 
 static const wlan_bss_t *current_bss(void)
@@ -438,6 +464,10 @@ static int a80211_get(struct apple80211req *r)
         if (!up() || !d || len < 0x8C) return fail(6);
         fill_result(d, len, current_bss());
         return 0;
+    case 23:                        /* 3.x: event device name, opened as /dev/<name> */
+        if (!d || len < sizeof EV3_NAME) return fail(22);
+        memcpy(d, EV3_NAME, sizeof EV3_NAME);
+        return 0;
     case 204:                       /* RSSI bounds {version, min, max, threshold} */
         if (!d || len < 16) return fail(22);
         ((int32_t *)d)[0] = 1; ((int32_t *)d)[1] = -95; ((int32_t *)d)[2] = -30; ((int32_t *)d)[3] = -85;
@@ -453,6 +483,8 @@ static int a80211_set(struct apple80211req *r)
     memset(&c, 0, sizeof c);
     if (wlan_read() != 0) return fail(6);
     switch (r->req_type) {
+    case 66:                        /* 3.x: event mask for the event device: all welcome */
+        return 0;
     case 10:                        /* SCAN_REQ */
         if (!power || io.st.state == WLAN_ST_OFF) return fail(6);
         if (io.st.state == WLAN_ST_STARTING) return fail(16);   /* client retries EBUSY */
@@ -856,6 +888,29 @@ static CFTypeRef my_SCPreferencesGetValue(SCPreferencesRef p, CFStringRef key)
     return SCPreferencesGetValue(p, key);
 }
 
+static CFReadStreamRef my_CFReadStreamCreateWithFile(CFAllocatorRef a, CFURLRef url)
+{
+    uint8_t path[256];
+    if (url && CFURLGetFileSystemRepresentation(url, 1, path, sizeof path) &&
+        !strcmp((char *)path, "/dev/" EV3_NAME)) {
+        int sv[2];
+        CFReadStreamRef rs = NULL;
+        if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) != 0) return NULL;
+        CFStreamCreatePairWithSocket(a, sv[0], &rs, NULL);
+        if (!rs) { close(sv[0]); close(sv[1]); return NULL; }
+        fcntl(sv[1], 4 /* F_SETFL */, 4 /* O_NONBLOCK */);
+        pthread_mutex_lock(&lock);
+        int i;
+        for (i = 0; i < EV_MAX && ev3_wr[i] > 0; i++) {}
+        if (i == EV_MAX) { close(ev3_wr[0]); memmove(ev3_wr, ev3_wr + 1, sizeof(ev3_wr) - sizeof(ev3_wr[0])); i = EV_MAX - 1; }
+        ev3_wr[i] = sv[1];
+        pthread_mutex_unlock(&lock);
+        say("[a80211] 3.x event stream opened");
+        return rs;
+    }
+    return CFReadStreamCreateWithFile(a, url);
+}
+
 __attribute__((used, section("__DATA,__interpose"))) static const struct { const void *rep, *orig; } interpose[] = {
     { (const void *)my_ioctl, (const void *)ioctl },
     { (const void *)my_IOServiceMatching, (const void *)IOServiceMatching },
@@ -866,6 +921,7 @@ __attribute__((used, section("__DATA,__interpose"))) static const struct { const
     { (const void *)my_IORegistryEntryCreateCFProperties, (const void *)IORegistryEntryCreateCFProperties },
     { (const void *)my_IORegistryEntrySetCFProperty, (const void *)IORegistryEntrySetCFProperty },
     { (const void *)my_SCPreferencesGetValue, (const void *)SCPreferencesGetValue },
+    { (const void *)my_CFReadStreamCreateWithFile, (const void *)CFReadStreamCreateWithFile },
 };
 
 const char *getprogname(void);
