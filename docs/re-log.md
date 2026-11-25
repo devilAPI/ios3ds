@@ -5119,7 +5119,7 @@ Worktree `oldwake`; firmware staged from `compat16` into this worktree's
 - 3.1.3's AppleEmbeddedAudio was not checked for the same unconditional
   store; its battery registration never hit it in any soak.
 
-## NEXT. Wi-Fi on 4.1 and 3.1.3: a shim mailbox address, the 3.x Apple80211 event device and scan-result layout (2026-11-25)
+## 133. Wi-Fi on 4.1 and 3.1.3: a shim mailbox address, the 3.x Apple80211 event device and scan-result layout (2026-11-25)
 
 Before: the driver matrix (docs/multi-version.md §6.9) had Wi-Fi "off: built
 against 4.2.1 private Apple80211/IOKit APIs" on 3.1.3 and 2.2.1; 4.1 was not
