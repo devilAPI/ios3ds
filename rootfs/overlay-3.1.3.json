@@ -129,6 +129,14 @@
    "new": "0240a0e3",
    "why": "7E18 QuartzCore CA::WindowServer::M2Display::new_server: replace ldr r4,[r5,#0xd0] (display kind from the M2CLCD display) with mov r4,#2, forcing the EAGLServer path. On the 3DS the kind is neither 1 (MBXServer) nor 2 (EAGLServer), so new_server fell through to the plain Server constructor and no render server/display context was created. With this patch GDB hits EAGLServer::EAGLServer (0x31bda5a0) and CAWindowServer::Server::Server (0x31bdf010); verified original bytes at cache VA 0x31bde74c (re-log 120). 4.x caches and overlays are untouched.",
    "mode": "0644"
+  },
+  {
+   "path": "/System/Library/CoreServices/SpringBoard.app/SpringBoard",
+   "offset": "0xd478",
+   "orig": "509b0e00",
+   "new": "18bd0e00",
+   "why": "7E18 -[SBUIController init] (IMP 0xe141) sends orderFront: to its UIWindow at 0xe344, then sends makeKey: with NO to the status bar window at 0xe374; the main window is never made key, so no CA context/render server starts and the boot spinner stays up (re-log 120). 4.2.1 instead makes the SBUIController window key in init. Repoint the literal pool word at VA 0xe478 (file 0xd478) from the orderFront: selref 0xe9b50 to the makeKeyAndVisible selref 0xebd18, so the existing message send makes the window key+visible. The r2=0 argument that orderFront: used is ignored by makeKeyAndVisible. Verified in QEMU: with this patch the 7E18 CA compositor draws the boot spinner through a real key UIWindow (re-log NEXT); before it the screen stayed black/spinner with no CA render. Original word 0x000e9b50 verified in the 7E18 executable; no 4.x recipe or shim byte changes.",
+   "mode": "0755"
   }
  ]
 }

@@ -3901,3 +3901,105 @@ traces stay under `build/`.
 - **[V]** No 3.1.3/2.2.1 soak PASS is claimed. The shipped 3.1.3 overlay
   builds cleanly and reaches CA display setup, but the screen still shows
   the boot spinner; a five-cycle home-screen soak cannot pass yet.
+
+## NEXT. 3.1.3: make the main UIWindow key, and where the home view still stops (2026-11-25)
+
+Continues §120. Both archived IPSWs were fetched again into this worktree's
+`build/fw-*/` (sha1 `5f4f5c01…` / `9af5625e…` verified by `fwprep.py`); all
+Apple files, images, GDB scripts and scratch patches stay under `build/`.
+Only `rootfs/overlay-3.1.3.json` and this log change in the tree.
+
+### The gate in 7E18 `SBUIController init`
+
+- **[V]** Recovered the real classes/methods from the executable's ObjC
+  metadata (231 classes, 3532 methods) instead of guessing IMPs:
+  `-[SBUIController init]` is Thumb `0xe141`, `finishLaunching` `0xc149`,
+  `animateAppleDown:` `0xbad5`, `-[SpringBoard appleIconViewRemoved]` `0x58bd`,
+  `-[SBUIController restoreIconList:]` `0xc975`. `SBUIController`'s `_window`
+  ivar is at offset 4 (its ivar list at `0xef74c`). The Mach-O is loaded with
+  vmaddr `0x1000` and file offset = VA − `0x1000`; runtime selrefs/sel strings
+  are at the same low VAs (class `SBUIController` `0xe7628`,
+  `sharedInstance` selref `0xea000`, `makeKeyAndVisible` selref `0xebd18`).
+- **[V]** Disassembly of `-[SBUIController init]` shows the 3.x difference
+  from 4.2.1: at `0xe344` it sends `orderFront:` to its UIWindow, then at
+  `0xe374` sends `makeKey:` **with NO** to the *status bar* window. The main
+  window is never made key, so no CA context/render server is created, which
+  matches §120's zero hits on `_CARenderServerStart`/`makeKeyWindow`. The
+  literal pool word at VA `0xe478` (file `0xd478`) is the `orderFront:`
+  selref `0x000e9b50`, verified byte-for-byte in the 7E18 executable.
+- **[V]** Shipped patch: change that single word to the `makeKeyAndVisible`
+  selref `0x000ebd18` (original `509b0e00`, new `18bd0e00`, mode 0755).
+  The existing message send then calls `[SBUIController's window
+  makeKeyAndVisible]`; the leftover `r2=0` argument of `orderFront:` is
+  ignored by the no-argument selector. This is a 4-byte, version-only file
+  patch; no 4.x recipe, patch set, shim or GPU file is touched.
+- **[V]** Fresh 3.1.3 image with this patch (plus §120's patches): CA now
+  draws the boot UI through a real key UIWindow. Two runs at 120/170 s showed
+  the spinner (top-screen mean 0.27) and the Apple logo + progress bar
+  (mean 4.8, a later/restarted SpringBoard state); without the patch the
+  screen stayed black/spinner at 0.12 with no CA drawing. Neither run reached
+  icons. GDB hardware breakpoints on user VAs were not reliable in this
+  harness (kernel breakpoints hit, user ones did not), so the visual check
+  and a shim-memory marker were used for verification.
+
+### Still not the home screen — scratch experiments, all reverted
+
+- **[V]** A Thumb hook at `appleIconViewRemoved` (`0x58bc`) branching to an
+  ARM trampoline in a verified zero gap of SpringBoard `__TEXT` (`0xdb850`,
+  file `0xda850`) wrote `0x5a` to shim PA `0x20845f00`: `xp /4x 0x20845f00`
+  after boot showed `0x5a`, proving the method runs. That trampoline called
+  `[[SBUIController sharedInstance] makeKeyAndVisible]` and the screen stayed
+  on the spinner.
+- **[V]** Extending the same trampoline with `_CARenderServerRegister`
+  (`0x31bae980`), `_CARenderServerStart` (`0x31bae990`) and
+  `[[SBUIController sharedInstance] restoreIconList:YES]` (selref `0xea3b4`)
+  left the spinner unchanged at 120/170 s. Adding `-[SBAwayController
+  isLocked] -> NO` (Thumb IMP `0x1d47d`, file `0x1c47c`, original `034b1b68`)
+  on top changed the picture to the Apple logo + progress bar (mean 4.8),
+  not the icon list. None of these three patches is shipped.
+- **[V]** 2.2.1 scratch: `-[SBTetherController isTethered]` is Thumb `0x9bbe9`
+  (file `0x9abe8`, original `f0b5184e`); patching it to return NO built and
+  booted, but both LCDs stayed on the 3DS boot console through 150 s. The
+  patch was reverted; no 2.x overlay change is shipped this round. Further
+  5H11a anchors for a future attempt: `-[SBUIController init]` `0xe4cd`,
+  `finishLaunching` `0xc129`, `animateAppleDown:` `0xb4c5`,
+  `-[SpringBoard appleIconViewRemoved]` `0x3685`, selrefs `orderFront:`
+  `0xdd57c`, `makeKey:` `0xdd6e4`, `makeKeyAndVisible` `0xdf10c`,
+  `SBUIController` class `0xc63fc`, `_window` ivar offset 4.
+- **[G]** The remaining gate is above window creation: SpringBoard reaches
+  `applicationDidFinishLaunching:`, `finishLaunching`, `animateAppleDown:`
+  and `appleIconViewRemoved`, enumerates `allApplications` and calls
+  `autoLaunchIfNecessaryOnBoot:`, but never executes the method that swaps
+  the boot LCD view for the icon list (§119's `transition:toView:` trace).
+  Finding that call site (or the notification/state it waits for) is the next
+  step before 2.x can reuse this approach. Neither old version can pass a
+  five-cycle home-screen soak while the screen is still the boot spinner.
+
+### Verification of this round's tree
+
+- **[V]** `make test`: all 94 offline tests plus host harnesses and the stub
+  symbol check pass. `tests/test_versions.py` now includes the new 7E18
+  `0xd478` patch in its expected 3.1.3 patch list; no 4.x expectation changed.
+- **[V]** Fresh default build (`make userland`, then
+  `rm -f build/sd.img && make sdimg`) produced the same six 4.2.1 boot-file
+  hashes as §120: `kernel.bin 505f451a…`, `devtree.bin 25b1bd23…`,
+  `fakeio.bin e5fecd66…`, `shim.bin e0609de9…`, `gpu.bin 7e696f65…`,
+  `boot.cfg 8d4079cf…`. The 3.1.3 overlay cannot affect them.
+- **[V]** Exact fresh-image sequence
+  `rm -f build/sd.img && make sdimg && python3 emu/soak.py --cycles 5 --icount 2`
+  → **Result: PASS**: SpringBoard + input after 70 s, warm-up after 130 s,
+  home reference after 140 s (stddev 53.6), five app/home cycles, zero
+  panic/stall/md0/log/crash/watchdog/GPU failures.
+- **[V]** Fresh 3.1.3 build of the shipped overlay
+  (`python3 scripts/mksd.py --image build/sd313-final.img --ios 3.1.3
+  --staging build/fw-3.1.3/staging --no-cydia --no-tlsfix`) succeeds and
+  boots to the CA-drawn boot UI as described above. No 3.1.3/2.2.1 soak PASS
+  is claimed: neither version reaches a home screen yet.
+- **[V]** Exact documented 4.1 sequence, after refetching 8B117
+  (`sha1 97abde620766…` verified by `fwprep.py`):
+  `rm -f build/sd.img && make sdimg IOS=4.1 && python3 emu/soak.py --cycles 5 --icount 2`
+  → **Result: PASS**: SpringBoard + input after 60 s, warm-up after 120 s,
+  home reference after 130 s (stddev 53.3), five cycles, zero failures.
+  Kernel/devtree hashes `e2613577…` / `29ebba25…` match §5.3; `boot.cfg`
+  is `5851eebe…` after the later main-branch boot-option changes (4.1 is not
+  required to be byte-identical).
