@@ -126,7 +126,7 @@ screen as an alert:
 | `headphone` | plug in, a second beep; the iOS route must say `Headphone…` (jack detect) | plug in / unplug |
 | `mic` | 1.5 s recording through AudioQueue; frames and peak must be > 0 | clap or speak |
 | `wifi.join` | en0 gets a DHCP address within 120 s (the saved network was scanned and joined) | – |
-| `wifi.https` | NSData fetch (3 tries, 15 s apart) of `https://example.com/` (or `ios3ds_hwtest_url=` in `cmdline`) with this iOS's own TLS; on 2.x/3.x a failure is SKIP (TLS too old for most servers) | – |
+| `wifi.https` | after the DHCP address, wait for the IPv4 default route, DNS (`getaddrinfo`) and the on-demand `com.apple.securityd` trust port, then one NSData fetch of `https://example.com/` (or `ios3ds_hwtest_url=` in `cmdline`) with this iOS's own TLS; on 2.x/3.x a failure is SKIP (TLS too old for most servers) | – |
 | `touch` | touch ADC running; pen samples in the input ring while you draw | draw on the bottom screen |
 | `buttons` | A B X Y L R and the D-pad seen in the input ring | press them |
 | `volume`, `home` | volume slider range, HOME press counter | move / press |

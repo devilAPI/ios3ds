@@ -249,9 +249,13 @@ def main():
                 if alerts:
                     ok, why = False, "; ".join(alerts)
                     break
-                if url == name:             # a page on the internet (slirp): no alert for 120 s
-                    if time.time() - t1 > 120:
-                        ok, why = True, "(no alert in 120 s)"
+                if url == name:             # a page on the internet (slirp): no local hit to check
+                    # A cold HTTPS page can sit in "Loading" for much longer than
+                    # two minutes on a slow ARM11 (re-log NEXT).  Wait for the
+                    # full page timeout before calling it a pass; the screenshot
+                    # still has to show the page, not Safari's loading bar.
+                    if time.time() - t1 > a.page_timeout:
+                        ok, why = True, "(no alert in %.0f s)" % a.page_timeout
                         break
                 elif urls:                  # a saved page: its HTML, then 60 s without a new request
                     with lock:

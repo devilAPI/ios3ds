@@ -68,6 +68,14 @@ class SafariHarnessTest(unittest.TestCase):
         self.assertNotIn("ios3ds_urlwait=1", offline)
         self.assertIn("ios3ds_urltest=1", offline)
 
+    def test_external_page_waits_full_timeout(self):
+        # An external HTTPS page has no local request to count; a cold 4.1
+        # load can stay in "Loading" for minutes, so the harness must not
+        # call it loaded after a fixed two minutes.
+        src = open(os.path.join(ROOT, "emu", "safari_test.py")).read()
+        self.assertIn("time.time() - t1 > a.page_timeout", src)
+        self.assertNotIn("no alert in 120 s", src)
+
     def test_log_reads_selected_image(self):
         old_sd = safari_test.SD
         safari_test.SD = "build/sd313.img"

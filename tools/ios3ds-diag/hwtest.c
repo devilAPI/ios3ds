@@ -55,6 +55,20 @@ struct sockaddr4 { uint8_t len, family; uint16_t port; uint32_t addr; char zero[
 struct ifaddrs { struct ifaddrs *next; char *name; unsigned flags; struct sockaddr4 *addr; void *mask, *dst, *data; };
 int getifaddrs(struct ifaddrs **);
 void freeifaddrs(struct ifaddrs *);
+struct addrinfo { int ai_flags, ai_family, ai_socktype, ai_protocol; unsigned ai_addrlen;
+                  char *ai_canonname; void *ai_addr; struct addrinfo *ai_next; };
+int getaddrinfo(const char *, const char *, const struct addrinfo *, struct addrinfo **);
+void freeaddrinfo(struct addrinfo *);
+const char *gai_strerror(int);
+#define CTL_NET 4
+#define PF_ROUTE 17
+#define AF_INET 2
+#define NET_RT_DUMP 1
+#define RTF_UP 0x1
+#define RTF_GATEWAY 0x2
+#define RTA_DST 0x1
+#define RTA_GATEWAY 0x2
+#define RTM_HDR 92
 
 /* ---- results ------------------------------------------------------------ */
 enum { PASS, FAIL, SKIP };
@@ -389,6 +403,109 @@ static int en0_addr(char *ip, int n)
     return ok;
 }
 
+/* ---- network readiness before the first HTTPS fetch ---------------------
+ * A DHCP address alone is not enough: configd's IPMonitor installs the default
+ * route and hands the DNS server to mDNSResponder a moment later, and the
+ * on-demand com.apple.securityd (TLS trust) port is only brought up by the
+ * first SecTrustEvaluate.  On 4.1 that startup race made NSData's very first
+ * HTTPS read fail with NSCocoaErrorDomain 256 (no underlying error), while
+ * the same call 15 s later worked (re-log 152/NEXT).  Wait for all three
+ * before the single fetch instead of retrying a failed one.
+ */
+static int default_route(char *gw, int n)
+{
+    int mib[6] = { CTL_NET, PF_ROUTE, 0, AF_INET, NET_RT_DUMP, 0 };
+    size_t len = 0;
+    int found = 0;
+    if (sysctl(mib, 6, 0, &len, 0, 0) || !len) return 0;
+    len += 1024;
+    char *buf = malloc(len);
+    if (!buf) return 0;
+    if (sysctl(mib, 6, buf, &len, 0, 0)) { free(buf); return 0; }
+    for (char *p = buf; p + RTM_HDR <= buf + len; ) {
+        uint16_t mlen = *(uint16_t *)p;
+        if (mlen < RTM_HDR) break;
+        int flags = *(int *)(p + 8), addrs = *(int *)(p + 12);
+        struct sockaddr4 *sa = (struct sockaddr4 *)(p + RTM_HDR), *dst = 0, *gtw = 0;
+        for (int bit = 1; bit <= 0x80 && (char *)sa < p + mlen; bit <<= 1) {
+            if (!(addrs & bit)) continue;
+            if (bit == RTA_DST) dst = sa;
+            if (bit == RTA_GATEWAY) gtw = sa;
+            int l = sa->len ? (sa->len + 3) & ~3 : 4;
+            sa = (struct sockaddr4 *)((char *)sa + l);
+        }
+        if ((flags & RTF_GATEWAY) && (flags & RTF_UP) && dst && dst->family == AF_INET &&
+            dst->addr == 0 && gtw && gtw->family == AF_INET) {
+            uint32_t a = gtw->addr;
+            snprintf(gw, (size_t)n, "%u.%u.%u.%u", a & 255, (a >> 8) & 255, (a >> 16) & 255, a >> 24);
+            found = 1;
+        }
+        p += mlen;
+    }
+    free(buf);
+    return found;
+}
+
+static int resolve_name(const char *host)
+{
+    struct addrinfo hints, *res = 0;
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = 1;
+    int e = getaddrinfo(host, 0, &hints, &res);
+    int ok = !e && res != 0;
+    if (res) freeaddrinfo(res);
+    return ok;
+}
+
+/* SecTrustEvaluate uses securityd's on-demand Mach port.  Looking the port up
+   starts the daemon; wait until it answers so the first TLS handshake does
+   not have to wait for a cold launchd job on the 400 MHz ARM11. */
+static int securityd_ready(void)
+{
+    mach_port_t sp = 0;
+    return bootstrap_look_up(bootstrap_port, "com.apple.securityd", &sp) == 0 && sp != 0;
+}
+
+/* SystemConfiguration's reachability cache is what CFNetwork consults; log
+   it once for a diag=1 hardware log, but do not gate on it (2.x lacks some
+   of these APIs and a stale cache must not block a usable network). */
+static void reachability_log(const char *host)
+{
+    void *sc = dlopen("/System/Library/Frameworks/SystemConfiguration.framework/SystemConfiguration", RTLD_LAZY);
+    if (!sc) return;
+    void *(*create)(void *, const char *) = (void *(*)(void *, const char *))dlsym(sc, "SCNetworkReachabilityCreateWithName");
+    int (*flags)(void *, unsigned *) = (int (*)(void *, unsigned *))dlsym(sc, "SCNetworkReachabilityGetFlags");
+    if (!create || !flags) return;
+    void *r = create(0, host);
+    unsigned f = 0;
+    int ok = r ? flags(r, &f) : 0;
+    out("[hwtest] reachability %s: %s flags 0x%x", host, ok ? "ok" : "failed", f);
+}
+
+static void wait_for_network(const char *host)
+{
+    time_t t0 = time(0);
+    char gw[32] = "";
+    int route = 0, dns = 0, sec = 0, last = -1;
+    for (;;) {
+        route = default_route(gw, sizeof gw);
+        dns = resolve_name(host);
+        sec = securityd_ready();
+        int state = route && dns && sec;
+        if (state != last) {
+            out("[hwtest] net wait: route %s dns %s securityd %s (%ld s)",
+                route ? gw : "none", dns ? "ok" : "no", sec ? "up" : "starting", (long)(time(0) - t0));
+            last = state;
+        }
+        if (state || time(0) - t0 >= 30) break;
+        sleep(1);
+    }
+    out("[hwtest] net ready after %ld s: route %s, dns %s, securityd %s",
+        (long)(time(0) - t0), route ? gw : "none", dns ? "ok" : "no", sec ? "up" : "no");
+    reachability_log(host);
+}
+
 /* HTTPS through Foundation (NSData dataWithContentsOfURL:options:error:):
    the stock TLS stack and trust store of this iOS version */
 static long https_get(const char *url, char *err, int n)
@@ -449,11 +566,13 @@ static void check_wifi(void)
     if (u) while (u[i] && u[i] != ' ' && i < (int)sizeof url - 1) { url[i] = u[i]; i++; }
     url[i] = 0;
     if (!url[0]) snprintf(url, sizeof url, "https://example.com/");
-    long n = -1;
-    for (int tries = 0; tries < 3 && n <= 0; tries++) {   /* DNS/DHCP can still be settling */
-        if (tries) { out("[hwtest] wifi.https: %s, retrying in 15 s", err); sleep(15); }
-        n = https_get(url, err, sizeof err);
-    }
+    char host[160] = "";
+    const char *h = strstr(url, "://");
+    h = h ? h + 3 : url;
+    for (int j = 0; j < (int)sizeof host - 1 && h[j] && h[j] != '/' && h[j] != ':' && h[j] != '?'; j++)
+        host[j] = h[j];
+    wait_for_network(host);
+    long n = https_get(url, err, sizeof err);   /* one fetch, after the stack is ready */
     if (n > 0) result("wifi.https", PASS, "%s: %ld bytes", url, n);
     else if (ios_major < 4) result("wifi.https", SKIP, "%s: %s (iOS %s TLS is too old for most servers)", url, err, ios_name);
     else result("wifi.https", FAIL, "%s: %s", url, err);

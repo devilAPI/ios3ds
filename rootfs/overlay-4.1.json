@@ -5,6 +5,13 @@
   "build/rootfs-add/usr/libexec/ios3ds-input": "build/rootfs-add/ios41/ios3ds-input"
  },
  "tlsfix": true,
+ "plist_set": {
+  "/System/Library/LaunchDaemons/com.apple.securityd.plist": {
+   "OnDemand": false,
+   "RunAtLoad": true
+  }
+ },
+ "_plist_set": "8B117 starts securityd on demand. Its cold launch (with ios3ds-hwaes.dylib) took long enough that the first HTTPS read after Wi-Fi returned NSCocoaErrorDomain 256; Safari's first HTTPS page stayed in Loading. On 4.1 only, start the TLS trust daemon at boot (re-log NEXT).",
  "file_patches_search": true,
  "_new_hex_replace": "relocate the literal CFStrings in liblockdown's activation table: ProductVersion 4.2.1 -> 4.1 (length 5 -> 3, keeping the 160-byte patch), BuildVersion 8C148 -> 8B117 (same length)",
  "new_hex_replace": [

@@ -42,6 +42,20 @@ class TestVersions(unittest.TestCase):
         self.assertEqual(len(pf), 1)
         self.assertTrue(os.path.isfile(pf[0]), pf[0])
 
+    def test_4_1_starts_securityd_at_boot(self):
+        """The TLS trust daemon must not be cold on the first HTTPS fetch."""
+        sec = "/System/Library/LaunchDaemons/com.apple.securityd.plist"
+        with open(os.path.join(ROOT, "rootfs", "recipe.json")) as f:
+            base = json.load(f)
+        self.assertNotIn("OnDemand", base["plist_set"].get(sec, {}))
+        with tempfile.TemporaryDirectory() as td:
+            with open(versions.recipe_path("4.1", td)) as f:
+                recipe = json.load(f)
+        self.assertIs(recipe["plist_set"][sec]["OnDemand"], False)
+        self.assertIs(recipe["plist_set"][sec]["RunAtLoad"], True)
+        # The hwaes interposer in the same plist survives the overlay merge.
+        self.assertIn("DYLD_INSERT_LIBRARIES", recipe["plist_set"][sec]["EnvironmentVariables"])
+
     def test_old_versions_layout(self):
         """3.1.3/2.2.1 caches are linked at 0xC0000000 (not 0x80000000)."""
         for v, build, epoch, irq in (("3.1.3", "7E18", 5, 0xC0068458),

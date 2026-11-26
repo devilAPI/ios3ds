@@ -80,6 +80,21 @@ class HwTest(unittest.TestCase):
         self.assertEqual(hwtest_check.icount_arg(0, None), "")  # control: no camera check
         self.assertEqual(hwtest_check.icount_arg(2, ""), "")    # explicit opt-out
         self.assertEqual(hwtest_check.icount_arg(2, "3"), "3")
+    def test_https_waits_for_the_network(self):
+        # configd's IPMonitor installs the default route and hands the DHCP
+        # DNS server to mDNSResponder after en0 already has an address.  The
+        # HTTPS check must wait for both instead of retrying a failed fetch.
+        src = read("tools/ios3ds-diag/hwtest.c")
+        for s in ("wait_for_network", "default_route", "getaddrinfo",
+                  "bootstrap_look_up", "com.apple.securityd",
+                  "SCNetworkReachabilityCreateWithName", "net ready"):
+            self.assertIn(s, src)
+        self.assertNotIn("retrying in 15 s", src)
+        self.assertNotIn("tries < 3", src)
+        self.assertIn("NET_RT_DUMP", src)
+        doc = read("docs", "real-hardware.md")
+        self.assertIn("default route", doc)
+        self.assertNotIn("3 tries, 15 s apart", doc)
 
 
 if __name__ == "__main__":
