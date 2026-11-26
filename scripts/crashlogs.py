@@ -39,7 +39,7 @@ HFS_PATHS = (
 )
 SUFFIXES = (".plist", ".crash", ".panic")
 # xpwn hfsplus ls: mode uid gid size month day time/year name
-LS_RE = re.compile(r"^(\d{6})\s+(\d+)\s+(\d+)\s+(\d+)\s+\S+\s+\S+\s+(.+?)\s*$")
+LS_RE = re.compile(r"^(\d{6})\s+(\d+)\s+(\d+)\s+(\d+)\s+\S+\s+\S+\s+(?:\d+:\d\d\s+)?(.+?)\s*$")
 
 
 def is_hfs_image(path):

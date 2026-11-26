@@ -16,6 +16,14 @@ GLTEST := $(ADD)/usr/libexec/ios3ds-gltest
 # table); installed only by rootfs/overlay-3.1.3.json
 ENGINE3 := $(ADD)/ios3/MBXGLEngine
 HOSTDIR := $(ROOT)/build/gl-host
+# iPhone OS 2.x (5H11a): no engine bundle; a dylib inserted into SpringBoard
+# interposes QuartzCore's EGL/GL imports (ios2/egl2.c). Installed only by the
+# opt-in 2.2.1 GPU image (IOS3DS_GPU221=1, scripts/versions.py)
+GLES2 := $(ADD)/ios2/ios3ds-gles2.dylib
+GLES2_STUB := $(ROOT)/build/gl-ios2/OpenGLES
+MBX2D_STUB := $(ROOT)/build/gl-ios2/MBX2D
+IOMFB_STUB := $(ROOT)/build/gl-ios2/IOMobileFramebuffer
+GLUE2 := $(ROOT)/tools/common/dyld2_glue.S
 
 CORE  := api.c draw.c raster.c pica_be.c ca.c stereo.c pvrtc.c
 HDRS  := engine.h gl_defs.h gl_slots.h pvrtc.h
@@ -30,7 +38,7 @@ PICA_HOST := $(PICA_SRC) $(PICA)/src/pica_dev_host.c $(PICA)/src/pica_drv.c $(PI
 PICA_HDRS := $(wildcard $(PICA)/include/*.h $(PICA)/src/*.h $(PICA)/sim/*.h)
 CFLAGS := -O2 -Wall -Wextra -Wno-unused-parameter -mfpu=vfp -DGL_PICA -I$(PICA)/include -I$(ROOT)/boot/common
 
-all: $(ENGINE) $(ENGINE3) $(GLTEST)
+all: $(ENGINE) $(ENGINE3) $(GLTEST) $(GLES2)
 
 $(ENGINE): $(CORE) iface.c thunks.S $(HDRS) $(STEREO) $(PICA_IOS) $(PICA_HDRS)
 	mkdir -p $(dir $@)
@@ -41,6 +49,28 @@ $(ENGINE3): $(CORE) iface.c thunks.S $(HDRS) $(STEREO) $(PICA_IOS) $(PICA_HDRS)
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -DGL_IOS3 -bundle -fvisibility=hidden $(CORE) $(PICA_IOS) iface.c thunks.S \
 	    -framework CoreFoundation -o $@
+
+$(GLES2_STUB): ios2/stub_gles.c
+	mkdir -p $(dir $@)
+	$(CC) -O0 -target armv6-apple-ios2.0 -dynamiclib -Wl,-w -install_name /System/Library/Frameworks/OpenGLES.framework/OpenGLES \
+	    -compatibility_version 1.0.0 -current_version 1.0.0 ios2/stub_gles.c -o $@
+
+$(MBX2D_STUB): ios2/stub_mbx2d.c
+	mkdir -p $(dir $@)
+	$(CC) -O0 -target armv6-apple-ios2.0 -dynamiclib -Wl,-w -install_name /System/Library/PrivateFrameworks/MBX2D.framework/MBX2D \
+	    -compatibility_version 1.0.0 -current_version 1.0.0 ios2/stub_mbx2d.c -o $@
+
+$(IOMFB_STUB): ios2/stub_iomfb.c
+	mkdir -p $(dir $@)
+	$(CC) -O0 -target armv6-apple-ios2.0 -dynamiclib -Wl,-w \
+	    -install_name /System/Library/PrivateFrameworks/IOMobileFramebuffer.framework/IOMobileFramebuffer \
+	    -compatibility_version 1.0.0 -current_version 1.0.0 ios2/stub_iomfb.c -o $@
+
+$(GLES2): $(CORE) ios2/egl2.c ios2/udivdi3.c thunks.S $(HDRS) $(STEREO) $(PICA_IOS) $(PICA_HDRS) $(GLUE2) $(GLES2_STUB) $(MBX2D_STUB) $(IOMFB_STUB)
+	mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -DDYLD2_DYLIB -target armv6-apple-ios2.0 -ffixed-r9 -Wl,-w -dynamiclib -fvisibility=hidden \
+	    -install_name /usr/lib/ios3ds-gles2.dylib $(CORE) $(PICA_IOS) ios2/egl2.c ios2/udivdi3.c thunks.S $(GLUE2) \
+	    $(GLES2_STUB) $(MBX2D_STUB) $(IOMFB_STUB) -framework CoreFoundation -o $@
 
 $(GLTEST): test/gltest.c test/glapi.h gl_defs.h
 	mkdir -p $(dir $@)
@@ -78,6 +108,6 @@ slots:
 	python3 genslots.py $(CACHE) -o gl_slots.h
 
 clean:
-	rm -f $(ENGINE) $(ENGINE3) $(GLTEST)
+	rm -f $(ENGINE) $(ENGINE3) $(GLTEST) $(GLES2) $(GLES2_STUB) $(MBX2D_STUB) $(IOMFB_STUB)
 	rm -rf $(HOSTDIR)
 .PHONY: all host-test slots clean

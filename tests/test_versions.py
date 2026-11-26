@@ -107,6 +107,40 @@ class TestVersions(unittest.TestCase):
                 env = recipe["plist_set"][sb]["EnvironmentVariables"]
                 self.assertEqual(env["IOS3DS_CA_SWAP_DIAG"], "1")
 
+    def test_2_2_1_gpu_path_is_opt_in(self):
+        """IOS3DS_GPU221=1 installs the EGL/GL interposer into SpringBoard."""
+        sb = "/System/Library/LaunchDaemons/com.apple.SpringBoard.plist"
+        lib = "/usr/lib/ios3ds-gles2.dylib"
+        with mock.patch.dict(os.environ, {"IOS3DS_GPU221": ""}):
+            self.assertFalse(versions.gpu221("2.2.1"))
+            self.assertEqual(versions.boot_cfg("2.2.1")["gpu_mirror"][0], "0")
+            with tempfile.TemporaryDirectory() as td:
+                with open(versions.recipe_path("2.2.1", td)) as f:
+                    plain = json.load(f)
+            env = plain["plist_set"][sb]["EnvironmentVariables"]
+            self.assertEqual(env["CA_ENABLE_OGL"], "0")
+            self.assertNotIn("IOS3DS_CA", env)
+            self.assertNotIn(lib, env["DYLD_INSERT_LIBRARIES"])
+            self.assertNotIn(lib, plain["add"].values())
+        with mock.patch.dict(os.environ, {"IOS3DS_GPU221": "1"}):
+            self.assertTrue(versions.gpu221("2.2.1"))
+            self.assertFalse(versions.gpu221("3.1.3"))
+            self.assertFalse(versions.gpu221("4.2.1"))
+            self.assertNotIn("gpu_mirror", versions.boot_cfg("2.2.1"))
+            with tempfile.TemporaryDirectory() as td:
+                with open(versions.recipe_path("2.2.1", td)) as f:
+                    recipe = json.load(f)
+                with open(versions.recipe_path("3.1.3", td)) as f:
+                    r313 = json.load(f)
+            env = recipe["plist_set"][sb]["EnvironmentVariables"]
+            self.assertEqual(env["CA_ENABLE_OGL"], "1")
+            self.assertEqual(env["IOS3DS_CA"], "1")
+            self.assertEqual(env["DYLD_INSERT_LIBRARIES"].split(":"),
+                             ["/usr/lib/ios3ds-a80211.dylib", lib])
+            self.assertEqual(recipe["add"]["build/rootfs-add/ios2/ios3ds-gles2.dylib"], lib)
+            self.assertEqual(recipe["chmod"][lib], "0755")
+            self.assertNotIn(lib, json.dumps(r313))
+
     def test_replace_marker_in_overlay(self):
         base = {"a": {"x": 1, "y": 2}, "b": [1, 2]}
         self.assertEqual(versions._merge(base, {"a": {"_replace": True, "z": 3}}),

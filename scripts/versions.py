@@ -120,6 +120,18 @@ def gpu313(version=DEFAULT):
         "1", "yes", "on", "true")
 
 
+def gpu221(version=DEFAULT):
+    """Is the experimental 2.2.1 PICA200 CoreAnimation path enabled?
+
+    Build-time, like gpu313(): 2.x has no GL engine bundle, so the opt-in
+    image installs /usr/lib/ios3ds-gles2.dylib (tools/ios3ds-gl/ios2/egl2.c)
+    into SpringBoard, which interposes QuartzCore's EGL/GL imports, and sets
+    CA_ENABLE_OGL=1. Off unless IOS3DS_GPU221=1 is exported for 2.2.1.
+    """
+    return version == "2.2.1" and os.environ.get("IOS3DS_GPU221", "").lower() in (
+        "1", "yes", "on", "true")
+
+
 def boot_cfg(version=DEFAULT):
     """boot.cfg overrides for `version` (the 4.2.1 default has none).
 
@@ -127,7 +139,7 @@ def boot_cfg(version=DEFAULT):
     the version's gpu_mirror=0 override turns the display mirror off.
     """
     cfg = dict(get(version).get("boot_cfg") or {})
-    if gpu313(version):
+    if gpu313(version) or gpu221(version):
         cfg.pop("gpu_mirror", None)
     return cfg
 
@@ -215,6 +227,22 @@ def recipe_path(version=DEFAULT, workdir=None):
         else:
             env["CA_ENABLE_OGL"] = "0"
             env["LK_ENABLE_OGL"] = "0"
+    if version == "2.2.1" and gpu221(version):
+        # opt-in GPU image: SpringBoard's render server composites with EGL/GL
+        # through our interposer (2.x OpenGLES is the IMG MBX driver)
+        lib = "/usr/lib/ios3ds-gles2.dylib"
+        env = recipe["plist_set"]["/System/Library/LaunchDaemons/com.apple.SpringBoard.plist"][
+            "EnvironmentVariables"]
+        env["CA_ENABLE_OGL"] = "1"
+        env["IOS3DS_CA"] = "1"
+        ins = env.get("DYLD_INSERT_LIBRARIES")
+        env["DYLD_INSERT_LIBRARIES"] = ins + ":" + lib if ins else lib
+        if os.environ.get("IOS3DS_GPU221_DIAG") in ("1", "yes", "on", "true"):
+            env["IOS3DS_CA_LOG_FRAMES"] = "60"
+            env["IOS3DS_GL_WATCHDOG"] = "1"
+            env["IOS3DS_GL_WATCHDOG_ABORT"] = os.environ.get("IOS3DS_GL_WATCHDOG_ABORT", "1")
+        recipe.setdefault("add", {})["build/rootfs-add/ios2/ios3ds-gles2.dylib"] = lib
+        recipe.setdefault("chmod", {})[lib] = "0755"
     if by_base is not None:
         # Key by the *base* recipe's fixed offset, not by list position: patches
         # are added to rootfs/recipe.json in other branches/versions, and a
