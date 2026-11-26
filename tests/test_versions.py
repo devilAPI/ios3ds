@@ -234,6 +234,10 @@ class TestVersions(unittest.TestCase):
                         # fake GPS: applog hooks, the tool, the gated test job
                         "build/rootfs-add/ios2/ios3ds-applog.dylib": "/usr/lib/ios3ds-applog.dylib",
                         "build/rootfs-add/ios2/ios3ds-diag": "/usr/libexec/ios3ds-diag",
+                        # boot.cfg hwtest=: the gated hardware test kit (2.x build)
+                        "build/rootfs-add/ios2/ios3ds-hwtest": "/usr/libexec/ios3ds-hwtest",
+                        "tools/ios3ds-diag/com.ios3ds.hwtest.plist":
+                        "/System/Library/LaunchDaemons/com.ios3ds.hwtest.plist",
                         "build/rootfs-add/ios2/ios3ds-gps": "/usr/bin/ios3ds-gps",
                         "build/rootfs-add/ios2/ios3ds-gpstest": "/usr/libexec/ios3ds-gpstest",
                         "tools/ios3ds-gps/com.ios3ds.gpstest.plist":
@@ -272,6 +276,10 @@ class TestVersions(unittest.TestCase):
                         "build/rootfs-add/usr/libexec/ios3ds-diag": "/usr/libexec/ios3ds-diag",
                         "tools/ios3ds-diag/com.ios3ds.urltest.plist":
                         "/System/Library/LaunchDaemons/com.ios3ds.urltest.plist",
+                        # boot.cfg hwtest=: the gated hardware test kit
+                        "build/rootfs-add/usr/libexec/ios3ds-hwtest": "/usr/libexec/ios3ds-hwtest",
+                        "tools/ios3ds-diag/com.ios3ds.hwtest.plist":
+                        "/System/Library/LaunchDaemons/com.ios3ds.hwtest.plist",
                         # fake GPS: applog hooks, the tool, the gated test job
                         "build/rootfs-add/usr/lib/ios3ds-applog.dylib": "/usr/lib/ios3ds-applog.dylib",
                         "build/rootfs-add/usr/bin/ios3ds-gps": "/usr/bin/ios3ds-gps",
