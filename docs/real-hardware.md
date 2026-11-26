@@ -137,8 +137,13 @@ screen as an alert:
 **Version-aware:** `kern.osversion` picks 4.2.1 (8C148), 4.1 (8B117), 3.1.3
 (7E18) or 2.2.1 (5H11a). On 2.x/3.x, CoreMotion (gyro) and gltest (GPU) are
 SKIPped with the reason, and the 2.2.1 image gets an iPhone OS 2 build of the
-tool (`build/rootfs-add/ios2/ios3ds-hwtest`). `emu/hwtest_check.py --mode 2`
-(or `--mode 1`, or `--mode 0` as the control run) is the QEMU run. Remove
-`hwtest=` afterwards: the test also runs on every later boot that has it.
+tool (`build/rootfs-add/ios2/ios3ds-hwtest`). The cameras check needs the
+kernel shim's frame path, not an app: on 2.2.1 both sensors delivering a frame
+is a PASS even though that firmware has no Camera.app (re-log 153).
+`emu/hwtest_check.py --mode 2` (or `--mode 1`, or `--mode 0` as the control
+run) is the QEMU run; modes 1/2 boot with `-icount 2` by default, the
+hardware-realistic timing the camera FIFO drain needs (docs/camera.md §5).
+Remove `hwtest=` afterwards: the test also runs on every later boot that
+has it.
 Please attach `log.txt` to the issue; the SUMMARY block is what we look at
 first.

@@ -6957,3 +6957,77 @@ add a depth-strength setting, keep `stereo3d=0` byte-identical.
   keeps a small stamped region.
 - The `stereo3d=1` soak failure above (SIGKILL of background apps) predates
   this round and is not traced.
+
+## 153. 2.2.1 camera frames: QEMU wall-clock starvation, not the driver (2026-11-26)
+
+Follow-up to 152's open item: `ios3ds_cam` START worked on 2.2.1 but no
+FRAME arrived from either sensor in 15 s, while 3.1.3/4.x delivered at once.
+The bare camera service (no Camera.app on 2.x) is the only goal.
+
+### Evidence
+
+- Fresh 2.2.1 image, `emu/hwtest_check.py --mode 2` (the wall-clock QEMU
+  default of that time): **9 PASS / 0 FAIL / 9 SKIP**, cameras SKIP with
+  "outer no frame in 15 s, inner no frame in 15 s". The log shows the whole
+  driver path alive:
+  `[cam] buffers: IOKit 3x150 KiB @24964000`, START, ARM9 I2C ids `2280` x3,
+  `outer left camera streaming ... into CAM1` and `inner ... into CAM0`,
+  sensor registers at 0.2/1/5 s, shim drains (`7911 services`, `649600
+  words`), yet `0 frames, 118 FIFO overruns`, `drain gap max 37.5 ms`,
+  FIFO parked at the 1280-unit fill cap, `0 blank drops` and both dumps
+  skipped. The mailbox handshake is intact (`want`/`ack_seq`/`state=RUNNING`);
+  this is not a start, I2C, mailbox or frame-buffer problem.
+- The same image with `--icount 2`: **10 PASS / 0 FAIL / 8 SKIP**, cameras
+  **PASS** for both sensors; `[cam] ... 2 frames, 0 FIFO overruns`,
+  `drain gap max 1.0 ms`, max FIFO fill 320-400 units, no restarts. Nothing
+  in `boot/arm9/camera.c`, `boot/common/cam_proto.h` or the 2.x KPI flags
+  (`virt_base`, `irq_cont`, `irq_spsr`, `vt_bias`, `kernel_ifnet`) changed
+  between the two runs.
+- A test with `CAM_STEP_TICKS` halved from 1047 to 500 on 2.2.1 (temporary,
+  reverted) doubled the services and the drained words but still gave
+  `0 frames`, `117 overruns`, `gap max 10.3 ms`: asking for more wake-ups
+  cannot fix a guest that is too slow to service them. 4.2.1's own
+  wall-clock run had `gap max 12.5 ms` and still delivered frames because its
+  CoreAnimation/GPU path leaves the ARM11 far more idle time.
+
+Cause: QEMU's default virtual clock follows the wall clock while the guest
+runs several times slower than a 3DS. 2.2.1 composites in software (the ARM9
+copies the screen), so its 1 ms camera drain misses the FIFO's ~5.5 ms window
+and every frame dies in an overrun. This is a test-harness timing artifact;
+section 5 of [camera.md](camera.md) already prescribes `--icount 2` (real
+instruction timing, ~250 MHz) for the camera path.
+
+### Fix
+
+- `emu/hwtest_check.py`: modes 1/2 now boot with `-icount 2` unless `--icount`
+  is given (`--icount ""` keeps the old wall-clock timing); mode 0, which has
+  no camera check, is unchanged. New `icount_arg()` is covered by
+  `tests/test_hwtest.py`.
+- `tools/ios3ds-diag/hwtest.c`: `cameras` now **PASS** when both sensors
+  return a frame on *every* version, including 2.x, where no Camera.app
+  exists to consume them. On 2.x a failed frame path is still SKIP with the
+  raw result, not FAIL (no app is missing a picture). The 2.x-only branch is
+  compiled with `-DIOS2_HWTEST` in the HW2 Makefile recipe, so the 4.2.1 code
+  path and binary are unchanged.
+- Docs updated: camera.md §5, real-hardware.md §6, other-versions.md,
+  multi-version.md §6.9.
+
+### Verification
+
+- `emu/hwtest_check.py --mode 2` on a fresh 2.2.1 image: **10 PASS, 0 FAIL,
+  8 SKIP** (cameras PASS, both frames). Same command on 4.2.1: **13 PASS,
+  0 FAIL, 5 SKIP**. Explicit wall-clock runs still reproduce the old
+  behaviour on 2.2.1 (0 frames), which is the documented reason for the
+  default.
+- Fresh-image soaks with `--icount 2`: 2.2.1
+  `soak.py --cycles 5 --require-app --targets "275,226;199,226;123,226;47,226;275,50"`
+  **PASS** (305 s, five apps opened, 0 failures); 4.2.1
+  `soak.py --cycles 5` **PASS** (90 s, 0 failures).
+- `make test` passes (six `tests/test_hwtest.py` cases, including the new
+  camera-PASS and harness-timing checks). The 4.2.1 tool binary is
+  byte-identical (`339f6290…`), and rebuilding 4.2.1 gives the same six
+  hashes as before the change: kernel `692874e8…`, devtree `0965a3f2…`,
+  fakeio `b89cfc32…`, shim `2f36ac60…`, gpu `5c3b584d…`, boot.cfg
+  `ff838865…` (the branch's current baseline; the 152 values predate this
+  branch's other merges).
+

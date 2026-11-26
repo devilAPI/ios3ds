@@ -20,7 +20,7 @@ $(HW): hwtest.c
 
 $(HW2): hwtest.c $(GLUE)
 	mkdir -p $(dir $@)
-	$(CC) -Os -Wall -Wextra $(OLD2) -I$(PROTO) hwtest.c $(GLUE) -o $@
+	$(CC) -Os -Wall -Wextra -DIOS2_HWTEST $(OLD2) -I$(PROTO) hwtest.c $(GLUE) -o $@
 
 # ent.plist: SpringBoard wants com.apple.springboard.opensensitiveurl for -urlpoll
 $(OUT): diag.c ent.plist

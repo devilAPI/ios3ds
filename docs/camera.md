@@ -252,7 +252,10 @@ preview looping over old frames steps back (FAIL), a frozen one stays put.
 QEMU's default timing (virtual clock = wall clock while the guest runs about
 3x slower than a 3DS) overruns the FIFO on every frame: use `--icount 2`
 (real-hardware instruction timing), where the 1 ms drain keeps up with 0
-overruns. The plug-in's pattern mode (`ios3dsPattern` = true in
+overruns. With iOS 2.2.1's software compositor the guest is slower still, so
+`emu/hwtest_check.py` uses `--icount 2` by default for its camera checks;
+`--icount ""` restores the old wall-clock timing (re-log 153). The plug-in's
+pattern mode (`ios3dsPattern` = true in
 com.apple.coremedia's preferences) bypasses the kernel path entirely.
 
 ## 6. Cost and limits

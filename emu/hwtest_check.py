@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """QEMU run of the one-boot hardware test kit (boot.cfg hwtest=, docs/real-hardware.md).
 
-  emu/hwtest_check.py [--mode 2] [--sd build/sd.img] [--icount 2] [--timeout 1500]
+  emu/hwtest_check.py [--mode 2] [--sd build/sd.img] [--timeout 1500]
+  emu/hwtest_check.py --mode 1 [--icount 2]       same, answer the prompts
   emu/hwtest_check.py --mode 0          control: hwtest off, no [hwtest] line may appear
 
 Sets hwtest=<mode> in sd:/ios3ds/boot.cfg, adds the ctr-wifi model's access
@@ -12,6 +13,14 @@ button). Prints the summary block, saves a screenshot of the on-screen
 summary to <out>/summary.png, and restores boot.cfg and the Wi-Fi files.
 Exit 0 when the summary appeared (mode 1/2) or no [hwtest] line appeared
 within --timeout (mode 0).
+
+Modes 1/2 boot with -icount 2 by default: hardware-realistic instruction
+timing. Without it QEMU's virtual clock follows the wall clock while a 2.x
+guest (software CoreAnimation, ARM9 screen copy) runs several times slower
+than the camera sensor model, so the shim's 1 ms FIFO drain is starved and
+no frame can ever complete (docs/camera.md section 5, docs/re-log.md 153).
+Pass --icount "" explicitly to repeat the old wall-clock timing. Mode 0
+has no camera check and keeps the faster default.
 """
 import argparse
 import os
@@ -30,6 +39,17 @@ import wifi_test  # noqa: E402
 def sess(sd, *args, check=True):
     return subprocess.run([sys.executable, os.path.join(ROOT, "emu", "session.py"), "--sd", sd] + list(args),
                           capture_output=True, text=True, check=check)
+
+
+def icount_arg(mode, value):
+    """-icount shift for this mode ('' = QEMU's wall-clock virtual time).
+
+    The camera checks need instruction-clocked time: see the module docstring.
+    `value` is the raw --icount argument (None = not given, '' = explicitly off).
+    """
+    if value is None:
+        return "2" if mode in (1, 2) else ""
+    return value
 
 
 def act(sd, prompt):
@@ -63,7 +83,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--mode", type=int, default=2, choices=(0, 1, 2))
     ap.add_argument("--sd", default=os.path.join(ROOT, "build", "sd.img"))
-    ap.add_argument("--icount", default="")
+    ap.add_argument("--icount", default=None, metavar="SHIFT",
+                    help="icount shift (default 2 for modes 1/2, off for mode 0; '' = wall clock)")
     ap.add_argument("--timeout", type=float, default=1500)
     ap.add_argument("--out", default=os.path.join(ROOT, "build", "emu-hwtest"))
     ap.add_argument("--extra-cfg", default="", help="more boot.cfg lines, ';'-separated (e.g. 'stereo3d=1;gps=52.52,13.40')")
@@ -92,8 +113,10 @@ def main():
         wifi_test.mtools(["mcopy", "-o", os.path.join(tmp, f), "::/ios3ds/" + f], a.sd)
     wifi_test.mtools(["mdel", "::/ios3ds/log.txt"], a.sd, check=False)
 
+    icount = icount_arg(a.mode, a.icount)
+    print("[hwtest-check] QEMU timing: %s" % ("-icount shift=%s" % icount if icount else "wall clock"))
     extra = "-nic user,model=ctr-wifi -global ctr-wifi.ssid=%s -global ctr-wifi.psk=%s" % (wifi_test.SSID, wifi_test.PSK)
-    start = ["start", "--extra", extra] + (["--icount", a.icount] if a.icount else [])
+    start = ["start", "--extra", extra] + (["--icount", icount] if icount else [])
     print(sess(a.sd, *start).stdout.strip())
     t0 = time.time()
     ok = False

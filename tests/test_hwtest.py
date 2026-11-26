@@ -52,6 +52,35 @@ class HwTest(unittest.TestCase):
                       "stereo3d", "lock/wake"):
             self.assertIn('"%s"' % check, src)
 
+    def test_cameras_pass_on_frames_every_version(self):
+        """2.x has no Camera.app, but a delivered frame is still a driver PASS.
+
+        The 4.x tool must keep its old code path and byte-identical binary:
+        the 2.x-only branch is compiled in with -DIOS2_HWTEST in the HW2
+        recipe alone (re-log 153).
+        """
+        src = read("tools/ios3ds-diag/hwtest.c")
+        ios2 = src.split("#ifdef IOS2_HWTEST")[1].split("#else")[0]
+        self.assertIn("if (ok == (int)CAM_COUNT)", ios2)
+        self.assertIn('result("cameras", PASS, "%s", what);', ios2)
+        self.assertIn("#ifdef IOS2_HWTEST", src)
+        mk = read("tools", "ios3ds-diag", "Makefile")
+        hw4 = mk.split("$(HW): hwtest.c")[1].split("$(HW2):")[0]
+        self.assertNotIn("-DIOS2_HWTEST", hw4)
+        hw2 = mk.split("$(HW2): hwtest.c $(GLUE)")[1].split("\n\n")[0]
+        self.assertIn("-DIOS2_HWTEST", hw2)
+
+    def test_harness_uses_hardware_timing_for_camera_checks(self):
+        """Wall-clock QEMU starves the 1 ms camera drain on 2.x (re-log 153)."""
+        import sys
+        sys.path.insert(0, os.path.join(ROOT, "emu"))
+        import hwtest_check
+        self.assertEqual(hwtest_check.icount_arg(2, None), "2")
+        self.assertEqual(hwtest_check.icount_arg(1, None), "2")
+        self.assertEqual(hwtest_check.icount_arg(0, None), "")  # control: no camera check
+        self.assertEqual(hwtest_check.icount_arg(2, ""), "")    # explicit opt-out
+        self.assertEqual(hwtest_check.icount_arg(2, "3"), "3")
+
 
 if __name__ == "__main__":
     unittest.main()

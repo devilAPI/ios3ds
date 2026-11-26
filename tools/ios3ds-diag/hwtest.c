@@ -572,10 +572,22 @@ static void check_cameras(void)
         if (!got && st != CAM_OK) snprintf(what + strlen(what), sizeof what - strlen(what), " %u", st);
     }
     free(fb);
+#ifdef IOS2_HWTEST
+    /* The shim's frame path is real hardware even where iOS has no Camera.app
+       to consume the frames. Two frames are a PASS; without them, report the
+       raw result as SKIP rather than calling a missing app a driver failure
+       (re-log 153). */
+    if (ok == (int)CAM_COUNT)
+        result("cameras", PASS, "%s", what);
+    else
+        result("cameras", SKIP, "no Camera.app on iPhone OS 2; shim frame path: %s", what);
+#else
+    /* Kept byte-for-byte: the 4.2.1 tool binary is unchanged by this fix. */
     if (ok != (int)CAM_COUNT && ios_major == 2)     /* no Camera.app / MediaCapture on 2.x (multi-version.md 6.9) */
         result("cameras", SKIP, "n/a on iPhone OS 2; shim frame path: %s", what);
     else
         result("cameras", ok == (int)CAM_COUNT ? PASS : FAIL, "%s", what);
+#endif
 }
 
 static void check_gps(void)

@@ -116,7 +116,9 @@ for the full table.
 - `ios3ds-tone`, headphone route, keyboard click and the PCM test song work;
   the microphone is **off** (no VirtualAudio patch, no built-in mic in N72's
   routing database). The accelerometer reports orientation changes. No
-  Camera.app and no CoreMotion on this firmware.
+  Camera.app and no CoreMotion on this firmware; the camera shim still
+  streams frames from both sensors, and `hwtest=2` reports the cameras PASS
+  under QEMU's hardware-realistic timing (re-log 153).
 - Cydia **1.0.3222** opens, with APT/dpkg but no default source, no TLSFix and
   no Substrate. By default the interface is composited in software with the
   ARM9 screen copy (`gpu_mirror=0`); the PICA200 path is opt-in (below).
