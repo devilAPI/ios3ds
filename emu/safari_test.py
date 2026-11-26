@@ -14,6 +14,11 @@ The host serves pages with images and a little JavaScript. Page 1 cold-starts
 Safari (the "first page load" of the hardware reports); the rest load into the
 running Safari. A page counts as loaded when the host served its HTML and
 every image; any Safari alert (e.g. "Cannot allocate memory") fails it.
+/next answers "pending" (not a URL) until the harness has a URL for Safari.
+Every normal run boots with ios3ds_urlwait=1: without it ios3ds-diag -urlpoll
+opens page 1 by itself 40 s after boot, often before Wi-Fi/DHCP is up, and
+Safari shows ENOMEM (4.1) or EINVAL (3.1.3) (re-log NEXT). --nolink leaves
+the flag off so the no-network alert is still exercised.
 Prints the [mem] lines before Safari, after the first page and at the end.
 boot.cfg is restored and the Wi-Fi files are removed afterwards.
 """
@@ -36,6 +41,7 @@ import wifi_test  # noqa: E402
 
 NIMG = 6
 state = {"next": "", "hits": [], "www": None}
+SD = None                       # --sd path: session.py log must read the same image
 lock = threading.Lock()
 
 
@@ -75,7 +81,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not os.path.isfile(local):
                 local = os.path.join(state["www"], os.path.basename(urllib.parse.unquote(path.split("?")[0])))
         if path == "/next":
-            body, ctype = state["next"].encode(), "text/plain"
+            # ios3ds-diag -urlpoll reads one URL per /next answer and opens it.
+            # An empty body for 40 s is its "no network, open the first page
+            # anyway" case (used by --nolink): on a normal run that fallback
+            # fires while Wi-Fi/DHCP is still coming up on old versions, so
+            # Safari cold-loads p1 before there is a link. Keep the poll alive
+            # with a token that is not a URL until the harness really has one.
+            body = state["next"].encode() if state["next"] or state["nolink"] else b"pending\n"
+            ctype = "text/plain"
         elif local and os.path.isfile(local):
             with open(local, "rb") as f:
                 body = f.read()
@@ -104,13 +117,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
         pass
 
 
+def boot_extra(nolink, port):
+    extra = " ios3ds_mem=1 ios3ds_applog=1 ios3ds_urltest=1"
+    if not nolink:                      # never open p1 before Wi-Fi/DHCP is up
+        extra += " ios3ds_urlwait=1"
+    if port != 8080:                    # ios3ds_urlport: 8080 is often taken on the host
+        extra += " ios3ds_urlport=%d" % port
+    return extra
+
+
 def sess(*args, check=True):
     return subprocess.run([sys.executable, os.path.join(ROOT, "emu", "session.py")] + list(args),
                           capture_output=True, text=True, check=check)
 
 
 def log_text():
-    return sess("log").stdout
+    # session.py's default is build/sd.img; with --sd pointing at a version's
+    # image its log lines would otherwise be invisible to wait_log(), and the
+    # harness would sit in the boot wait until boot-timeout.
+    return sess("log", "--sd", SD).stdout if SD else sess("log").stdout
 
 
 def wait_log(pattern, timeout):
@@ -151,8 +176,11 @@ def main():
     ap.add_argument("--settle", type=float, default=60,
                     help="seconds to wait after boot before opening page 1 (0 = as early as the harness can)")
     a = ap.parse_args()
+    global SD
+    SD = a.sd
     os.makedirs(a.out, exist_ok=True)
     state["www"] = a.www
+    state["nolink"] = a.nolink
     urls = [u for u in a.urls.split(",") if u]
     if urls:
         a.pages = len(urls)
@@ -163,9 +191,7 @@ def main():
     wifi_test.mtools(["mcopy", "-o", "::/ios3ds/boot.cfg", saved], a.sd)
     with open(saved) as f:
         cfg = f.read()
-    extra = " ios3ds_mem=1 ios3ds_applog=1 ios3ds_urltest=1"
-    if a.port != 8080:                  # ios3ds_urlport: 8080 is often taken on the host
-        extra += " ios3ds_urlport=%d" % a.port
+    extra = boot_extra(a.nolink, a.port)
     cfg = re.sub(r"(?m)^(cmdline=.*)$", lambda m: m.group(1) + extra, cfg)
     if a.mem_size:
         cfg = re.sub(r"(?m)^mem_size=.*$", "mem_size=" + a.mem_size, cfg)

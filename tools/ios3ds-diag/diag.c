@@ -69,7 +69,14 @@ static int iobusy(int secs)
    Every 2 s it GETs http://a.b.c.d:port/next (BSD sockets, HTTP/1.0); a body
    that starts with "http" and differs from the last one is opened with
    SpringBoardServices' SBSOpenSensitiveURLAndUnlock, i.e. in Safari, as a
-   link from another app would. One "[urltest]" line per URL. */
+   link from another app would. One "[urltest]" line per URL.
+
+   Without a boot-arg the old 40 s "no answer, open p1 anyway" fallback stays:
+   emu/safari_test.py --nolink uses it to exercise Safari with no network.
+   With ios3ds_urlwait=1 (set by every other safari_test run) the poll waits
+   for the harness's URL instead: on a cold boot of 4.1/3.1.3 the 40 s timer
+   fires before Wi-Fi/DHCP is up, so Safari was launched with no link and
+   its first page failed with ENOMEM/EINVAL (re-log NEXT). */
 #include <errno.h>
 #include <stdint.h>
 time_t time(time_t *);
@@ -82,10 +89,12 @@ static int urlpoll(const char *ip, int port)
 {
     char ba[512];
     size_t bn = sizeof(ba) - 1;
+    int wait_for_url = 0;
     if (sysctlbyname("kern.bootargs", ba, &bn, NULL, 0) == 0) {
         ba[bn < sizeof(ba) ? bn : sizeof(ba) - 1] = 0;
         const char *q = strstr(ba, "ios3ds_urlport=");
         if (q) port = atoi(q + 15);     /* test aid: 8080 is often taken on the host */
+        wait_for_url = strstr(ba, "ios3ds_urlwait=1") != NULL;
     }
     void *cf = dlopen("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation", RTLD_NOW);
     void *sbs = dlopen("/System/Library/PrivateFrameworks/SpringBoardServices.framework/SpringBoardServices", RTLD_NOW);
@@ -111,10 +120,12 @@ static int urlpoll(const char *ip, int port)
                 got += n;
         close(s);
         buf[got] = 0;
-        if (!got && !last[0] && time(NULL) - t0 >= 40) {
+        if (!got && !last[0] && !wait_for_url && time(NULL) - t0 >= 40) {
             /* no answer for 40 s (a connect without a link can itself take
                75 s): open the first page anyway, as a user opening Safari
-               before Wi-Fi is up would (emu/safari_test.py --nolink) */
+               before Wi-Fi is up would (emu/safari_test.py --nolink).
+               Normal runs set ios3ds_urlwait=1 so that a slow DHCP never
+               turns into a page load before the link is up. */
             snprintf(buf, sizeof(buf), "HTTP/1.0 200 OK\r\n\r\nhttp://%s:%d/p1.html", ip, port);
             got = (long)strlen(buf);
             printf("[urltest] no answer from %s:%d for 40 s: opening its first page anyway\n", ip, port);

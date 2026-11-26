@@ -5850,3 +5850,138 @@ missing on 8B117. Everything below was read from this worktree's staged
   to be added to `scripts/mkrelease.py:SOURCES` so the installer ships
   `scripts/inject_dylib.py`. With that, `make test` passes again and the six
   4.2.1 hashes above are unchanged.
+
+## NEXT. Safari's first cold page on 4.1 and 3.1.3: -urlpoll opened p1 before Wi-Fi (2026-11-25)
+
+Continues §104/§112 and §133. Task: on 4.1 the first Safari page after a cold
+start showed "Cannot allocate memory", on 3.1.3 "Cannot Open Page … Invalid
+argument"; every later page loaded. §133 guessed the first-big-page memory
+wall of §104/§112. That is not what these runs show.
+
+### Re-log of §104/§112 on the old versions (before the fix)
+
+- **[V]** 4.1 (8B117), fresh `make sdimg IOS=4.1` plus
+  `emu/safari_test.py --pages 3 --settle 240 --icount 2 --port 19423`: the SD
+  log has `[urltest] no answer from 10.0.2.2:19423 for 40 s: opening its first
+  page anyway` and `[urltest] open http://10.0.2.2:19423/p1.html -> 1` at log
+  lines 450/455, while `[wifid] en0 configured by configd` only appears at
+  line 501. Safari was therefore launched and given its first URL **before
+  DHCP**: the failure is a link-not-up error, not a page-size allocation.
+- **[V]** The `[mem]` lines with that early Safari (KiB) show the §112 shape
+  but no pressure that would explain a first-page-only failure: free
+  37,696-38,724, speculative 35,300-35,556, `free_nospec` 2,140-3,424, wired
+  30,828-30,980, `memorystatus_level` 61; MobileSafari resident 9,096-9,284
+  KiB. No `[applog] … ENOMEM` line was logged: none of the three allocation
+  entry points the re-log 112 interposer watches failed.
+- **[V]** 3.1.3 (7E18), fresh `make sdimg IOS=3.1.3` plus
+  `emu/safari_test.py --pages 1 --settle 0 --icount 2 --port 27113`: the same
+  `[urltest] no answer … for 40 s` / `open …/p1.html` pair precedes
+  `en0 configured`, and the cold page shows the alert
+  "Cannot Open Page — Safari cannot open the page. The error was: 'Operation
+  could not be completed. Invalid argument.'" (screenshot
+  `build/safari-313-base-invalid-argument.png`, not committed). At that
+  baseline 3.1.3's Safari did not load `ios3ds-applog.dylib`, so there was no
+  `[applog]` line; the screenshot is the evidence for the error text. Main's
+  re-log 139 later injects applog into MobileSafari with `LC_LOAD_DYLIB`, and
+  that is part of the merged tree re-verified below. §133's pages 2/3 loaded
+  in 10 s each on the same image, after the link was up.
+- **[G]** The two error strings are the CFNetwork/OS reported result of that
+  early request; they are not two driver bugs. 4.1's TLSFix copy (§104) is
+  loaded into Safari, 3.1.3 has no TLSFix at all, yet both fail only when the
+  URL is opened before `en0 configured`.
+
+### Root cause and fix
+
+- **[V]** `-urlpoll` in `tools/ios3ds-diag/diag.c` has a fallback for the
+  `--nolink` test: 40 s without an answer from the harness's `/next` endpoint
+  makes it synthesize `http://host:port/p1.html` and send it through
+  `SBSOpenSensitiveURLAndUnlock`. A connect with no link can itself take
+  75 s, and Wi-Fi/DHCP on these versions takes longer than 40 s under
+  `--icount 2`, so this fired on every cold boot. `urltest` then never opened
+  the harness's later p1 again (`last` already held that URL), so the first
+  page of every safari_test run was the early, link-less one.
+- **[V]** Fix: `ios3ds_urlwait=1` (added to the boot cmdline by
+  `emu/safari_test.py` for every linked run) keeps the poll waiting for a
+  real URL. The 40 s fallback stays for `--nolink`, which does not set the
+  flag. No kernel, shim, rootfs or Wi-Fi driver source changes; `diag`'s
+  default behaviour without the new boot-arg is unchanged.
+- **[V]** Second harness bug found while re-logging: with `--sd <image>`
+  `safari_test.py`'s `wait_log()` read `session.py log`'s default
+  `build/sd.img`, not the selected image, so boots on a version-specific
+  image never passed its own boot wait. `log_text()` now passes `--sd` too.
+- **[V]** `/next` now answers `pending\n` (not a URL) until the harness has a
+  URL, so `-urlpoll` keeps polling instead of treating an empty HTTP body as
+  an answer. `tests/test_safari_harness.py` covers all three cases offline.
+
+### Verification
+
+- **[V]** 4.1, fresh `make sdimg IOS=4.1`, `emu/safari_test.py --sd
+  build/sd41-final.img --pages 3 --settle 240 --icount 2 --port 21307`
+  (all fresh-image runs, one QEMU at a time): **3/3 pages loaded**, page 1 in
+  46 s, pages 2/3 in 10 s each, no alert; screenshots in
+  `build/emu-safari-41-fixed2/` (p1 shows "Page 1" with its image, not an
+  alert). `[urltest] open …/p1.html` now appears after `en0 configured`.
+  `[mem]` at the first page: free 40,016 KiB / spec 36,576 / `free_nospec`
+  3,440 / wired 30,000 / level 61, MobileSafari 15,244 KiB — the same
+  low-usable-free shape as §112, but the page loads; memory was not the cause.
+- **[V]** 3.1.3, fresh `make sdimg IOS=3.1.3`, `emu/safari_test.py --sd
+  build/sd313-final.img --pages 3 --settle 240 --icount 2 --port 29831`:
+  **3/3 pages loaded**, page 1 in 15 s, pages 2/3 in 5 s each, no alert;
+  `build/emu-safari-313-fixed/p1.png` shows the rendered "Page 1" with its
+  images, not the §before "Invalid argument" alert. There are no `[mem]`
+  lines on 3.1.3: its overlay does not install `ios3ds-sample`, so the memory
+  re-log for that version is the §112-shaped 4.1 figure above plus the
+  screenshot; the merged tree's applog injection (re-log 139) gives an
+  `[applog]` load-error line if a cold page ever fails again.
+- **[V]** 4.2.1, fresh `make sdimg`, `emu/safari_test.py --sd
+  build/sd421-final.img --pages 3 --settle 240 --icount 2 --port 31459`:
+  **3/3 pages loaded**, first page 66 s, pages 2/3 10/15 s, no alert. Its
+  first page is still fine with the new boot-arg, and the six default boot
+  file hashes are unchanged (`505f451a…`, `25b1bd23…`, `e5fecd66…`,
+  `a35631eb…`, `6bdaf617…`, `8d4079cf…`). `[mem]` at the first page: free
+  34,612 / `free_nospec` 1,232 / level 61, MobileSafari 18,340 KiB — even
+  lower usable free than 4.1's first page, which rules out a simple free-page
+  threshold as the cause of the old versions' alerts.
+- **[V]** Wi-Fi still works with the changed `ios3ds-diag`: 4.1 fresh image,
+  `emu/wifi_test.py --case ok --icount 2 --time 500 --port 32711` → **PASS,
+  20/20** (SDIO/BMI/WMI/scan/4-way/keys/en0/DHCP/route/DNS/HTTP, no panic or
+  ARM9 crash). 3.1.3 fresh image, same test with `--port 34177` → **PASS,
+  20/20**. Fresh-image soaks: 4.2.1 `rm -f build/sd.img && make sdimg &&
+  emu/soak.py --cycles 5 --icount 2` → **Result: PASS** (boot 110 s, five
+  cycles, app diffs 50.8-110.1, home diff ≤ 4.6, 0 panics/stalls/md0 errors/
+  crashes/jetsam/GPU fallbacks; the one SpringBoard restart is boot-time HID).
+  4.1 fresh image, `--cycles 5 --icount 2 --require-app --crashlogs --targets
+  "47,314;123,226;199,226;275,226;123,50"` → **Result: PASS** (boot 90 s,
+  five cycles, app diffs 41.0-108.7, home diff ≤ 0.6, no crash reports, 0
+  panics/stalls/errors/jetsam). 3.1.3 fresh image, same flags/targets →
+  **Result: PASS** (input 65 s, five cycles, app diffs 53.1-102.9, home diff
+  0.0, no crash reports, 0 panics/stalls/errors/jetsam).
+
+### After rebasing onto origin/main (40b5704)
+
+- **[V]** The six fresh default-build hashes are unchanged
+  (`505f451a…`, `25b1bd23…`, `e5fecd66…`, `a35631eb…`, `6bdaf617…`,
+  `8d4079cf…`), and `make test` passes (including the five new harness tests).
+- **[V]** Fresh images, one QEMU at a time: 4.1 safari_test (`--pages 3
+  --settle 60 --port 35731`) **3/3**, page 1 in 46 s; 3.1.3
+  (`--port 36217`) **3/3**, page 1 in 15 s. The older-version GPU opt-in on
+  main does not affect the default 3.1.3 image used here.
+- **[V]** Fresh-image five-cycle soaks, `--icount 2`: **4.2.1 PASS** (boot 80 s),
+  **4.1 PASS** (boot 80 s, `--require-app`, §128 targets, no crash reports),
+  **3.1.3 PASS** (boot 50 s, same flags); 0 restarts/panics/crashes/jetsam in
+  all three, no tap that opened no app.
+
+### Hardware checklist (diag=1 log.txt)
+
+- **[G]** No hardware path changed: `ios3ds_urlwait` is only set by the QEMU
+  harness, and a console/user tap does not go through `-urlpoll`. Confirm on a
+  console anyway: with `diag=1`, join Wi-Fi, wait for `[wifid] en0 configured
+  by configd`, then cold-launch Safari and load a small page. The log must not
+  contain `[applog] MobileSafari load error` with POSIX 12/EINVAL for that
+  first page. If it does, attach its domain/code plus the `[mem] free_nospec`
+  line and the screenshot; that would be a real userland/network bug rather
+  than the harness race fixed here.
+- **[G]** Repeat the §112 big-page checklist on the same run (the alert there
+  is a separate, hardware-only memory report): `[pica] arena 10240 KiB`,
+  camera preview/still, `[mem] free_nospec` and any
+  `[applog] MobileSafari ENOMEM` line.
