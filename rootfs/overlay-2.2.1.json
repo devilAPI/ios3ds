@@ -2,7 +2,9 @@
  "_comment": "iOS 2.2.1 (5H11a) overlay on rootfs/recipe.json. Applied by scripts/versions.py into build/fw-2.2.1/recipe.json; the 4.2.1 recipe is never changed. 2.x has no dyld shared cache (frameworks are individual dylibs) and no MBXGLEngine/Substrate, so all cache patches, interposers and TLSFix are left out; Cydia comes from the 2.x package set rootfs/cydia-2.x.json (Cydia 1.0.3222). The liblockdown patches + ldid re-sign were removed after a control run showed the re-sign alone stops dyld after CoreSurface; the stock signed dylib lets it load the full framework set (re-log 115). Activation remains an open item.",
  "cydia": "rootfs/cydia-2.x.json",
  "tlsfix": false,
+ "music_wav_test": true,
  "trust_store": null,
+ "music_legacy_db": true,
  "write": {
   "_replace": true,
   "/etc/fstab": "/dev/md0 / hfs rw 0 0\n",

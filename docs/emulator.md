@@ -101,6 +101,16 @@ inside the disposable image; every run needs a fresh image. Artifacts and the
 PASS/FAIL report are in `build/emu/stress/`. The inventory of drivers, tests
 and open hardware checks is [driver-status.md](driver-status.md).
 
+### Audio on older versions: `emu/audio_check.py`
+`python3 emu/audio_check.py --sd build/sd-4-1.img --ios 4.1 --tests jack,click,song --icount 2`
+boots one image and checks the emulated headphone jack (guest route changes in
+`sd:/ios3ds/log.txt` plus QEMU's `[jack]` lines), keyboard clicks (a new iOS
+output stream and CSND start after typing in Spotlight or Notes) and Music.app's
+test song (a new stream plus a non-silent CSND WAV). Per-version tap positions
+are in `UI`; artifacts and the PASS/FAIL report go to `--out`. The script does
+not edit the image; a fresh one is still recommended for repeatable logs.
+See docs/audio.md §10 and re-log NEXT.
+
 ### Safari and memory: `emu/safari_test.py`
 `python3 emu/safari_test.py --icount 2` boots with the Wi-Fi model, opens
 pages from a host HTTP server in Safari (`ios3ds-diag -urlpoll`, boot-arg

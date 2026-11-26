@@ -422,6 +422,25 @@ static void send_touch_gs(float nx, float ny, int touch, uint32_t mask)
             if (opt_debug && app_port && !mach_port_alive(app_port))
                 say("[input] stale touch port for %s: re-resolving", app_id[0] ? app_id : "SpringBoard");
             mach_port_t p = (id[0] && gs_named_port) ? gs_named_port(id) : 0;
+#ifdef INPUT_PURPLE_FALLBACK
+            /* 7E18/8B117 report a display identifier such as
+               com.apple.mobileipod-AudioPlayer, but register the purple event
+               port under the application id without the -AudioPlayer suffix.
+               Without this fallback every in-app tap in QEMU went to
+               SpringBoard (Music's Own playlist could not be opened). */
+            if (!p && id[0]) {
+                char base[128];
+                strncpy(base, id, sizeof base - 1);
+                base[sizeof base - 1] = 0;
+                char *dash = strchr(base, '-');
+                if (dash) {
+                    *dash = 0;
+                    p = gs_named_port(base);
+                    if (opt_debug && p)
+                        say("[input] purple port fallback %s -> %s", id, base);
+                }
+            }
+#endif
             if (opt_debug && id[0] && !p)
                 say("[input] no touch port for %s; using SpringBoard", id);
             app_port_set(p);

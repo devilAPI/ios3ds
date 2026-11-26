@@ -6,6 +6,7 @@ import struct
 import sys
 import tempfile
 import unittest
+import wave
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
@@ -91,6 +92,22 @@ class AlacWriter(unittest.TestCase):
         self.assertEqual(len(s), 2 * music.RATE)
         self.assertTrue(all(-32768 <= v <= 32767 for v in s))
         self.assertGreater(max(abs(v) for v in s), 1000)
+
+
+class PcmSong(unittest.TestCase):
+    def test_wav(self):
+        """The old-version PCM song is the same audio as the ALAC one."""
+        with tempfile.TemporaryDirectory() as td:
+            p = os.path.join(td, "ios3ds-test-song.wav")
+            t = music.make_test_song_wav(p)
+            with wave.open(p, "rb") as w:
+                self.assertEqual((w.getnchannels(), w.getsampwidth(), w.getframerate()),
+                                 (2, 2, music.RATE))
+                samples = struct.unpack("<%dh" % (w.getnframes() * 2), w.readframes(w.getnframes()))
+        self.assertEqual(len(samples), len(music.render_song()))
+        self.assertEqual(list(samples), music.render_song())
+        self.assertGreater(max(abs(v) for v in samples), 10000)
+        self.assertAlmostEqual(t["ms"], len(samples) * 500.0 / music.RATE)
 
 
 class Library(unittest.TestCase):

@@ -98,7 +98,13 @@ def build(staging, out, recipe_path=None, verbose=True, hfsplus=None, rootfs_add
     elif not os.path.exists(HFS):
         subprocess.run([os.path.join(ROOT, "scripts", "build-hfsplus.sh")], check=True)
     recipe = json.load(open(recipe_path or os.path.join(ROOT, "rootfs", "recipe.json")))
-    missing = [l for l in recipe.get("add", {}) if not os.path.exists(local_path(l, rootfs_add))]
+    # A version overlay can swap one source file (e.g. a 4.1-only input daemon)
+    # without dropping the rest of the base recipe's "add" set.
+    add_files = dict(recipe.get("add", {}))
+    for old, new in recipe.get("replace_add", {}).items():
+        if old in add_files:
+            add_files[new] = add_files.pop(old)
+    missing = [l for l in add_files if not os.path.exists(local_path(l, rootfs_add))]
     if missing:
         raise SystemExit("[mkrootfs] missing files for the rootfs (build the userland tools: "
                          "make userland):\n  " + "\n  ".join(missing))
@@ -167,7 +173,7 @@ def build(staging, out, recipe_path=None, verbose=True, hfsplus=None, rootfs_add
             hfs(out, "add", tmp, path)
             if verbose:
                 print("[mkrootfs] wrote %s" % path)
-        for local, path in recipe.get("add", {}).items():
+        for local, path in add_files.items():
             if exists(out, path):
                 hfs(out, "rm", path)
             hfs(out, "add", local_path(local, rootfs_add), path)
@@ -302,7 +308,14 @@ def build(staging, out, recipe_path=None, verbose=True, hfsplus=None, rootfs_add
                     print("[mkrootfs] injected %s -> %s" % (dylib, path))
     if music or test_song:
         import music as music_mod
-        music_mod.apply(out, hfs, music, test_song, verbose)
+        legacy_db = None
+        if recipe.get("music_legacy_db"):
+            legacy_db = os.path.join(ROOT, "build", "mkitdb")
+            if not os.path.exists(legacy_db):
+                raise SystemExit("[mkrootfs] this firmware needs iOS 2.x's iTunesDB; "
+                                 "run 'make music-itdb' first (libgpod-dev)")
+        music_mod.apply(out, hfs, music, test_song, verbose, legacy_db,
+                        bool(recipe.get("music_wav_test")))
     if recipe.get("disable_daemons"):
         hfs(out, "mkdir", LD_OFF, check=False)
         n = 0

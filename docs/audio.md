@@ -428,3 +428,18 @@ computer has it, else the file name. `--no-test-song` leaves out the test song.
   one item and the song decodes. `music.py` now also writes one ordinary
   playlist (`is_hidden=0`, `distinguished_kind=0`, name "ios3ds") with every
   track and a `container_ui` row, following libgpod's `itdb_sqlite.c`.
+
+**Older versions (re-log NEXT):** 8B117 uses the same sqlite library and
+`MLSSqliteVFSOpen` patch as 4.2.1 (relocated) and plays the ALAC test song.
+7E18's MusicLibrary has no `_AOU243378_7_1`: its signed-`.cbk` helper is
+`AOU243378_2(MLSSqliteVFSFile*)` at dyld-cache offset `0x12a5844`, stubbed to
+return 1 in `rootfs/overlay-3.1.3.json` (returning 0 makes `itdbprepserver`
+write a 0-byte `Library.itdb`). 7E18's software ALAC decoder refuses our
+escape-frame `.m4a` (the now-playing view opens paused and no stream starts),
+so the same melody is written as PCM `.wav` on 3.1.3; it plays and reaches CSND.
+5H11a has no sqlite `.itlp` library: `scripts/music.py` additionally writes a
+binary `iTunes/iTunesDB` (and an `iTunes_Control/iTunes/iTunesDB` copy) with the
+host helper `tools/music-itdb/mkitdb.c` (`make music-itdb`, needs libgpod), plus
+the PCM song. In-app taps on 8B117/7E18/5H11a need the purple-port fallback in
+`ios3ds-input` (SpringBoard reports `com.apple.mobileipod-AudioPlayer` while
+the event port is registered as `com.apple.mobileipod`).

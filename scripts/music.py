@@ -214,6 +214,20 @@ def make_test_song(path):
     return dict(TEST_SONG, path=path, ms=ms, rate=RATE, bitrate=RATE * 32 // 1000)
 
 
+def make_test_song_wav(path):
+    """The same melody as plain PCM for older firmwares whose software ALAC
+    decoder cannot start a stream from our escape-frame .m4a (re-log NEXT)."""
+    import array
+    samples = render_song()
+    with wave.open(path, "wb") as w:
+        w.setnchannels(2)
+        w.setsampwidth(2)
+        w.setframerate(RATE)
+        w.writeframes(array.array("h", samples).tobytes())
+    ms = len(samples) * 500.0 / RATE
+    return dict(TEST_SONG, path=path, ms=ms, rate=RATE, bitrate=RATE * 32 // 1000)
+
+
 # ---- metadata of the user's files -------------------------------------------------------
 
 
@@ -453,11 +467,14 @@ def build_library(tracks, out):
     return files
 
 
-def gather(music_dir=None, test_song=True, work=None, verbose=True):
+def gather(music_dir=None, test_song=True, work=None, verbose=True, wav_test=False):
     """Track list: the test song (rendered into work) + the playable files of music_dir."""
     tracks = []
     if test_song:
-        tracks.append(make_test_song(os.path.join(work, "ios3ds-test-song.m4a")))
+        if wav_test:
+            tracks.append(make_test_song_wav(os.path.join(work, "ios3ds-test-song.wav")))
+        else:
+            tracks.append(make_test_song(os.path.join(work, "ios3ds-test-song.m4a")))
     if music_dir:
         if not os.path.isdir(music_dir):
             raise SystemExit("[music] no such folder: %s" % music_dir)
@@ -477,14 +494,38 @@ def gather(music_dir=None, test_song=True, work=None, verbose=True):
     return tracks
 
 
-def apply(img, hfs, music_dir=None, test_song=True, verbose=True):
-    """Add the library to the rootfs image (mkrootfs.py; hfs = its hfsplus runner)."""
+def apply(img, hfs, music_dir=None, test_song=True, verbose=True, legacy_db=None, wav_test=False):
+    """Add the library to the rootfs image (mkrootfs.py; hfs = its hfsplus runner).
+
+    legacy_db: path of the host helper that writes iOS 2.x's binary
+    iTunes/iTunesDB (tools/music-itdb/mkitdb.c). wav_test: write the generated
+    test song as PCM instead of ALAC for old firmwares. 4.x recipes set neither
+    and keep the unchanged ALAC/sqlite library.
+    """
     with tempfile.TemporaryDirectory() as td:
-        tracks = gather(music_dir, test_song, td, verbose)
+        tracks = gather(music_dir, test_song, td, verbose, wav_test)
         if not tracks:
             return 0
         out = os.path.join(td, "Media")
         build_library(tracks, out)
+        if legacy_db:
+            itdb = os.path.join(out, "iTunes", "iTunesDB")
+            os.makedirs(os.path.dirname(itdb), exist_ok=True)
+            args = [legacy_db, itdb]
+            for t in tracks:
+                args += [t["title"], t["artist"], t["album"],
+                         "iTunes_Control:Music:" + t["rel"].replace("/", ":"),
+                         str(int(t.get("ms") or 0))]
+            subprocess.run(args, check=True)
+            # 5H11a's MusicLibrary resource table names iTunes/iTunesDB; some
+            # 2.x builds look under iTunes_Control/iTunes. Install both so the
+            # test song is found either way (harmless duplicate, old versions only).
+            alt = os.path.join(out, "iTunes_Control", "iTunes", "iTunesDB")
+            os.makedirs(os.path.dirname(alt), exist_ok=True)
+            shutil.copyfile(itdb, alt)
+            if verbose:
+                print("[music] iOS 2.x library: iTunes/iTunesDB + iTunes_Control/iTunes/iTunesDB "
+                      "(%d song(s))" % len(tracks))
         for d, dirs, fs in os.walk(out):
             rel = os.path.relpath(d, out)
             dev = MEDIA if rel == "." else MEDIA + "/" + rel.replace(os.sep, "/")

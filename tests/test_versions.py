@@ -160,7 +160,7 @@ class TestVersions(unittest.TestCase):
                                       "0x176a3dc", "0x1769eb0", "0x176a1c4",
                                       "0x176a210", "0x176a260",
                                       "0x95760", "0x1bde74c", "0x2f91bb8",
-                                      "0xfa800"])  # EAGLServer API patch is opt-in; VirtualAudio N72/N82 swap (mic)
+                                      "0xfa800", "0x12a5844"])  # EAGLServer API patch is opt-in; VirtualAudio N72/N82 swap (mic); MusicLibrary .cbk helper (test song)
                     # SpringBoard skips DataMigrator only when this matches
                     # the running build (re-log 125).
                     self.assertIn("<key>SBLastSystemVersion</key>\n\t<string>7E18</string>",

@@ -6245,3 +6245,152 @@ off.
 - **[V]** After `git rebase origin/main` (c24a40d): `make test` passes;
   fresh 2.2.1 soak (same command) → **PASS** (cycle 0 Cydia, app diff 52.2);
   fresh 4.2.1 build has the same six hashes; 4.2.1 soak → **PASS**.
+## NEXT. Audio on 4.1, 3.1.3 and 2.2.1: headphone routing, keyboard clicks and the test song (2026-11-26)
+Design: docs/audio.md §4/§10, docs/multi-version.md §6.9, docs/emulator.md
+(`emu/audio_check.py`). All runs used the worktree-private QEMU
+`/tmp/opencode/qemu-compat2/b/qemu-system-arm`, `--icount 2`, and images built
+from firmware staged under this worktree's `build/fw-*`.
+
+### Headphones: already worked, now has an emulator check
+- **[V]** On each of 4.1, 3.1.3 and 2.2.1, two plug/unplug cycles through
+  `qom-set /machine headphones on|off` (QMP boolean) with Music.app open gave
+  `[jack] headphones plugged in|unplugged` from the model, the ARM9's
+  `[audio] headphones plugged in: CODEC output -> headphones ... iOS route ->
+  headphones` / `... unplugged ...`, `ios3ds-audio: headphones in|out, jack
+  interrupt` from the shim, and `[audio] iOS route -> headphones|speaker (jack
+  change #N passed to iOS)`. No CODEC or DMA error, no panic. The same DT
+  `function-hp_detect` (fake GPIO pin 0x0d00), VIC0 source 12 injection and ARM9
+  GPIO2 jack polling are used on every version; no code fix was needed.
+- **[V]** `emu/audio_check.py --tests jack` checks the model *and* guest lines
+  and fails if either side is missing (3.1.3 run: model 2 in/2 out, guest
+  2 in/2 out, 4 iOS route changes).
+
+### Keyboard click: worked, but needed a reliable way to trigger it in QEMU
+- **[V]** Typing `a`, `s`, `d` in Spotlight on 4.1 and 3.1.3, and in Notes on
+  2.2.1, adds a new `[audio] iOS output stream #N started` and a new
+  `[csnd] ch0 play ...` line; the CSND WAV shows the click burst. No change to
+  the audio path: the click is an ordinary UI sound on the same DMA/TC IRQ path
+  as the boot sounds.
+- **[V]** The old input daemon could not resolve an app's purple event port:
+  SpringBoard reported `com.apple.mobileipod-AudioPlayer` while the port is
+  registered as `com.apple.mobileipod`, so in-app taps went to SpringBoard
+  (`[input] no touch port for ...; using SpringBoard`) and Music's playlists
+  could not be opened. `tools/ios3ds-input/daemon/input.c` now has a
+  `INPUT_PURPLE_FALLBACK` build that retries the id up to the first `-`; it is
+  compiled only into the 3.x, 2.x and new 4.1 binaries. The default 4.2.1
+  binary is unchanged (`4747378e…` before and after a clean rebuild).
+
+### Test song: three separate blockers
+- **[V]** 4.1 (8B117): the sqlite `iTunes Library.itlp` opens after the
+  relocated `MLSSqliteVFSOpen` patch (re-log 131); Music.app lists the
+  "ios3ds" playlist and the ALAC song. With the purple-port fallback, opening
+  the song shows the paused now-playing view; tapping Play starts stream #2
+  (`stream stopped: 1478656 words, peak 17910, TC IRQs 47 (47 injected)`), and
+  the CSND mix has a 14426 peak in the last 8 s. No audio fix was needed.
+- **[V]** 3.1.3 (7E18): `itdbprepserver` created `Locations.itdb.cbk` and
+  Music.app exited before showing its library. 7E18 has no
+  `_AOU243378_7_1`; its equivalent is `AOU243378_2(MLSSqliteVFSFile*)` at
+  dyld-cache offset `0x12a5844` (found from MusicLibrary's LC_SYMTAB inside the
+  cache), the sole `bl` target of `MLSSqliteVFSOpen` at `0x12a55a0`. Stubbing
+  it to return 0 made `Library.itdb` 0 bytes; returning 1 (`mov r0,#1; bx lr`,
+  added to `rootfs/overlay-3.1.3.json`) makes the library open and Music.app
+  show "ios3ds Test Song". The ALAC `.m4a` then opened paused and started no
+  stream (7E18's software ALAC decoder does not accept our escape frames), so
+  the same generated melody is written as PCM `.wav` on 3.1.3
+  (`rootfs/overlay-3.1.3.json`: `music_wav_test`). Tapping the song starts
+  stream #2; `[csnd]` reports `820203 frames, 24561 non-silent ... peak 24208`
+  and the WAV tail peaks at 24375.
+- **[V]** 2.2.1 (5H11a): no sqlite `.itlp` library at all; Music.app showed
+  "No Music". `scripts/music.py` now writes a binary `iTunes/iTunesDB` (and an
+  `iTunes_Control/iTunes/iTunesDB` copy) with the new host helper
+  `tools/music-itdb/mkitdb.c` (`make music-itdb`, public libgpod API, no Apple
+  data), plus the PCM song. Music.app then opens on its Artists tab with
+  "ios3ds"; artist → song starts stream #2 and the now-playing view shows the
+  pause icon (playing). The VirtualAudio product-table patch stays disabled on
+  5H11a, as before; only the library/song path changed.
+- **[G]** The 7E18 ALAC decoder failure is diagnosed only from QEMU (no stream,
+  paused UI, WAV works with the same metadata/library). A real 3.1.3 console
+  may decode ALAC; the `.wav` is still a valid, lossless version of the same
+  test song.
+
+### Files changed (all outside the 4.2.1 default path)
+`rootfs/overlay-{4.1,3.1.3,2.2.1}.json`, `scripts/{mkrootfs,music}.py`,
+`Makefile`, `tools/music-itdb/{Makefile,mkitdb.c}`,
+`tools/ios3ds-input/daemon/{Makefile,input.c}`, `emu/audio_check.py`,
+`docs/{audio,emulator,multi-version,re-log}.md`,
+`tests/{test_versions,test_music}.py` (the new 3.1.3 cache patch offset and a test that the PCM fallback song equals the ALAC song).
+
+### 4.2.1 unchanged
+- **[V]** Fresh `make userland` + `rm -f build/sd.img && make sdimg` after all
+  changes: kernel `505f451a44d9da6aae7034d427d5524d7392d9fc70640ec997c374b0b5a70e38`,
+  devtree `25b1bd233447ddfc60eb69e30ad4cbd085c1963f86e77052fda969469d8327cc`,
+  fakeio `e5fecd6645b3bc44d6510d7af7397c667fdc25da4517e2cd9fabc42fb673570d`,
+  shim `a35631eb66b3c2855a1a02e656bb88b77b132dd89f7a3c69a429f9a033a4a3a1`,
+  gpu `6bdaf6177b66a3d268d3472958a74c8797ce18c64a1a4556f04806292691f479`,
+  boot.cfg `8d4079cfe114e5006a82967dee51b28de666376474fa86ebd8c9a5d4969b5e29`
+  — the values printed by main before this round. `make test` passes.
+
+### Hardware checklist (diag=1 log.txt)
+1. Plug in headphones during Music playback: `[audio] headphones plugged in:
+   CODEC output -> headphones ... iOS route -> headphones`, then
+   `[audio] iOS route -> headphones (jack change #N passed to iOS)` and a
+   `[audio] iOS headphone volume: CS42L58 .. -> CSND volume ...` line; sound
+   must come only from the headphones (the analogue 3DS CODEC path is still
+   unconfirmed, docs/audio.md §8).
+2. Unplug: the mirrored `unplugged` / `iOS route -> speaker` lines and the
+   speaker continuing the song (or the iPod app pausing on
+   `OldDeviceUnavailable`).
+3. Type on the keyboard: a UI click is audible; in a debug log a new
+   `[audio] iOS output stream #N started` accompanies each group of taps.
+4. Music.app: "ios3ds" playlist → "ios3ds Test Song"; the 39 s melody plays
+   from the speaker and through the headphones when plugged in.
+
+### Emulator checks (`emu/audio_check.py`)
+- **[V]** 2.2.1 full check (`build/ac221/report.md`): jack PASS (model 2/2,
+  guest 2/2, 4 route changes), click PASS (1 new output stream and 1 CSND
+  start), song PASS (1 new stream/start; CSND mix tail peak 20544).
+- **[V]** 3.1.3: jack PASS (`build/ac313`, model 2/2, guest 2/2, 4 routes) and
+  song PASS (new stream #3, WAV tail peak 22795); the click check passed on a
+  second run (`build/ac313c`: 1 stream, 1 CSND start) — the Spotlight page
+  swipe is occasionally swallowed under host load.
+- **[V]** 4.1: the automated jack check passes (model 2/2, guest 2/1, 3
+  routes); the manual session above captured both the click (new stream #2,
+  `[csnd] ch0 play`) and the ALAC song (stream #2, peak 17910) on 8B117. The
+  automated click/song sequence is timing-sensitive there (Spotlight/Notes
+  transitions under a loaded host), so those two lines are manual evidence.
+- **[G]** A hardware `diag=1` run is still needed for the analogue CODEC
+  output; QEMU stops at the CSND mix.
+
+### Soaks and final verification
+- **[V]** Four fresh images were built with `scripts/mksd.py --image ... --ios
+  VERSION --staging build/fw-VERSION/staging` and soaked sequentially with
+  `IOS3DS_QEMU=/tmp/opencode/qemu-compat2/b/qemu-system-arm`:
+  - 4.2.1 (`build/sd.img` from the final default `make sdimg`):
+    `python3 emu/soak.py --cycles 5 --icount 2 --out build/soak421-final`
+    → **Result: PASS** (input after 81 s, five cycles, 0 panics/crashes/DMA
+    errors, home diff 0.0).
+  - 4.1 (`build/soak-41.img`): `--sd ... --cycles 5 --icount 2 --require-app
+    --crashlogs` → **Result: PASS** (input after 80 s, five app/home cycles,
+    no tap that opened nothing, 0 restarts/crashes/DMA errors).
+  - 3.1.3 (`build/soak-313.img`): `--sd ... --cycles 5 --icount 2
+    --require-app --crashlogs --targets "47,314;123,226;199,226;275,226;123,50"`
+    → **Result: PASS** (input after 61 s, 0 restarts/crashes/DMA errors).
+  - 2.2.1 (`build/soak-221.img`): `--sd ... --cycles 5 --icount 2
+    --require-app --crashlogs --targets "275,226;199,226;123,226;47,226;275,50"`
+    → **Result: PASS** (input after 60 s, 0 restarts/crashes/DMA errors).
+- **[V]** `make test` passes after all changes (including the new PCM-song
+  host test and the relocated 3.1.3 patch-offset expectation).
+
+### After `git rebase origin/main` (76d86c4, 2026-11-26)
+- **[V]** `make test` passes; a fresh default `make userland` + `make sdimg`
+  still gives the six main hashes: kernel `505f451a…`, devtree `25b1bd23…`,
+  fakeio `e5fecd66…`, shim `a35631eb…`, gpu `6bdaf617…`, boot.cfg
+  `8d4079cf…`.
+- **[V]** Four fresh images (`build/post-{4-1,3-1-3,2-2-1}.img` plus the
+  default `build/sd.img`) were soaked again with the same commands as above:
+  4.2.1, 4.1, 3.1.3 and 2.2.1 → **Result: PASS** in all four
+  (`build/post-soak*/report.md`, 5 cycles each, 0 crashes/DMA errors).
+- **[V]** Post-rebase 2.2.1 image (now with main's iPhone OS 2 Cydia set):
+  `emu/audio_check.py --tests jack,song` → **PASS** (jack model 2/2 and guest
+  2/2 with 4 route changes; one new output stream/CSND start for the song,
+  CSND WAV tail peak 22936).

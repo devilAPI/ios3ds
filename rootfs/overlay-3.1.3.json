@@ -2,6 +2,7 @@
  "_comment": "iOS 3.1.3 (7E18) overlay on rootfs/recipe.json. Applied by scripts/versions.py into build/fw-3.1.3/recipe.json; the 4.2.1 recipe is never changed. The 3.1 dyld shared cache exists but every 8C148 file patch points at code that moved, so none is applied until it is relocated by symbol (docs/multi-version.md). Our userland binaries are built against 4.2.1's exported symbols and are not installed yet; Cydia/TLSFix packages are 4.2.1-only. The liblockdown body/table below are the 7E18 equivalents of the 8C148 activation patches (symbol-relocated from 4.2.1), so 3.1.3 has offline activation answers without a dyld-cache override. SpringBoard stdout/stderr go to the console for bring-up diagnostics (no 3.x applog tool is installed).",
  "cydia": "rootfs/cydia.json",
  "tlsfix": false,
+ "music_wav_test": true,
  "trust_store": null,
  "write": {
   "_replace": true,
@@ -194,6 +195,14 @@
    "orig": "4e3732004e383200",
    "new": "583732004e373200",
    "why": "7E18 VirtualAudio (mediaserverd's routing plug-in) picks its routing by matching hw.model against the product table at 0xfa7f4 (M68 N18 N45 N72 N82 N88). N72 has no built-in microphone, so iOS reported input available 0 and AudioQueueNewInput failed with 'nohw'. 3.1.3 has no N81 entry (the receiver-less model 4.2.1 borrows), so swap the N72 slot to 'X72' and the N82 (iPhone 3G) slot to 'N72': input comes from the codec's 'imic' data source (dt_audio.py ain2b-intmic) and the 3DS microphone (docs/audio.md section 7, re-log 130)"
+  },
+  {
+    "path": "/System/Library/Caches/com.apple.dyld/dyld_shared_cache_armv6",
+    "offset": "0x12a5844",
+    "orig": "f0402de90c708de2",
+    "new": "0100a0e31eff2fe1",
+    "why": "7E18 MusicLibrary AOU243378_2(MLSSqliteVFSFile*) -> 1 (ARM mov r0,#1; bx lr; \"allowed\"), skipping the signed .itdb.cbk path. MLSSqliteVFSOpen (VA 0x312a55a0, cache offset 0x12a55a0) is its only caller; on 8C148 the equivalent helper _AOU243378_7_1 is stubbed the same way (recipe.json, docs/audio.md section 10), so iTunes' signed .itdb.cbk checksum file is neither written nor checked. 7E18 has no _AOU243378_7_1: the helper here is AOU243378_2 at 0x312a5844, found by the MusicLibrary image's LC_SYMTAB in the dyld cache. Returning 0 instead made itdbprepserver write a 0-byte Library.itdb; returning 1 leaves a plain, unsigned library that itdbprepserver upgrades and Music.app lists (re-log NEXT).",
+    "mode": "0644"
   }
  ],
  "_cydia_pseudo": "Cydia 1.1.30 + APT/dpkg (armv6, iOS >= 2.0) without TLSFix (a Substrate tweak; Substrate is loaded by ios3ds-applog, which old versions do not install). Virtual firmware packages carry this firmware's versions",

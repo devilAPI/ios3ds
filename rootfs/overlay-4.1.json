@@ -1,6 +1,9 @@
 {
  "_comment": "iOS 4.1 (8B117) overlay on rootfs/recipe.json. Applied by scripts/versions.py into build/fw-4.1/recipe.json; the base recipe is never changed. Cydia/TLSFix use the base recipe's package set (Cydia 1.1.30 and Substrate run on iOS >= 2.0/3.x); only the 4.2.1 IconState layout is dropped.",
  "cydia": "rootfs/cydia.json",
+ "replace_add": {
+  "build/rootfs-add/usr/libexec/ios3ds-input": "build/rootfs-add/ios41/ios3ds-input"
+ },
  "tlsfix": true,
  "file_patches_search": true,
  "_new_hex_replace": "relocate the literal CFStrings in liblockdown's activation table: ProductVersion 4.2.1 -> 4.1 (length 5 -> 3, keeping the 160-byte patch), BuildVersion 8C148 -> 8B117 (same length)",
