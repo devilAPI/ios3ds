@@ -8,14 +8,16 @@
   "/etc/fstab": "/dev/md0 / hfs rw 0 0\n",
   "/etc/syslog.conf": "*.*\t/var/log/syslog\n",
   "/var/log/syslog": "",
-  "/private/var/mobile/Library/Preferences/com.apple.springboard.plist": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict>\n\t<key>SBLastSystemVersion</key>\n\t<string>5H11a</string>\n\t<key>SBDisableAutoDim</key>\n\t<true/>\n\t<key>SBDontLockAfterCrash</key>\n\t<true/>\n\t<key>SBDidShowReorderText</key>\n\t<true/>\n\t<key>SBDisableMailAutoLaunch</key>\n\t<true/>\n\t<key>SBNoWatchdogs</key>\n\t<true/>\n</dict>\n</plist>\n"
+  "/private/var/mobile/Library/Preferences/com.apple.springboard.plist": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict>\n\t<key>SBLastSystemVersion</key>\n\t<string>5H11a</string>\n\t<key>SBDisableAutoDim</key>\n\t<true/>\n\t<key>SBDontLockAfterCrash</key>\n\t<true/>\n\t<key>SBDidShowReorderText</key>\n\t<true/>\n\t<key>SBDisableMailAutoLaunch</key>\n\t<true/>\n\t<key>SBNoWatchdogs</key>\n\t<true/>\n</dict>\n</plist>\n",
+  "/private/var/preferences/SystemConfiguration/preferences.plist": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict>\n\t<key>CurrentSet</key>\n\t<string>/Sets/A6D2E0C1-2A21-4B1E-8C4F-1D5E00000221</string>\n\t<key>NetworkServices</key>\n\t<dict>\n\t\t<key>10D3D5A0-2A21-4E15-9E2D-1D5E00000221</key>\n\t\t<dict>\n\t\t\t<key>DNS</key>\n\t\t\t<dict/>\n\t\t\t<key>IPv4</key>\n\t\t\t<dict>\n\t\t\t\t<key>ConfigMethod</key>\n\t\t\t\t<string>DHCP</string>\n\t\t\t</dict>\n\t\t\t<key>Interface</key>\n\t\t\t<dict>\n\t\t\t\t<key>DeviceName</key>\n\t\t\t\t<string>en0</string>\n\t\t\t\t<key>Hardware</key>\n\t\t\t\t<string>AirPort</string>\n\t\t\t\t<key>Type</key>\n\t\t\t\t<string>Ethernet</string>\n\t\t\t\t<key>UserDefinedName</key>\n\t\t\t\t<string>Wi-Fi</string>\n\t\t\t</dict>\n\t\t\t<key>Proxies</key>\n\t\t\t<dict/>\n\t\t\t<key>UserDefinedName</key>\n\t\t\t<string>Wi-Fi</string>\n\t\t</dict>\n\t</dict>\n\t<key>Sets</key>\n\t<dict>\n\t\t<key>A6D2E0C1-2A21-4B1E-8C4F-1D5E00000221</key>\n\t\t<dict>\n\t\t\t<key>Network</key>\n\t\t\t<dict>\n\t\t\t\t<key>Global</key>\n\t\t\t\t<dict>\n\t\t\t\t\t<key>IPv4</key>\n\t\t\t\t\t<dict>\n\t\t\t\t\t\t<key>ServiceOrder</key>\n\t\t\t\t\t\t<array>\n\t\t\t\t\t\t\t<string>10D3D5A0-2A21-4E15-9E2D-1D5E00000221</string>\n\t\t\t\t\t\t</array>\n\t\t\t\t\t</dict>\n\t\t\t\t</dict>\n\t\t\t\t<key>Service</key>\n\t\t\t\t<dict>\n\t\t\t\t\t<key>10D3D5A0-2A21-4E15-9E2D-1D5E00000221</key>\n\t\t\t\t\t<dict>\n\t\t\t\t\t\t<key>__LINK__</key>\n\t\t\t\t\t\t<string>/NetworkServices/10D3D5A0-2A21-4E15-9E2D-1D5E00000221</string>\n\t\t\t\t\t</dict>\n\t\t\t\t</dict>\n\t\t\t</dict>\n\t\t\t<key>UserDefinedName</key>\n\t\t\t<string>Automatic</string>\n\t\t</dict>\n\t</dict>\n</dict>\n</plist>\n"
  },
  "remove": [
   "/System/Library/Caches/com.apple.kernelcaches/kernelcache.s5l8720x"
  ],
  "mkdirs": [
   "/private/var/mobile/Library/Logs",
-  "/private/var/mobile/Library/Logs/CrashReporter"
+  "/private/var/mobile/Library/Logs/CrashReporter",
+  "/private/var/preferences/SystemConfiguration"
  ],
  "_activation": "SpringBoard's liblockdown calls end in /var/run/lockdown/localcomm, which does not exist without lockdownd. The stock /usr/lib/liblockdown.dylib is byte-patched in place (connect/checkin/copy_value/copy_identity/disconnect/set/remove stubs and an offline ActivationState table) and keeps its stock signature blob: re-signing it stalls 2.x dyld (re-log 116), and the 2.2.1 kernel patch cs-invalid-page-allow accepts the patched pages instead (re-log 128).",
  "symlink": {
@@ -32,12 +34,18 @@
     "LK_ENABLE_MBX2D": "0",
     "CA_ENABLE_OGL": "0",
     "LK_ENABLE_OGL": "0",
-    "MBX2D_PAGE_FLIP": "0"
+    "MBX2D_PAGE_FLIP": "0",
+    "DYLD_INSERT_LIBRARIES": "/usr/lib/ios3ds-a80211.dylib"
    }
   }
  },
  "plist_merge": {
-  "_replace": true
+  "_replace": true,
+  "/System/Library/LaunchDaemons/com.apple.configd.plist": {
+   "EnvironmentVariables": {
+    "DYLD_INSERT_LIBRARIES": "/usr/lib/ios3ds-a80211.dylib"
+   }
+  }
  },
  "add": {
   "_replace": true,
@@ -50,7 +58,11 @@
   "build/rootfs-add/ios2/ios3ds-diag": "/usr/libexec/ios3ds-diag",
   "build/rootfs-add/ios2/ios3ds-gps": "/usr/bin/ios3ds-gps",
   "build/rootfs-add/ios2/ios3ds-gpstest": "/usr/libexec/ios3ds-gpstest",
-  "tools/ios3ds-gps/com.ios3ds.gpstest.plist": "/System/Library/LaunchDaemons/com.ios3ds.gpstest.plist"
+  "tools/ios3ds-gps/com.ios3ds.gpstest.plist": "/System/Library/LaunchDaemons/com.ios3ds.gpstest.plist",
+  "build/rootfs-add/ios2/ios3ds-wifid": "/usr/libexec/ios3ds-wifid",
+  "build/rootfs-add/ios2/ios3ds-nettest": "/usr/libexec/ios3ds-nettest",
+  "build/rootfs-add/ios2/ios3ds-a80211.dylib": "/usr/lib/ios3ds-a80211.dylib",
+  "tools/ios3ds-wifi/daemon/com.ios3ds.wifi.plist": "/System/Library/LaunchDaemons/com.ios3ds.wifi.plist"
  },
  "chmod": {
   "_replace": true,
@@ -63,14 +75,18 @@
   "/usr/libexec/ios3ds-diag": "0755",
   "/usr/bin/ios3ds-gps": "0755",
   "/usr/libexec/ios3ds-gpstest": "0755",
-  "/System/Library/LaunchDaemons/com.ios3ds.gpstest.plist": "0644"
+  "/System/Library/LaunchDaemons/com.ios3ds.gpstest.plist": "0644",
+  "/usr/libexec/ios3ds-wifid": "0755",
+  "/usr/libexec/ios3ds-nettest": "0755",
+  "/usr/lib/ios3ds-a80211.dylib": "0755",
+  "/System/Library/LaunchDaemons/com.ios3ds.wifi.plist": "0644"
  },
  "cydia_plist_write": {
   "_replace": true
  },
  "file_patches": [],
  "disable_daemons": [],
- "_todo": "Darwin 9 lacks IOSurface, CoreMotion and Celestial's 4.x API: our 4.2.1 GPU/gyro/camera userland binaries cannot simply be copied here. The activation interposer above is the only 4.2.1-derived tool installed on 2.2.1; input/MCU/Wi-Fi tools are still not installed (docs/multi-version.md §6.5).",
+ "_todo": "Darwin 9 lacks IOSurface, CoreMotion and Celestial's 4.x API: our 4.2.1 GPU/gyro/camera userland binaries cannot simply be copied here. The activation interposer above is the only 4.2.1-derived tool installed on 2.2.1; input/MCU/Wi-Fi tools are still not installed (docs/multi-version.md \u00a76.5).",
  "extra_file_patches": [
   {
    "path": "/usr/lib/liblockdown.dylib",
@@ -148,5 +164,6 @@
  "inject_dylibs": {
   "/Applications/Maps.app/Maps": "/usr/lib/ios3ds-applog.dylib",
   "/Applications/MobileSafari.app/MobileSafari": "/usr/lib/ios3ds-applog.dylib"
- }
+ },
+ "_wifi": "Wi-Fi (re-log NEXT): en0 is the shim's own Darwin 9 ifnet (kern.ios3ds_eth, tools/ios3ds-wifi/shim/kif_eth.c) because 5H11a has no IOUserEthernet. It is not an IOKit object, so configd would not create a network service for it: the preferences.plist above holds one Wi-Fi service on en0 with DHCP. configd gets the 2.x a80211 bridge. SpringBoard (and the apps it starts, i.e. Settings' AirPortSettings) also get it: on 2.x they call Apple80211 in-process."
 }
