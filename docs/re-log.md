@@ -6139,7 +6139,7 @@ ios3ds_safe=1 ...` from SpringBoard.
   (24268 bytes), gpu 5c3b584d, boot.cfg ff838865.
 - [V] Fresh 4.2.1 soak `--cycles 5 --icount 2` -> PASS; `make test` passes.
 
-## NEXT. Cydia on 2.2.1: an iPhone OS 2 package set (Cydia 1.0.3222) (2026-11-26)
+## 146. Cydia on 2.2.1: an iPhone OS 2 package set (Cydia 1.0.3222) (2026-11-26)
 
 Design and user notes: docs/cydia.md "iPhone OS 2.x". Closes the 2.2.1 Cydia
 row of the driver matrix (docs/multi-version.md §6.9), which re-log 131 left
