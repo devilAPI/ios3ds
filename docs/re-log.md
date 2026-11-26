@@ -6671,7 +6671,7 @@ stubs `IOMobileFramebufferEnable/DisableVSyncNotifications` 0x31bf596c/0x31bf595
 - **[G]** Making QEMU's PICA200 frames faster (so the pause also goes away
   in the emulator) is a separate performance item, not done here.
 
-## NEXT. One-boot hardware test kit: `boot.cfg hwtest=1` (2026-11-26)
+## 152. One-boot hardware test kit: `boot.cfg hwtest=1` (2026-11-26)
 
 Goal: one console boot that checks every driver and writes a clear
 PASS/FAIL/SKIP block to `log.txt` (and the screen), so a hardware report
