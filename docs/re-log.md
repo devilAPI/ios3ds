@@ -6718,3 +6718,66 @@ is one file instead of a dozen manual steps. User docs:
 
 ### Results (QEMU)
 
+- **[V]** 4.2.1, `hwtest=2` (`emu/hwtest_check.py --mode 2`): summary after
+  59–80 s of checks, **13 PASS, 0 FAIL, 5 SKIP** (gps, headphone, buttons,
+  stereo3d, lock/wake need `gps=`/a person). Accel 39 samples in 3 s,
+  CoreMotion gyro 209 ARM9 samples, both cameras one frame, gltest pass,
+  tone route "Speaker", mic 66150/66150 frames (QEMU sine), en0 10.0.2.15,
+  `https://example.com/` 577 bytes, backlight level 90. The on-screen alert
+  shows "Hardware test: 13 PASS, 0 FAIL, 5 SKIP" with the grouped names
+  (screenshot `build/emu-hwtest/summary-mode2.png`).
+- **[V]** 4.2.1, `hwtest=1` + `stereo3d=1` + `gps=52.5200,13.4050`, harness
+  playing the person (`--mode 1`): **19 PASS, 0 FAIL, 1 SKIP** (headphone:
+  the yes/no alert is left to time out). Touch 78 pen samples, buttons
+  `ff3` (all ten wanted), volume slider 0..63, 1 HOME press, 3D slider
+  0..255, lock/wake: 2 POWER presses, backlight off then on; gps PASS (the
+  separate gpstest job had already moved the location to 40.71,-74.01, now
+  reported as "moved at runtime"). Every unanswered prompt timed out to SKIP.
+- **[V]** 4.2.1 control, `--mode 0` (no `hwtest=`): home screen up
+  (`[mcud] connected to SpringBoard`), **0 `[hwtest]` lines** in 900 s.
+- **[V]** 4.1: first run 11 PASS / 2 FAIL — outer camera gave no frame
+  within 6 s, and the first HTTPS fetch 12 s after the join failed
+  (NSCocoaErrorDomain 256). Fixed in the tool (15 s frame wait, 3 tries
+  15 s apart); rerun **13 PASS, 0 FAIL, 5 SKIP**, the fetch succeeded on
+  the second try.
+- **[V]** 3.1.3: **11 PASS, 0 FAIL, 7 SKIP**: gyro chip PASS without
+  CoreMotion, gpu SKIP (no gltest on 7E18), https SKIP (NSCocoaErrorDomain
+  256: 3.x TLS), mic 66150 frames, both cameras one frame, join after 20 s.
+- **[V]** 2.2.1 (iPhone OS 2 build of the tool): first run 9 PASS / 1 FAIL /
+  8 SKIP; the FAIL was cameras (START accepted, no frame from either
+  sensor in 15 s). Cameras are n/a on 2.x (no Camera.app/MediaCapture,
+  §6.9), so the tool now reports SKIP with the frame-path result.
+  Mic SKIP (no route, re-log 134), https SKIP (TLS), gpu SKIP.
+  Rerun with that rule: **9 PASS, 0 FAIL, 9 SKIP**, END: PASS.
+- **[V]** Soaks, fresh images, `hwtest` off (default `boot.cfg`):
+  4.2.1 `soak.py --cycles 5 --icount 2` **PASS** (input after 130 s, 5 apps,
+  0 panics/crashes, no SpringBoard restart after the first connect);
+  4.1 `--require-app` **PASS** (150 s, 5 apps); 3.1.3 `--require-app
+  --targets "47,314;123,226;199,226;275,226;123,50"` **PASS** (80 s);
+  2.2.1 `--require-app --targets "275,226;199,226;123,226;47,226;275,50"`
+  **PASS** (90 s).
+- **[V]** 4.2.1 default build hashes unchanged: kernel `505f451a…`, devtree
+  `25b1bd23…`, fakeio `e5fecd66…`, shim `a35631eb…`, gpu `6bdaf617…`,
+  boot.cfg `8d4079cf…`. `make test` passes (new `tests/test_hwtest.py`,
+  `hwtest` cases in `test_bootcfg.py`, version add lists, stub SDK symbols
+  `_kill`, `_pipe`, `_strcat`).
+
+### Findings for other areas
+
+- 2.2.1 camera frame path: `ios3ds_cam` START returns OK but no FRAME
+  arrives from either sensor in QEMU (3.1.3/4.x deliver at once). Camera is
+  n/a on 2.x anyway; not chased (camera owner).
+- 4.1 right after the join, the first `NSData` HTTPS fetch fails with
+  NSCocoaErrorDomain 256 and no NSUnderlyingError; 15 s later it works
+  (DNS/route settling). Safari users may see the same first-page error.
+
+### Needs hardware [G]
+
+- Boot once with `hwtest=1` (and `stereo3d=1`, `gps=…` if wanted), follow
+  the prompts, send `log.txt`. The `[hwtest] ==== SUMMARY` block is the
+  report. Unchecked on a console: CFUserNotification prompts on the real
+  SpringBoard, the "heard it?" answers (speaker/CODEC/amp, headphones),
+  a real mic level (QEMU used a sine), the ITG-3270 through CoreMotion,
+  the 3D look, and whether the 4.2.1 summary alert is visible after the
+  lock/wake check (in QEMU mode 1 the final screenshot was black: the
+  screen had been locked by the test itself; the alert appears on wake).
