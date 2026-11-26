@@ -6242,3 +6242,6 @@ off.
   recovery, no crash reports).
 - **[V]** Fresh 4.2.1 image, `emu/soak.py --cycles 5 --icount 2` →
   **Result: PASS**.
+- **[V]** After `git rebase origin/main` (c24a40d): `make test` passes;
+  fresh 2.2.1 soak (same command) → **PASS** (cycle 0 Cydia, app diff 52.2);
+  fresh 4.2.1 build has the same six hashes; 4.2.1 soak → **PASS**.
