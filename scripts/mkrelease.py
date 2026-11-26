@@ -50,6 +50,7 @@ ROOTFS_ADD = "rootfs-add"       # build/rootfs-add/** -> prebuilt/rootfs-add/**,
 # repository files the installer imports or reads (paths kept as in the repo)
 SOURCES = [
     "scripts/fwprep.py", "scripts/mkboot.py", "scripts/mkrootfs.py", "scripts/mksd.py",
+    "scripts/inject_dylib.py",
     "scripts/install.py", "scripts/versions.py", "scripts/kpi.py", "scripts/fwlib/*.py",
     "kernel/dtgen.py", "kernel/patcher.py", "kernel/patches*.json",
     # per-version patch sets and rootfs overlays (experimental IOS=4.1 build)
