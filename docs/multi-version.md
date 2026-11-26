@@ -889,4 +889,4 @@ that build's public keys and drives `mksd.py --ios VERSION`, the same path as
 version prints a HIGHLY EXPERIMENTAL / QEMU-only / may-not-boot warning. The
 GPU flags above are still developer build-time switches; release installs use
 the software compositor. User instructions and IPSW hashes:
-[docs/other-versions.md](other-versions.md); verification: re-log NEXT.
+[docs/other-versions.md](other-versions.md); verification: re-log 150.

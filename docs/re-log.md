@@ -6553,7 +6553,7 @@ compat16 worktree into this worktree's `build/fw-2.2.1`. 5H11a code read with
 - The same SwapSetLayer token flag / SwapWait pattern may be behind 3.1.3's
   GPU-path "first frame after Home" issue (§148); not checked there.
 
-## NEXT. Release installer version choice and user docs for the other iOS versions (2026-11-26)
+## 150. Release installer version choice and user docs for the other iOS versions (2026-11-26)
 
 - **[V]** `scripts/install.py` now accepts only `--ios 4.2.1|4.1|3.1.3|2.2.1`
   (default 4.2.1). An unknown version is refused by an argparse `type` check
