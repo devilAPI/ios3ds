@@ -414,3 +414,15 @@ Fresh-image soaks: `stereo3d=0` PASS, `stereo3d=1 --slider3d 255` PASS.
 `emu/perf.py --slider3d 255` folder animation: 25-28 frames/s avg 35-46 ms
 before, 39-40 frames/s avg 24-26 ms after (guest time; the same pace as
 stereo off). The hardware checklist is at the end of re-log 127.
+
+### Stereo round 4 (2026-11-26)
+
+Transitions (§4.1), `stereo_depth` (§4.2) and `gpu3d.bin` (§4.3): before
+this round PDC0 never actually switched to 3D, in QEMU or on a console.
+`emu/stereo_tour.py` now shows real per-class disparity on both eyes through
+page swipes, Spotlight, the folder, app open/close and the switcher, with no
+3D/2D toggling and no depth sign flips. `stereo3d=0` is byte-identical and
+its soak passes; `stereo3d=1` soaks fail on current main with background
+apps SIGKILLed (also with main's engine, see the re-log), so the flag stays
+experimental. Details and the hardware checklist: the re-log section
+"Stereo 3D round 4".
