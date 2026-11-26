@@ -21,7 +21,7 @@
 #define ST_GX_VA      0xBFE00000u              /* entry.S: PA 0x10400000 */
 /* PDC0 sits at +0x400 in the GX block (entry.S PDC0). The default gpu.bin
    was built with base 0, so its "PDC0" writes hit 0x10400024..0x10400098
-   instead (found in QEMU: PDC0 +0x70 never left 2D, re-log NEXT stereo 4).
+   instead (found in QEMU: PDC0 +0x70 never left 2D, re-log 155 stereo 4).
    That gpu.bin must stay byte-identical (the 4.2.1 hashes), so the fix ships
    as a second GPU part, gpu3d.bin: scripts/mkboot.py copies gpu.bin and
    moves this file's one ST_GX_VA literal to 0xBFE00400 (PDC0), so no other

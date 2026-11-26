@@ -40,7 +40,7 @@ static stereo_frame_t st_f;
 static RT st_rt;                    /* the display target of this frame */
 static int st_have_rt;
 static unsigned st_home, st_flat, st_wipes, st_stamps, st_frames;
-/* Transitions (re-log NEXT, docs/stereo3d.md section 4.1) */
+/* Transitions (re-log 155, docs/stereo3d.md section 4.1) */
 static int st_full;                 /* this frame had a full-screen draw */
 static int st_scene_home = 1;       /* the last complete frame was the home screen */
 static unsigned st_sticky, st_partial, st_dropped, st_covers;

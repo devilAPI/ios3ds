@@ -6841,7 +6841,7 @@ driver work:
   PASS through both joins, plus one console join from the "Select a Wi-Fi
   Network" alert on the reporter's Old 3DS.
 
-## NEXT. Stereo 3D round 4: transitions, `stereo_depth`, and the PDC0 switch that never reached PDC0 (2026-11-26)
+## 155. Stereo 3D round 4: transitions, `stereo_depth`, and the PDC0 switch that never reached PDC0 (2026-11-26)
 
 Goal: keep per-layer depth through app open/close, the switcher, folders and
 page swipes (no flicker, no eye mismatch, flat when the depth is unknown),

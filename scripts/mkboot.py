@@ -205,7 +205,7 @@ def stereo_gpu_part(gpu, rng):
     """gpu3d.bin's GPU part (stereo3d=1 only): gpu.bin's part with the one
     GX-base literal of kernel/shim/pica_stereo.c moved to PDC0. That file's
     register macro adds the PDC0 offsets to the GX block's base instead of
-    PDC0's, so the 2D/3D switch never reached PDC0 (re-log NEXT stereo 4).
+    PDC0's, so the 2D/3D switch never reached PDC0 (re-log 155 stereo 4).
     Patching the literal keeps every other byte and address of the part
     identical, and gpu.bin itself is not touched."""
     lo, hi = rng
