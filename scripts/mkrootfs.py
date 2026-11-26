@@ -275,6 +275,31 @@ def build(staging, out, recipe_path=None, verbose=True, hfsplus=None, rootfs_add
                 print("[mkrootfs] re-signed %s (mode %s)" % (path, mode))
         for path, mode in recipe.get("chmod", {}).items():
             hfs(out, "chmod", mode, path)
+        # Old versions cannot put applog into apps through SpringBoard's
+        # SBGuardMallocAlways (4.x only) or a launchd-wide environment (hangs
+        # the boot): add it as a real LC_LOAD_DYLIB dependency of the chosen
+        # stock executables instead (scripts/inject_dylib.py, re-log NEXT).
+        # Only overlays set "inject_dylibs"; 4.2.1's recipe has no such key.
+        if recipe.get("inject_dylibs"):
+            import inject_dylib
+            for path, dylib in recipe["inject_dylibs"].items():
+                if path.startswith("_") or not dylib:
+                    continue
+                tmp = os.path.join(td, "inject")
+                with open(tmp, "wb") as f:
+                    f.write(hfs_cat(out, path))
+                new = inject_dylib.patch(open(tmp, "rb").read(), dylib)
+                if new == open(tmp, "rb").read():
+                    if verbose:
+                        print("[mkrootfs] %s already depends on %s" % (path, dylib))
+                    continue
+                with open(tmp, "wb") as f:
+                    f.write(new)
+                hfs(out, "rm", path)
+                hfs(out, "add", tmp, path)
+                hfs(out, "chmod", "0755", path)
+                if verbose:
+                    print("[mkrootfs] injected %s -> %s" % (dylib, path))
     if music or test_song:
         import music as music_mod
         music_mod.apply(out, hfs, music, test_song, verbose)

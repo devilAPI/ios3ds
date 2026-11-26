@@ -144,5 +144,9 @@
   "cy+kernel.darwin": "9.4.1",
   "cy+lib.corefoundation": "478.29"
  },
- "_gps": "Fake GPS (docs/location.md): ios3ds-applog.dylib, ios3ds-gps, ios3ds-gpstest and ios3ds-diag are installed (2.x builds on 2.2.1). The CoreLocation hooks work in a process that loads applog (gpstest). Stock apps do not get applog yet: SpringBoard's SBGuardMalloc debug switch (3.x/2.x have no SBGuardMallocAlways) did not reach MobileMaps in QEMU even with its one-shot removeObjectForKey: nopped, so it is not used (re-log 135)."
+ "_gps": "Fake GPS (docs/location.md): 2.x builds of ios3ds-applog.dylib, ios3ds-gps, ios3ds-gpstest and ios3ds-diag are installed. CoreLocation hooks work in a process that loads applog; the stock Maps and MobileSafari executables get an LC_LOAD_DYLIB for it (below), because 2.x has no SBGuardMallocAlways and a launchd-wide DYLD_INSERT_LIBRARIES hangs the boot (re-log NEXT).",
+ "inject_dylibs": {
+  "/Applications/Maps.app/Maps": "/usr/lib/ios3ds-applog.dylib",
+  "/Applications/MobileSafari.app/MobileSafari": "/usr/lib/ios3ds-applog.dylib"
+ }
 }
