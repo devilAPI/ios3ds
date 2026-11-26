@@ -5694,3 +5694,34 @@ category activation or leave `input available 0`.
 - **[V]** Reverting the experiments leaves the 2.2.1 overlay exactly as on
   main: no `VirtualAudio` entry in `rootfs/overlay-2.2.1.json`. All four
   version soaks and the six 4.2.1 hashes were re-checked afterwards.
+
+### Verification of this round's tree (2026-11-26)
+
+- **[V]** `make test` passes (97 offline tests, GL/Wi-Fi/GPS/input/ALS/
+  blkcache harnesses, stub-symbol check). The repository has **no code change**
+  in this round: only `docs/re-log.md` and `docs/multi-version.md` are modified.
+- **[V]** Fresh default build (`python3 scripts/mkboot.py --out build/verify421`)
+  gives `kernel 505f451a44d9da6aae7034d427d5524d7392d9fc70640ec997c374b0b5a70e38`,
+  `devtree 25b1bd233447ddfc60eb69e30ad4cbd085c1963f86e77052fda969469d8327cc`,
+  `fakeio e5fecd6645b3bc44d6510d7af7397c667fdc25da4517e2cd9fabc42fb673570d`,
+  `shim a35631eb66b3c2855a1a02e656bb88b77b132dd89f7a3c69a429f9a033a4a3a1`,
+  `gpu 6bdaf6177b66a3d268d3472958a74c8797ce18c64a1a4556f04806292691f479`,
+  `boot.cfg 8d4079cfe114e5006a82967dee51b28de666376474fa86ebd8c9a5d4969b5e29`
+  — the six values recorded on main (re-log 132/134/135).
+- **[V]** Fresh images, `IOS3DS_QEMU=/tmp/opencode/qemu-compat2/b/qemu-system-arm`,
+  `--icount 2`, five cycles each, **Result: PASS** in all four soaks:
+  - 2.2.1: `--require-app --crashlogs --targets
+    "275,226;199,226;123,226;47,226;275,50"`; input after 65 s, five apps
+    opened (diffs 52.8–109.0), home diff 0.0 after every Home, 0 panics,
+    0 crashes, no audio DMA errors.
+  - 3.1.3: `--require-app --crashlogs --targets
+    "47,314;123,226;199,226;275,226;123,50"`; 0 panics, 0 crashes, every tap
+    opened an app.
+  - 4.1: `--require-app --crashlogs`; 0 panics, 0 crashes, every tap opened
+    an app.
+  - 4.2.1: default image, no extra flags; 0 restarts, home after every Home.
+- **[G]** 2.2.1 Safari UI rotation still needs a console test: a scratch
+  `ios3ds-diag -urlpoll` job did not launch MobileSafari on 5H11a, and page
+  swipes in the 2.x QEMU input build do not reach the second home-screen page,
+  so the Safari window could not be captured in landscape here. The kernel
+  probe, HID samples and SpringBoard orientation are verified above.
