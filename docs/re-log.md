@@ -7031,3 +7031,102 @@ instruction timing, ~250 MHz) for the camera path.
   `ff838865…` (the branch's current baseline; the 152 values predate this
   branch's other merges).
 
+## NEXT. iOS 4.1: the first HTTPS fetch was a cold trust daemon, not a late DNS (2026-11-26)
+
+Continues 152 (hwtest kit) and 143 (Safari's cold first page). The hwtest kit
+reported the first 4.1 fetch after joining Wi-Fi as `NSCocoaErrorDomain 256`
+with no `NSUnderlyingError`; the same call 15 s later fetched 577 bytes from
+`https://example.com/`. This round finds which part of the stack was actually
+late and removes the retry.
+
+### What the first fetch saw
+
+- **[V]** Baseline, fresh `make sdimg IOS=4.1` image, `emu/hwtest_check.py
+  --mode 2 --sd build/sd41.img --icount 2` (`build/emu-hwtest-base41/log-mode2.txt`):
+  `[wifid] en0 configured by configd`, `[hwtest] wifi.join PASS ... after 14 s`,
+  then `[hwtest] wifi.https: NSCocoaErrorDomain 256, retrying in 15 s`; the
+  second try passed with 577 bytes. The only lines between the two tries that
+  name a newly started service are `AMFI: Invalid signature but permitting
+  execution` and `[hwaes] securityd: software IOAESAccelerator` /
+  `software AppleKeyStore (key wrap)`: securityd, iOS's on-demand TLS trust
+  daemon (`MachServices: com.apple.securityd`, `OnDemand` in its launchd
+  plist), was started by that first certificate check.
+- **[V]** Instrumented run on the same image (`build/emu-hwtest-diag41/`),
+  checking state at the exact moment the old code did its first fetch:
+  routing table had a default route via `10.0.2.2`, `getaddrinfo("example.com")`
+  resolved and `SCNetworkReachabilityCreateWithName/GetFlags` returned
+  `flags 0x2` (Reachable, no ConnectionRequired). So the DHCP address,
+  configd's IPMonitor route, mDNSResponder's DNS server and SystemConfiguration
+  reachability were **already ready**; merely preflighting them made the first
+  fetch succeed in that run. The clock is also fine: the same boot's
+  `[mcud] clocks` line reports RTC and `gettimeofday` within 1 s over ~70 s.
+- **[G]** CFNetwork's exact wrapper path is not disassembled. The evidence
+  points at the cold `securityd`/trust startup (and the few seconds of
+  preflight work), not at a missing network service or a bad TLSFix load:
+  the hwtest tool has no `ios3ds-applog`/Substrate injection, so TLSFix is not
+  in that process at all on either try.
+
+### Fix
+
+- **[V]** `tools/ios3ds-diag/hwtest.c`: after the DHCP address, wait (up to
+  30 s) for the IPv4 default route (`sysctl NET_RT_DUMP`, same check as
+  `ios3ds-nettest`), a successful `getaddrinfo` for the URL's host, and the
+  `bootstrap_look_up(bootstrap_port, "com.apple.securityd", ...)` port, then
+  make **one** `NSData dataWithContentsOfURL:options:error:` fetch. The old
+  three-try/15 s retry loop and its "retrying" log line are gone. The wait and
+  reachability flags are logged for `diag=1` console logs
+  (`[hwtest] net ready ...`, `[hwtest] reachability ... flags 0x2`).
+- **[V]** `rootfs/overlay-4.1.json` (4.1 only): the generated rootfs sets
+  `OnDemand=false` and `RunAtLoad=true` in
+  `/System/Library/LaunchDaemons/com.apple.securityd.plist`, so the trust
+  daemon is up before the user can join Wi-Fi or tap Safari. The base 4.2.1
+  recipe and its plist stay untouched; the hwaes interposer in the same plist
+  survives the overlay merge (`tests/test_versions.py`).
+- **[V]** `emu/safari_test.py` no longer calls an external page "loaded after
+  120 s" unconditionally: it waits the full `--page-timeout` (a cold HTTPS
+  page can sit in Loading much longer on the ARM11). The screenshot still has
+  to show the page; `tests/test_safari_harness.py` checks the timeout path.
+
+### Verification
+
+- **[V]** 4.1, fresh image with the hwtest fix, `hwtest_check.py --mode 2
+  --icount 2`: **13 PASS / 0 FAIL / 5 SKIP**, no retry line, `wifi.https PASS
+  577 bytes`. Its log reads `[hwtest] net ready after 0 s: route 10.0.2.2, dns
+  ok, securityd up` and `reachability example.com: ok flags 0x2`; the securityd
+  hwaes lines arrive during that single fetch. A second fresh image with the
+  boot-time securityd overlay (`build/emu-hwtest-final2-41/`) gave the same
+  **13 PASS / 0 FAIL / 5 SKIP**, `net ready after 1 s`, 577 bytes.
+- **[V]** Safari, 4.1 `--settle 0` (URL opened as soon as DHCP and HID are up),
+  `https://example.com/`:
+  - before: harness said "loaded in 123 s" but `build/emu-safari-base41/p1.png`
+    showed Safari still in **Loading**, with no page text; securityd started
+    only near the end of the run.
+  - after: `safari_test.py --urls https://example.com/ --settle 0 --page-timeout
+    420` printed **1/1 pages loaded without an alert in 772 s**; the harness's
+    `p1.png` shows the rendered "Example Domain" page with the HTTPS lock icon
+    and its text, no alert/load error. The live screenshot at t=387 s already
+    showed the complete page (reload icon, not "Loading"), so the
+    extra wait is the harness's conservative timeout, not the page load time.
+- **[V]** `safari_test.py --pages 3 --settle 60 --icount 2` on the same 4.1
+  image: **3/3 pages loaded without an alert** (page 1 in 205 s, pages 2/3 in
+  10 s each), screenshots in `build/emu-safari-41-pages/`.
+- **[V]** Fresh-image 4.1 soak, `soak.py --cycles 5 --icount 2 --require-app
+  --crashlogs --targets "47,314;123,226;199,226;275,226;123,50"`: **Result:
+  PASS** (boot to SpringBoard + input 110 s, five cycles, app diffs 41.0–108.7,
+  home diff ≤ 1.4, 0 panics/stalls/md0 errors/crashes/jetsam, no tap that
+  opened no app, no CrashReporter reports).
+- **[V]** Fresh-image 4.2.1 soak, `soak.py --cycles 5 --icount 2`: **Result:
+  PASS** (five cycles, 0 panics/stalls/md0 errors/crashes/jetsam, no tap that
+  opened no app). The one SpringBoard restart in each soak report is the
+  boot-time HID connect, not a mid-run restart.
+- **[V]** 4.2.1 default-build hashes (fresh `make sdimg`): kernel `505f451a…`,
+  devtree `25b1bd23…`, fakeio `e5fecd66…`, shim `a35631eb…`, gpu `6bdaf617…`,
+  boot.cfg `8d4079cf…` — unchanged. `make test` passes.
+
+### Needs hardware [G]
+
+- Boot 4.1 with `diag=1`, join Wi-Fi and immediately load a small HTTPS page in
+  Safari and in another app. The log must show `[hwtest] net ready ...` with
+  `securityd up` and no `NSCocoaErrorDomain 256` first-fetch line. None of
+  this version has a console run yet; the QEMU securityd start-up is slower
+  than a real 3DS under TCG, so a console should only be easier.
