@@ -5851,7 +5851,6 @@ missing on 8B117. Everything below was read from this worktree's staged
   `scripts/inject_dylib.py`. With that, `make test` passes again and the six
   4.2.1 hashes above are unchanged.
 
-<<<<<<< HEAD
 ## 143. Safari's first cold page on 4.1 and 3.1.3: -urlpoll opened p1 before Wi-Fi (2026-11-25)
 
 Continues §104/§112 and §133. Task: on 4.1 the first Safari page after a cold
@@ -5986,7 +5985,7 @@ wall of §104/§112. That is not what these runs show.
   is a separate, hardware-only memory report): `[pica] arena 10240 KiB`,
   camera preview/still, `[mem] free_nospec` and any
   `[applog] MobileSafari ENOMEM` line.
-=======
+
 
 
 ## NEXT. Wi-Fi on 2.2.1: a shim ifnet, Aeropuerto and in-process Apple80211 (2026-11-26)
@@ -6077,4 +6076,13 @@ Apple80211.framework. Details in docs/wifi.md section 11.
   "275,226;199,226;123,226;47,226;275,50"` → **PASS** (with the dylib in
   SpringBoard and every app).
 - **[V]** Fresh 4.2.1 soak `--cycles 5 --icount 2` → **PASS**.
->>>>>>> 683b546 (docs: Wi-Fi on 2.2.1 (wifi.md 11, re-log, driver matrix))
+<<<<<<< HEAD
+=======
+- **[V]** After rebasing onto origin/main (c125664, with the gpu313/sens221
+  rounds; the 2.2.1 overlay Wi-Fi entries were re-applied on main's
+  overlay): `make test` passes (test_versions knows the Wi-Fi files,
+  `IORegistryEntrySearchCFProperty` added to the stub symbol list),
+  2.2.1 `wifi_test --case ok` **PASS**, `wifi_ui_test` **8/8 PASS**, fresh
+  2.2.1 soak (`--require-app`, targets above) **PASS**, 4.2.1 hashes
+  unchanged (same six values), fresh 4.2.1 soak **PASS**.
+>>>>>>> 4a678d7 (re-log: post-rebase Wi-Fi 2.2.1 checks)
