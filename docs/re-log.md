@@ -6504,9 +6504,21 @@ compat16 worktree into this worktree's `build/fw-2.2.1`. 5H11a code read with
 
 ### Results
 
-- **[V]** Fresh-image soaks, `--cycles 5 --icount 2 --require-app --crashlogs
-  --targets "275,226;199,226;123,226;47,226;275,50"`: see the table in the
-  verification subsection below.
+- **[V]** Fresh-image soaks on the final tree (rebased on 48a1bc4+),
+  `IOS3DS_QEMU=/tmp/opencode/qemu-compat2/b/qemu-system-arm`, `--icount 2`:
+
+  | image | command | boot | cycles / home | result |
+  |---|---|---|---|---|
+  | 2.2.1 `IOS3DS_GPU221=1` | `soak.py --cycles 5 --require-app --crashlogs --targets "275,226;199,226;123,226;47,226;275,50"` | 62 s | 5 apps opened (diffs 53.7–107.1), home diff 0.0, home settled after 6/22/16/20/20 s, lock round ok, 0 restarts | **PASS** |
+  | 2.2.1 default | same | 50 s | 5 apps opened, home diff 0.0, settled after 6 s every cycle, lock round ok, 0 restarts | **PASS** |
+  | 4.2.1 | `soak.py --cycles 5` | 70 s | home after every Home, 0 restarts | **PASS** |
+
+  4.2.1 default build hashes are unchanged: kernel `505f451a…`, devtree
+  `25b1bd23…`, fakeio `e5fecd66…`, shim `a35631eb…`, gpu `6bdaf617…`,
+  boot.cfg `8d4079cf…` (no kernel, shim or boot file is touched; the 2.2.1
+  switch only changes the 2.2.1 recipe and boot.cfg). `make test` passes.
+  (`build/mkitdb` for the 2.2.1 iTunesDB was copied from another worktree:
+  libgpod-dev is not installed here.)
 - **[V]** Log of the GPU image: `[gl] CA compositor: OpenGL ES on the
   PICA200 (GPU self-check and scene check passed)`, `[gl] ios2: EGL display
   up for CoreAnimation`, `first pixmap surface 320x480`, `first CA display
