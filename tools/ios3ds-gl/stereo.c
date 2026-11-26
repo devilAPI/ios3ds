@@ -152,13 +152,17 @@ int stereo_prepare(GC *gc, RT *rt, const Vtx *v, int n)
         }
     }
     if (!full && opaque && st_f.phase != STP_FLAT &&
-        (maxx - minx) * (maxy - miny) >= 0.85f * (float)gc->vp[2] * (float)gc->vp[3]) {
-        /* An opaque layer over almost the whole screen that is not the
-           exact full-screen wallpaper quad: an app window under the status
-           bar (0,20-320,480) or the last steps of the app zoom. Nothing
-           below it keeps a depth, so the frame is flat, like an app's full
-           frame. Without this, an app's updates had no full-screen draw,
-           counted as damage updates of the home screen and were stamped. */
+        minx <= (float)gc->vp[0] + tol && maxx >= (float)(gc->vp[0] + gc->vp[2]) - tol &&
+        maxy >= (float)(gc->vp[1] + gc->vp[3]) - tol && miny > (float)gc->vp[1] + tol &&
+        miny <= (float)gc->vp[1] + (float)gc->vp[3] / 16.0f) {
+        /* An opaque full-width layer from just under the status bar to the
+           bottom (an app window, 0,20-320,480, and the end of the app zoom)
+           hides everything that had a depth: the frame is flat, like an
+           app's full-screen frame. Without this, an app's updates had no
+           full-screen draw, counted as damage updates of the home screen
+           and were stamped (the status bar popped out over a flat app).
+           Only this shape: a broader "85 % of the screen" rule also hit
+           home-screen layers and kept the home screen flat (tour run 2). */
         st_f.phase = STP_FLAT;
         if (st_f.draws < 255)
             st_f.draws++;

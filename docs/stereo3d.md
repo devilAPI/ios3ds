@@ -130,9 +130,11 @@ full-screen. Three engine rules keep the depth right through them
   frame was an app, the update is not stamped. Before, such an update with
   4..15 draws but too few stamps wiped the whole map: on an idle home screen
   the "Searching..." spinner alone kept the screen flat.
-- **Near-full opaque layers are flat.** An opaque layer over at least 85 %
-  of the screen that is not the exact wallpaper quad (an app window under the
-  status bar, the last steps of the app zoom) makes the frame flat.
+- **An app window is flat.** An opaque full-width layer from just under the
+  status bar to the bottom (an app window at 0,20-320,480, the end of the app
+  zoom) makes the frame flat, so the app's later damage updates are not
+  stamped either. (A broader "any opaque layer over 85 % of the screen" rule
+  also matched home-screen layers and kept the home screen flat.)
 - **Large moving layers keep their class.** A layer covering at least 1/8
   of the screen (the folder's sliding home-screen halves, the zooming app,
   the switcher's raised home screen) remembers the class it got when it first
