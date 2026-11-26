@@ -5819,3 +5819,29 @@ missing on 8B117. Everything below was read from this worktree's staged
   the console, then check Maps shows the set location when online and Safari's
   `navigator.geolocation` gets the same coordinates. No locationd or `/bin/sh`
   is involved; `ios3ds-gps set` still needs a real shell on these versions.
+
+## NEXT. Verification of this round (2026-11-26)
+
+- **[V]** `make test`: 101 offline tests including the new
+  `tests/test_inject_dylib.py` (append, idempotence, slack limit, bad magic),
+  the GL host tests, Wi-Fi/GPS harnesses and the stub-symbol check all pass.
+- **[V]** 4.2.1 default build hashes (sha256, unchanged from origin/main and
+  re-log 135): kernel `505f451a…`, devtree `25b1bd23…`, fakeio `e5fecd66…`,
+  shim `a35631eb…`, gpu `6bdaf617…`, boot.cfg `8d4079cf…`.
+- **[V]** Fresh-image soaks with `IOS3DS_QEMU=/tmp/opencode/qemu-compat2/b/qemu-system-arm`,
+  `--cycles 5 --icount 2`: **4.2.1 PASS** (default targets), **4.1 PASS**
+  (`--require-app --crashlogs`, targets `47,314;123,226;199,226;275,226;123,50`),
+  **3.1.3 PASS** (same targets, Maps/Safari injected), **2.2.1 PASS**
+  (`--require-app --crashlogs`, targets `275,226;199,226;123,226;47,226;275,50`).
+  Each: 0 restarts after boot, 0 panics, 0 stalls, every tap opened an app,
+  Home always returned, lock rounds ended on the home screen.
+- **[V]** 4.1 CLCD: after the patch, a POWER/Home lock-wake round on the
+  `diag=1` image produced 0 `Where is my backlight?` lines (1 before the
+  patch) while the MCU still logged backlight 500 → 0 → 500.
+- **[V]** 4.1 gyro: `[gyrotest] gyroAvailable 64 deviceMotionAvailable 64
+  accelerometerAvailable 1`, gyroActive 1, rate −0.523 rad/s after
+  `qom-set gyro-y 30000` (final kernel with the CLCD patch too).
+- **[V]** 3.1.3/2.2.1 Maps: applog constructor and GPS hooks verified in Maps
+  (3.1.3 via a per-pid marker build that was reverted before the commit;
+  2.2.1 via `[applog] Maps pid 32` on the console). The marker change never
+  entered any commit; `git diff tools/ios3ds-diag/applog.c` is empty.
