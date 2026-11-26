@@ -132,7 +132,8 @@ def main():
     ap.add_argument("--out", default=os.path.join(ROOT, "build", "emu-wifi-popup"))
     ap.add_argument("--boot-timeout", type=float, default=900)
     a = ap.parse_args()
-    os.makedirs(a.out, exist_ok=True)
+    out = a.out                 # rest of main() uses this for shots and logs
+    os.makedirs(out, exist_ok=True)
     tmp = tempfile.mkdtemp(prefix="ios3ds-wifi-popup-")
     saved = os.path.join(tmp, "boot.cfg")
     wifi_test.mtools(["mcopy", "-o", "::/ios3ds/boot.cfg", saved], a.sd)

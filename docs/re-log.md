@@ -6781,3 +6781,62 @@ is one file instead of a dozen manual steps. User docs:
   the 3D look, and whether the 4.2.1 summary alert is visible after the
   lock/wake check (in QEMU mode 1 the final screenshot was black: the
   screen had been locked by the test itself; the alert appears on wake).
+## NEXT. Public issue #10: the Old 2DS log is from a stale, corrupt build (2026-11-26)
+
+Dana's four attachments (downloaded to `build/issue-data/attachments/`, treated
+as data and never committed) are two identical `log.txt`/`log_prev.txt` pairs.
+They answer the "doesn't launch / shows x0000" report without needing new
+driver work:
+
+- **[V]** Every log starts `ios3ds m1-0.3.0-62-g6d963b6-20261121.0001`, the
+  same stale build as issue #9's chainloader logs (§118/§126). `shim: 23516
+  bytes at 20840000 (magic e7bfe619)` is not a shim (`SHIM` = 4d494853), so
+  the ARM11 jumped into unrelated data. After Wi-Fi/WMI comes up and
+  `B held: jump cancelled`, the log shows `[probe] ARM11 stalled`,
+  `[hb] pc x00000000`, all-zero vectors/TTBR and no `[pica] present` or
+  SpringBoard line. The "barcode"/`x0000` picture was the loader's stale CLCD
+  buffer, not iOS.
+- **[V]** Current main already refuses this state: `d01c35f` checks the shim
+  header before the jump and prints the reinstall hint; `215ddf5`/`af68575`
+  detect and repair older `luma/payloads/*.firm`, log `argv0=` and the
+  `payload check:` decisions; `96c0a03` keeps the boot console on screen until
+  the CLCD buffer changes after the first iOS frame. `tools/ios3ds-pica`'s
+  mirror test covers the wait/first-frame transition, and `make test` passes.
+- **[V]** Both new lines are visible on real hardware in issue #1's later New
+  2DS XL log (`35435217-log_prev.txt`, build `0.4.0-244`):
+  `payload check: 0:/luma/payloads/ios3ds.firm is this build`, then
+  `CLCD is on; waiting for the first iOS frame before mirroring its buffer`
+  and `first iOS frame in the CLCD buffer: mirroring it now`.
+- **[G]** No console retest has been posted. Dana needs matching files (boot
+  once from the `.3dsx` launcher, which repairs the chainload payload), then a
+  chainload with a fresh `log.txt`. Expected: `shim.bin` 24268 bytes with
+  magic `SHIM`, no bad-header line, `CLCD is on; waiting for the first iOS
+  frame` followed by `first iOS frame in the CLCD buffer`, then SpringBoard
+  with working input. Until then the issue is **partly fixed on main**, not
+  confirmed fixed on the reporter's Old 2DS.
+
+## NEXT. Public issue #6: WPA2+WPA3 popup harness repaired, join run still blocked (2026-11-26)
+
+- **[V]** The product fix is already in main (`8f66c8d`, §84,
+  `docs/wifi.md` §10.8): `wlan_ie_wpa2_view()` strips SAE/PSK-SHA256 AKMs and
+  MFPC/MFPR from the *iOS copy* of mixed RSN IEs, while the ARM9 keeps the real
+  IE and joins with WPA2-PSK. Host tests cover both AKM orders, a following
+  vendor IE, plain WPA2, SAE-only, open IEs and a truncated RSN; `make test`
+  passes.
+- **[V]** The end-to-end harness itself had a bug: `main()` called
+  `home_screen(out)` / `shot(out, ...)` without binding `out`, so
+  `emu/wifi_popup_test.py` died with `NameError: out` right after boot, before
+  any join check. It now binds `out = a.out`; `tests/test_wifi_popup_harness.py`
+  checks that binding offline (part of `make test`).
+- **[V]** A fresh-image mixed-AP run after the fix reached
+  `boot to SpringBoard`, `chip idle without wifi.cfg`, `home screen` and
+  `Settings > Wi-Fi scans` (4/4 PASS) before its 3600 s wall-clock limit. The
+  SD log then shows `APNetworksController` → `APOtherNetworkSetup` →
+  `APOtherNetworkController` and no `[a80211] associate`, i.e. a hardcoded tap
+  landed on Settings' "Other Network" row instead of the AP, so the popup path
+  was never reached. This is a harness/UI-coordinate problem, not a failed
+  WPA2 join; the run's tail is in `build/issue-data/popup-run2.log` (data only).
+- **[G]** Still needed: calibrate the popup harness's network-row tap (as
+  `emu/wifi_ui_test.py --net-row` allows) on a lightly loaded host, then get a
+  PASS through both joins, plus one console join from the "Select a Wi-Fi
+  Network" alert on the reporter's Old 3DS.
