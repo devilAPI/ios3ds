@@ -165,5 +165,5 @@
   "/Applications/Maps.app/Maps": "/usr/lib/ios3ds-applog.dylib",
   "/Applications/MobileSafari.app/MobileSafari": "/usr/lib/ios3ds-applog.dylib"
  },
- "_wifi": "Wi-Fi (re-log NEXT): en0 is the shim's own Darwin 9 ifnet (kern.ios3ds_eth, tools/ios3ds-wifi/shim/kif_eth.c) because 5H11a has no IOUserEthernet. It is not an IOKit object, so configd would not create a network service for it: the preferences.plist above holds one Wi-Fi service on en0 with DHCP. configd gets the 2.x a80211 bridge. SpringBoard (and the apps it starts, i.e. Settings' AirPortSettings) also get it: on 2.x they call Apple80211 in-process."
+ "_wifi": "Wi-Fi (re-log 144): en0 is the shim's own Darwin 9 ifnet (kern.ios3ds_eth, tools/ios3ds-wifi/shim/kif_eth.c) because 5H11a has no IOUserEthernet. It is not an IOKit object, so configd would not create a network service for it: the preferences.plist above holds one Wi-Fi service on en0 with DHCP. configd gets the 2.x a80211 bridge. SpringBoard (and the apps it starts, i.e. Settings' AirPortSettings) also get it: on 2.x they call Apple80211 in-process."
 }

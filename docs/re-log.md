@@ -5988,7 +5988,7 @@ wall of §104/§112. That is not what these runs show.
 
 
 
-## NEXT. Wi-Fi on 2.2.1: a shim ifnet, Aeropuerto and in-process Apple80211 (2026-11-26)
+## 144. Wi-Fi on 2.2.1: a shim ifnet, Aeropuerto and in-process Apple80211 (2026-11-26)
 
 Before: 2.2.1's driver-matrix row said Wi-Fi "off" (re-log 133): 5H11a has no
 IOUserEthernet, and 2.x's Wi-Fi manager is Aeropuerto on a dynamic
