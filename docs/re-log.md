@@ -7130,7 +7130,7 @@ late and removes the retry.
   `securityd up` and no `NSCocoaErrorDomain 256` first-fetch line. None of
   this version has a console run yet; the QEMU securityd start-up is slower
   than a real 3DS under TCG, so a console should only be easier.
-## NEXT. Battery life: opt-in idle telemetry, block gating and a New 3DS idle clock (2026-11-26)
+## 157. Battery life: opt-in idle telemetry, block gating and a New 3DS idle clock (2026-11-26)
 
 Task: battery life on the main 4.2.1 image. Measure/estimate idle and
 screen-off draw from what the emulator and the MCU/battery drivers expose,
