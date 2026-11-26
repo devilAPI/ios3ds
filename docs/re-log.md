@@ -5596,7 +5596,7 @@ worktree into this worktree's `build/fw-3.1.3`; 2.2.1 was staged by copying
   race from a swallowed Home / slow close animation, so the hardware log is
   the deciding evidence for the fix.
 
-## NEXT. 2.2.1 accelerometer: the I2C probe was there all along (2026-11-26)
+## 137. 2.2.1 accelerometer: the I2C probe was there all along (2026-11-26)
 
 Re-log 135 said 5H11a's AppleLIS302DL never sent an I2C transfer. That was a
 false negative from a short observation, not a device-tree or probe gap in the
@@ -5645,7 +5645,7 @@ the evidence and corrects the driver matrix.
   `kernel/dtgen.py`, `tools/ios3ds-mcu/{dt_mcu.py,shim/mcu.c}` and the shim
   binary are unchanged. The 4.2.1 build is therefore byte-identical.
 
-## NEXT. 2.2.1 microphone: why the VirtualAudio product swap cannot work alone (2026-11-26)
+## 138. 2.2.1 microphone: why the VirtualAudio product swap cannot work alone (2026-11-26)
 
 The 5H11a mic route is still **not working**; this section replaces the open
 "[G]" in re-log 134 with the binary-level reason and three tested patches.
