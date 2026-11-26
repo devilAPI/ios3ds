@@ -138,6 +138,12 @@ full-screen. Three engine rules keep the depth right through them
   (A broader "any opaque layer over 85 % of the screen" rule, and this shape
   without the icon test, also matched home-screen layers and left the home
   screen flat after a folder closed.)
+- **After an app, only the wallpaper brings 3D back.** The engine remembers
+  the texture of the last home frame's background draw. After an app, a
+  frame counts as the home screen only if its first full-screen draw is that
+  texture (or one of the same size under at least 12 icon-grid draws); an
+  app's own full-screen view under a navigation and a tab bar (Game Center's
+  "Loading" view) otherwise looked like "background + icons".
 - **Large moving layers keep their class.** A layer covering at least 1/8
   of the screen (the folder's sliding home-screen halves, the zooming app,
   the switcher's raised home screen) remembers the class it got when it first

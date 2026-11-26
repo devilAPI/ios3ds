@@ -45,6 +45,15 @@ static int st_full;                 /* this frame had a full-screen draw */
 static int st_scene_home = 1;       /* the last complete frame was the home screen */
 static unsigned st_sticky, st_partial, st_dropped, st_covers;
 static int st_cover, st_cover_icons;   /* this frame: an app-window-shaped layer, icons before it */
+/* The wallpaper: the texture of the last home frame's background draw.
+   After an app, a frame is the home screen again only if its background is
+   that texture (or one of the same size under a full icon grid): an app's
+   own full-screen view under a navigation and a tab bar otherwise looks
+   like "background + icons" too (tour 4: Game Center's "Loading" view). */
+static const Tex *st_wall, *st_bgtex;
+static int st_wall_w, st_wall_h, st_bg_w, st_bg_h, st_bg_seen;
+static unsigned st_notwall;
+#define ST_GRID_ICONS 12
 /* A large layer that moves through a band boundary (the folder's sliding
    home-screen halves, the app zoom, the switcher's sliding home screen)
    would change class from one frame to the next and its depth would jump.
@@ -173,6 +182,13 @@ int stereo_prepare(GC *gc, RT *rt, const Vtx *v, int n)
     cls = stereo_draw(&st_f, (int)minx, (int)miny, (int)maxx, (int)maxy, gc->vp, full, opaque);
     if (full)
         st_full = 1;
+    if (cls == STC_BG && !st_bg_seen) {
+        Tex *t = gc->tu[0].enabled ? gl_bound_tex(gc, 0) : NULL;
+        st_bg_seen = 1;
+        st_bgtex = t;
+        st_bg_w = t ? t->w : 0;
+        st_bg_h = t ? t->h : 0;
+    }
     else if (cls < 0 && st_f.phase == STP_START && st_scene_home && st_f.draws < ST_PARTIAL_DRAWS) {
         /* a damage update of the home screen starts with small draws: they
            are not wallpaper tiles but the layers that moved, so classify
@@ -341,6 +357,18 @@ int stereo_end_frame(GC *gc)
         st_covers++;
     }
     home = stereo_frame_home(&st_f);
+    if (home && !st_scene_home && st_wall && st_bg_seen && st_bgtex != st_wall &&
+        !(st_bg_w == st_wall_w && st_bg_h == st_wall_h && st_f.icons >= ST_GRID_ICONS)) {
+        home = 0;                   /* an app's own background, not the wallpaper */
+        st_f.phase = STP_FLAT;
+        st_full = 1;
+        st_notwall++;
+    }
+    if (home && st_bg_seen) {
+        st_wall = st_bgtex;
+        st_wall_w = st_bg_w;
+        st_wall_h = st_bg_h;
+    }
     st_frames++;
     if (!st_full && st_f.draws < ST_PARTIAL_DRAWS && st_f.phase != STP_FLAT) {
         /* A small damage update (a moving dock item, the clock, one step
@@ -402,6 +430,7 @@ int stereo_end_frame(GC *gc)
     st_have_rt = 0;
     st_full = 0;
     st_cover = 0;
+    st_bg_seen = 0;
     return home ? 0 : 1;
 }
 
@@ -476,12 +505,14 @@ void stereo_forget(const void *mem)
         st_log_n = 0;
         st_full = 0;
         st_cover = 0;
+        st_bg_seen = 0;
+        st_wall = NULL;
     }
 }
 
 unsigned stereo_cover_stats(void)
 {
-    return st_covers;
+    return st_covers + st_notwall;
 }
 
 void stereo_transition_stats(unsigned *sticky, unsigned *partial, unsigned *dropped)
