@@ -6910,3 +6910,50 @@ add a depth-strength setting, keep `stereo3d=0` byte-identical.
   and an app frame, the app-window frame and a home snapshot;
   `test_stereo_copy` checks the hysteresis and `stereo_depth=0`;
   `tests/test_stereo.py` checks `stereo_depth_k()`.
+
+### Soaks, tests, cost
+- **[V]** Default build after the rebase: `kernel 505f451a`, `devtree
+  25b1bd23`, `fakeio e5fecd66`, `shim a35631eb`, `gpu 6bdaf617`, `boot.cfg
+  8d4079cf` (unchanged); new card file `gpu3d.bin 4aa214b9`. `make test`
+  green.
+- **[V]** `stereo3d=0` fresh-image `soak.py --cycles 5 --icount 2`: **PASS**.
+- **[V]** `stereo3d=1 --slider3d 255` fresh images: **FAIL** twice. Both
+  runs: SpringBoard SIGKILLs Game Center (and Calendar/Photos) a few seconds
+  after Home ("exited abnormally with signal 9"), and one tap (Photos once,
+  Calendar once) rendered no app within 180 s. Controls on fresh images:
+  `stereo_depth=0` (engine stamping on, no 3D) FAIL with the same SIGKILLs
+  but every app opened; **origin/main's GL engine** with this firm,
+  `stereo3d=1`, `stereo_depth=0`: FAIL with the same SIGKILLs. So the kills
+  come with `stereo3d=1` on current main, not from this round's engine
+  rules (re-log 127's PASS predates them; not traced). The app that did not
+  open appeared only with the real two-eye mirror running, i.e. only now
+  that PDC0 really switches; in QEMU the two-eye frame costs ~14 ms vs
+  ~10 ms flat (`[stereo] mirror GPU cost`). [G: check app launches with the
+  slider up on a console]
+- **[V/noisy]** `emu/perf.py --runs 3 --icount 2 --slider3d 255`: one
+  `[perf] CA:` window survived in the log (the diag log fills up):
+  `30 frames in 1004 ms; min/avg/max 5/33/222; <17:11 17-33:13 33-66:1
+  66-100:4 >=100:1`; folder open 14.2/12.4/46.1 s, close 21.0/21.4/4.1 s.
+  Host load average was 12-14 (other agents' kernel builds), so this is
+  not comparable with re-log 127's 24-26 ms (taken with PDC0 still in 2D,
+  i.e. without real two-eye frames). Re-measure on an idle host.
+
+### Hardware checklist (Old 3DS, `stereo3d=1`, `diag=1`, card with `gpu3d.bin`)
+1. Log: `[stereo] stereo3d=1: GPU part 0:/ios3ds/gpu3d.bin instead of gpu.bin`.
+2. Home, slider up: real depth (dock/status bar in front, wallpaper behind).
+   This is the first build that programs PDC0 itself; if the top screen
+   goes black/garbled, note it and slide down (PDC0 back to Luma's preset).
+3. Swipe to Spotlight and back, open/close Utilities, open/close an app,
+   double-Home switcher: no flicker of the barrier, no double image except
+   possibly one frame during fast swipes; apps look flat.
+4. `stereo_depth=50` then `=0`: half depth, then flat with the LED off.
+5. Send `log.txt` with `[stereo] mirror GPU cost`, `[stereo] active path ...
+   transitions held in 3D`, `[gl] CA stereo3D transitions: ...`.
+
+### Not done
+- One frame of eye mismatch mid-swipe (see Evidence) is not explained.
+- In some apps the ARM9 probe still sees a stamped-looking alpha and leaves
+  the barrier on (eyes identical or nearly); Game Center's "Loading" view
+  keeps a small stamped region.
+- The `stereo3d=1` soak failure above (SIGKILL of background apps) predates
+  this round and is not traced.
