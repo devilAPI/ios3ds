@@ -6552,3 +6552,49 @@ compat16 worktree into this worktree's `build/fw-2.2.1`. 5H11a code read with
   here); a photo during a scroll shows it.
 - The same SwapSetLayer token flag / SwapWait pattern may be behind 3.1.3's
   GPU-path "first frame after Home" issue (§148); not checked there.
+
+## NEXT. Release installer version choice and user docs for the other iOS versions (2026-11-26)
+
+- **[V]** `scripts/install.py` now accepts only `--ios 4.2.1|4.1|3.1.3|2.2.1`
+  (default 4.2.1). An unknown version is refused by an argparse `type` check
+  with the supported list in the message; inventory-only entries in
+  `scripts/versions.py` (e.g. 3.0, 4.0) are not installer choices.
+- **[V]** `verify_ipsw()` hashes the supplied IPSW and compares it with the
+  pinned sha1 in `scripts/versions.py` before `fwprep.py` runs. This also
+  covers IPSWs over 1 GiB, which the old `fwprep.py` check skipped, and
+  `--force` cannot bypass it. A differently named file gets a note, not a
+  refusal, because the 3.1.3 (7E18) archive may be renamed locally.
+  `check_staging()` rejects a pre-extracted folder whose manifest names a
+  different build.
+- **[V]** The selected version flows into `fwprep.py --ios` (public keys for
+  that build from api.ipsw.me) and `mksd.py --ios` / `mkboot.py`
+  (`build_tree()`), i.e. the same patch set, overlay and userland as
+  `make sd IOS=VERSION`. The zip's root `install.py` forwards every argument
+  by `runpy`, and `mkrelease.py` now also ships `docs/other-versions.md`.
+- **[V]** Every non-default version prints a prominent
+  `WARNING: iOS X (build) is HIGHLY EXPERIMENTAL ... NEVER on a real 3DS ...
+  MAY NOT BOOT ...` notice before any work; 4.2.1 prints nothing extra.
+  README.md gained a user-facing section, docs/release.md the zip behaviour,
+  docs/INSTALL.md a pointer, and CI smoke checks for version choice and
+  rejection. `tests/test_installer.py` adds 9 offline tests (choice, sha1,
+  staging, warning, mksd argument, packaging). `make test`: **PASS**
+  (119 Python unit tests plus all host tests).
+- **[V]** 4.2.1 default build before vs. after this change: kernel
+  `505f451a…`, devtree `25b1bd23…`, fakeio `e5fecd66…`, shim `a35631eb…`,
+  gpu `6bdaf617…`, boot.cfg `8d4079cf…` — all byte-identical to the values in
+  §6.7/re-log 149 and to a fresh build from the unmodified tree. The
+  `ios3ds.firm` / `rootfs.hfs` bytes differ only because `git describe --dirty`
+  puts the working-tree state and build time in the payload version string;
+  no boot file, kernel, shim, GPU or recipe was touched.
+- **[V/G]** **Soak not re-run in this session.** A fresh `make sdimg` was
+  built, but other agents kept 4–10 QEMU processes running for the whole
+  30-minute wait window, so starting another would break the
+  one-QEMU-at-a-time rule. **[G]** On a free host, rerun
+  `rm -f build/sd.img && make sdimg && IOS3DS_QEMU=/tmp/opencode/qemu-compat2/b/qemu-system-arm python3 emu/soak.py --cycles 5 --icount 2`
+  and expect **Result: PASS** (as in §149); no 4.2.1 boot path was changed.
+  Older-version images were not rebuilt here either (their IPSWs are not
+  staged in this worktree), so §6.9's PASS results stand unmodified.
+- **[G]** Hardware: for each newly installable version, install with
+  `--ios` and `diag=1`, back up the card, boot on a console and attach
+  `sd:/ios3ds/log.txt` with the version and IPSW sha1 to an issue. The
+  opt-in GPU paths need the console checklists in re-log 135 and 149.
