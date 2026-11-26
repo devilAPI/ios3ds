@@ -881,3 +881,12 @@ thread watchdog (`[gl] ios2: watchdog: ...`, abort + crash report after a 20 s
 stall inside the engine) and a `[gl] CA:` cost line every 60 frames. If the
 GPU gate fails (ca_gpu=0, self-check, scene check) CA keeps its software
 compositor. See the re-log section *GPU (PICA200) CoreAnimation on 2.2.1*.
+
+**Installing the experimental versions from a release (no developer setup):**
+**[V]** `install.py --ios 4.1|3.1.3|2.2.1 IPSW SD` checks the IPSW sha1, fetches
+that build's public keys and drives `mksd.py --ios VERSION`, the same path as
+`make sd IOS=VERSION`. Unknown versions are refused and every non-default
+version prints a HIGHLY EXPERIMENTAL / QEMU-only / may-not-boot warning. The
+GPU flags above are still developer build-time switches; release installs use
+the software compositor. User instructions and IPSW hashes:
+[docs/other-versions.md](other-versions.md); verification: re-log NEXT.

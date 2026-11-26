@@ -10,7 +10,7 @@ Not an emulator: the iPod touch 2G's own kernel, SpringBoard and apps run direct
 [![Release](https://img.shields.io/github/v/release/devilAPI/ios3ds?include_prereleases&label=release)](https://github.com/devilAPI/ios3ds/releases)
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 
-[**Install**](#install) · [Controls](#controls) · [What works](#what-works) · [Troubleshooting](#troubleshooting) · [How it works](#how-it-works) · [Build from source](#build-from-source)
+[**Install**](#install) · [Other iOS versions](#other-ios-versions) · [Controls](#controls) · [What works](#what-works) · [Troubleshooting](#troubleshooting) · [How it works](#how-it-works) · [Build from source](#build-from-source)
 
 </div>
 
@@ -80,7 +80,7 @@ You need about 15 minutes, a PC and your own copy of the iPod touch firmware. No
 ### 1. Download
 
 1. **ios3ds:** `ios3ds-<version>.zip` from the [Releases page](https://github.com/devilAPI/ios3ds/releases). Unzip it anywhere.
-2. **The iOS firmware** (ios3ds can't ship it): `iPod2,1_4.2.1_8C148_Restore.ipsw`, the iPod touch 2nd generation on iOS 4.2.1, from Apple's servers via [ipsw.me](https://ipsw.me/download/iPod2,1/8C148).
+2. **The iOS firmware** (ios3ds can't ship it): `iPod2,1_4.2.1_8C148_Restore.ipsw`, the iPod touch 2nd generation on iOS 4.2.1, from Apple's servers via [ipsw.me](https://ipsw.me/download/iPod2,1/8C148). The experimental 4.1/3.1.3/2.2.1 installs need a different IPSW: [docs/other-versions.md](docs/other-versions.md).
 
 ### 2. Run the installer
 
@@ -90,7 +90,7 @@ Put the SD card in your PC, open a terminal in the unzipped folder and run:
 python3 install.py ~/Downloads/iPod2,1_4.2.1_8C148_Restore.ipsw /media/$USER/YOUR_SD_CARD
 ```
 
-Use your own paths. The card is `/Volumes/NAME` on macOS and `/mnt/e` (or another letter) in WSL.
+Use your own paths. The card is `/Volumes/NAME` on macOS and `/mnt/e` (or another letter) in WSL. Add `--ios 4.1`, `--ios 3.1.3` or `--ios 2.2.1` (with that version's IPSW) to install an **experimental** build; see [Other iOS versions](#other-ios-versions). Omitting `--ios` always installs 4.2.1.
 
 It takes a few minutes and needs about 4 GB of free space on the PC while it works. It:
 1. decrypts the kernel and the iOS disk from your IPSW, and checks that it is the right file;
@@ -126,6 +126,36 @@ Alternatively, hold **START** while powering on and pick `ios3ds` in Luma's chai
 > 2. Press HOME → `Scripts...` → `ios3ds-wifi-fw`, then confirm with A.
 >
 > Details: [docs/wifi.md](docs/wifi.md) §3.
+
+---
+
+## Other iOS versions
+
+> 🚨 **EVERYTHING OTHER THAN 4.2.1 IS HIGHLY EXPERIMENTAL.** 🚨
+>
+> **The 4.1, 3.1.3 and 2.2.1 builds have been tested only in the QEMU
+> emulator, not on a Nintendo 3DS console, and may not boot.** They are not
+> supported. Only iOS 4.2.1 is the console-tested build described on this page.
+> Back up your SD card before trying another version.
+
+The release installer can build the other iPod touch 2G versions from the
+matching IPSW without a developer setup:
+
+```sh
+python3 install.py --ios 4.1    ~/Downloads/iPod2,1_4.1_8B117_Restore.ipsw    /media/$USER/SD_CARD
+python3 install.py --ios 3.1.3  ~/Downloads/iPod2,1_3.1.3_7E18_Restore.ipsw  /media/$USER/SD_CARD
+python3 install.py --ios 2.2.1  ~/Downloads/iPod2,1_2.2.1_5H11a_Restore.ipsw /media/$USER/SD_CARD
+```
+
+The installer warns loudly, checks the IPSW sha1, fetches the public keys for
+that build and builds the card the same way as `make sd IOS=VERSION`. Unknown
+versions are refused. In QEMU all three reach the home screen, open apps and
+pass fresh-image soaks, but none has ever been tested on a console; per-version
+driver status (Wi-Fi/Safari, sound, camera, gyro, Cydia, GPU) is in
+[docs/multi-version.md](docs/multi-version.md) §6.9. The 3.1.3 and 2.2.1
+PICA200 compositor flags (`IOS3DS_GPU313=1`, `IOS3DS_GPU221=1`) are build-time
+opt-ins for developers, not defaults. Full instructions, IPSW sources and
+hashes: [docs/other-versions.md](docs/other-versions.md).
 
 ---
 
@@ -298,10 +328,13 @@ the default and unchanged. In QEMU, **4.1, 3.1.3 and 2.2.1 all boot to the home
 screen, open apps and pass fresh-image soaks**; none of these three has been
 tested on a real console. Cydia is installed on all three: 4.1 and 3.1.3 use
 the 4.x package set (TLSFix only on 4.1), and 2.2.1 uses Cydia 1.0.3222 with no
-default source. 3.1.3 uses software CoreAnimation and the ARM9 screen copy by
-default; for a console test of its experimental PICA200 compositor, build with
-`IOS3DS_GPU313=1 make sd IOS=3.1.3` (slower in QEMU, not the default). The
-per-version driver status is in [docs/multi-version.md](docs/multi-version.md) §6.9.
+default source. 3.1.3 and 2.2.1 use software CoreAnimation and the ARM9 screen
+copy by default; for a console test of their experimental PICA200 compositors,
+build with `IOS3DS_GPU313=1 make sd IOS=3.1.3` or
+`IOS3DS_GPU221=1 make sd IOS=2.2.1` (both slower in QEMU, not the default).
+Installing the same versions from a release zip needs no toolchain:
+[docs/other-versions.md](docs/other-versions.md). The per-version driver status
+is in [docs/multi-version.md](docs/multi-version.md) §6.9.
 
 Optional:
 - `make qemu` builds the emulator, about 10 minutes.
@@ -316,6 +349,7 @@ Optional:
 | | |
 |---|---|
 | [architecture.md](docs/architecture.md) | boot chain, memory map, every hardware bridge |
+| [other-versions.md](docs/other-versions.md) | **user guide**: install 4.1/3.1.3/2.2.1 from a release zip, IPSWs and sha1s, experimental status, GPU flags |
 | [multi-version.md](docs/multi-version.md) | other iOS versions (4.1/3.1.3/2.2.1 QEMU status and driver matrix), 1.x feasibility |
 | [real-hardware.md](docs/real-hardware.md) | testing safely on a console |
 | [emulator.md](docs/emulator.md) | the QEMU `nintendo3ds` machine, Azahar |

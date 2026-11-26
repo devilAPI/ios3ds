@@ -41,12 +41,44 @@ scripts/build-ios-toolchain.sh symbols
 ios3ds-<version>/
   install.py                      runs scripts/install.py
   INSTALL.md README.md LICENSE    (INSTALL.md as docs/INSTALL.md)
+  docs/other-versions.md          user guide for the experimental 4.1/3.1.3/2.2.1 installs
   prebuilt/                       our builds + MANIFEST.json (size, sha256, origin of each)
   scripts/ kernel/ rootfs/ tools/ the installer's Python scripts, patch recipes and launchd plists
   src/xpwn-hfsplus/               source of prebuilt/hfsplus-linux-x86_64 (GPL-3.0)
 ```
 
 `install.py IPSW SD` runs `fwprep.py` (keys from api.ipsw.me, as in a repo build), then `mksd.py` with the prebuilt payload, shim, launcher and rootfs binaries (`--firm/--launcher/--prebuilt/--rootfs-add/--hfsplus`). The output is the same as `make sd`.
+
+## Version choice in the release
+
+The installer accepts `--ios 4.2.1|4.1|3.1.3|2.2.1` (default **4.2.1**; the zip's
+root `install.py` forwards all arguments to `scripts/install.py`). Only those
+four are accepted: other versions in `scripts/versions.py` are inventory only
+and produce an `unknown iOS version` error. For every non-default version the
+installer prints a prominent **HIGHLY EXPERIMENTAL / QEMU only / may not boot**
+warning before doing any work.
+
+After selecting the version, the installer:
+
+- expects the matching `iPod2,1_<version>_<build>_Restore.ipsw` (a differently
+  named file only gets a note — the hash is what matters) and verifies its
+  sha1 against `scripts/versions.py`. A mismatch is an error, and `--force`
+  does **not** bypass it;
+- fetches the public keys for that build from `api.ipsw.me/v4/keys/ipsw/iPod2,1/<build>`
+  via `fwprep.py` (or uses `--keys FILE`), so no keys are shipped in the zip;
+- calls `mksd.py --ios VERSION` and `mkboot.py`/`mkrootfs.py` with that version's
+  patch set and rootfs overlay — the same build path as `make sd IOS=VERSION`;
+- writes the same three card paths as the 4.2.1 install. `--staging DIR`
+  reuses a pre-extracted firmware only if its manifest names the chosen build.
+
+The IPSW itself is never downloaded or shipped: 4.1/2.2.1 come from ipsw.me,
+and Apple's CDN no longer serves the 3.1.3 (7E18) file, so that one needs an
+archived copy with the pinned sha1. The PICA200 flags `IOS3DS_GPU313=1` and
+`IOS3DS_GPU221=1` are developer build-from-source switches; the release
+installer builds the default software-compositor images. See
+[docs/other-versions.md](other-versions.md) for the user guide and per-version
+status; the default 4.2.1 output is unchanged by this option. CI smoke-tests
+the zip's `--ios` parsing and rejection of unknown versions.
 
 ## Provenance: what may ship
 

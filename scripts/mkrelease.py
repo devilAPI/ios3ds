@@ -8,7 +8,7 @@ scripts/build-hfsplus.sh --static) and writes build/release/ios3ds-<version>.zip
 with one top folder ios3ds-<version>/:
 
   install.py                      the installer (runs scripts/install.py): IPSW -> SD card tree
-  INSTALL.md README.md LICENSE
+  INSTALL.md README.md LICENSE docs/other-versions.md
   prebuilt/ios3ds.firm            3DS payload (ARM9 monitor + ARM11 stub)
   prebuilt/ios3ds.3dsx            Homebrew Launcher app
   prebuilt/shim.bin, gpu.bin      kernel shim + its GPU part (unconfigured: mkboot patches them)
@@ -59,14 +59,15 @@ SOURCES = [
     "tools/ios3ds-wifi/ios3ds-wifi-fw.gm9", "tools/ios3ds-wifi/nwmfw.py",
     "scripts/cydia.py", "scripts/certs.py", "scripts/music.py", "scripts/carryover.py", "scripts/crashlogs.py", "rootfs/recipe.json", "rootfs/cydia.json", "rootfs/cydia-2.x.json",
     "rootfs/files/*", "rootfs/certs/roots.pem", "rootfs/certs/roots-ec.pem",
-    "README.md", "LICENSE", "docs/INSTALL.md",
+    "README.md", "LICENSE", "docs/INSTALL.md", "docs/other-versions.md",
 ]
 XPWN_FILES = ["hfs/*.c", "common/abstractfile.c", "common/base64.c", "includes/**/*.h", "LICENSE",
               "README.markdown"]
 XPWN_REV = "20c32e5c12d1b22a9d55a59a0ff6267f539b77f4"
 
 INSTALL_WRAPPER = """#!/usr/bin/env python3
-# ios3ds installer: see README.md (Install).  python3 install.py IPSW [SD]
+# ios3ds installer: see README.md (Install) and docs/other-versions.md.
+# python3 install.py [--ios 4.2.1|4.1|3.1.3|2.2.1] IPSW [SD]
 import os, runpy, sys
 sys.argv[0] = os.path.abspath(__file__)
 runpy.run_path(os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts", "install.py"),

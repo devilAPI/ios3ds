@@ -137,6 +137,9 @@ jobs:
           cd ios3ds-*/
           python3 install.py --check
           python3 install.py 2>&1 | grep -q 'give the path' && echo "usage message OK"
+          python3 install.py --ios 4.1 --check 2>&1 | grep -q 'iOS 4.1 (8B117) is HIGHLY EXPERIMENTAL' && echo "experimental warning OK"
+          python3 install.py --ios 3.1.3 --check 2>&1 | grep -q 'OK: everything needed is here' && echo "version choice OK"
+          python3 install.py --ios 9.9 2>&1 | grep -q 'unknown iOS version' && echo "unknown version rejected"
           if find . -type f \( -name '*.ipsw' -o -name '*.hfs' -o -name '*.img3' -o -name 'kernel*' \
                  -o -name 'devtree*' -o -name 'boot.cfg' -o -name 'keys-*' \) | grep .; then
             echo "Apple-derived file names in the release"; exit 1

@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
-"""ios3ds installer: your own iOS 4.2.1 IPSW + this release -> a ready SD card.
+"""ios3ds installer: your own iPod2,1 IPSW + this release -> a ready SD card.
 
-  python3 install.py IPSW [SD]
+  python3 install.py [--ios 4.2.1|4.1|3.1.3|2.2.1] IPSW [SD]
 
-  IPSW   iPod2,1_4.2.1_8C148_Restore.ipsw (the iPod touch 2G firmware, from Apple)
+  --ios  firmware to install (default 4.2.1, the only supported version;
+         4.1, 3.1.3 and 2.2.1 are HIGHLY EXPERIMENTAL, QEMU-only and may not boot)
+  IPSW   the matching iPod touch 2G restore file (e.g.
+         iPod2,1_4.2.1_8C148_Restore.ipsw for the default); its sha1 is checked
+         against scripts/versions.py before anything is decrypted
   SD     where to put the files: the root of your mounted SD card, or any folder
          (default: ./ios3ds-sd, copy its contents to the card yourself)
 
 What it does (README.md, section Install):
   1. decrypts the kernel, device tree and root filesystem from the IPSW
-     (scripts/fwprep.py; the publicly documented keys for this one firmware
-     come from api.ipsw.me, or --keys FILE)
+     (scripts/fwprep.py; the public keys for the selected build come from
+     api.ipsw.me, or --keys FILE)
   2. patches the kernel and builds the device tree, boot.cfg and the iOS disk
-     image rootfs.hfs with our programs (scripts/mksd.py -> mkboot.py, mkrootfs.py)
+     image rootfs.hfs (scripts/mksd.py --ios VERSION -> mkboot.py, mkrootfs.py:
+     the same build path as 'make sd IOS=VERSION')
   3. writes sd:/ios3ds/, sd:/3ds/ios3ds.3dsx and sd:/luma/payloads/ios3ds.firm
 
 Needs Python 3.8+ with the 'cryptography' package (or the openssl command) and
@@ -22,6 +27,7 @@ prebuilt too; elsewhere it is compiled from src/xpwn-hfsplus (needs cc + zlib).
 Nothing here talks to the 3DS or writes anything but files in SD and --work.
 """
 import argparse
+import hashlib
 import json
 import os
 import platform
@@ -36,7 +42,9 @@ SCRIPTS = os.path.join(ROOT, "scripts")
 sys.path.insert(0, SCRIPTS)
 import versions  # noqa: E402
 
-TARGET_IPSW = "iPod2,1_4.2.1_8C148_Restore.ipsw"
+# Only these four have a patch set, a rootfs overlay and a documented install
+# path. versions.py also lists firmwares that are inventory only (no build).
+INSTALL_VERSIONS = ("4.2.1", "4.1", "3.1.3", "2.2.1")
 GiB = 1 << 30
 
 
@@ -51,6 +59,83 @@ def step(n, msg):
 def die(msg):
     say("\nERROR: " + msg)
     sys.exit(1)
+
+
+def check_version(value):
+    """Argparse type: refuse anything but the four installable iOS versions."""
+    if value not in INSTALL_VERSIONS:
+        raise argparse.ArgumentTypeError(
+            "unknown iOS version %r (supported: %s; default: %s)"
+            % (value, ", ".join(INSTALL_VERSIONS), versions.DEFAULT))
+    info = versions.get(value)      # also catches a drift in the registry
+    if value != versions.DEFAULT and (not info["patch_set"] or not info["overlay"]):
+        raise argparse.ArgumentTypeError(
+            "iOS %s has no installer build recipe yet" % value)
+    return value
+
+
+def ipsw_name(ios):
+    """The exact restore file expected for `ios` (from the version registry)."""
+    return versions.get(ios)["ipsw"]
+
+
+def warn_experimental(ios, emit=None):
+    """Loud, unavoidable notice for every non-default version."""
+    if ios == versions.DEFAULT:
+        return
+    emit = emit or say
+    emit("")
+    emit("*" * 72)
+    emit("WARNING: iOS %s (%s) is HIGHLY EXPERIMENTAL." % (ios, versions.get(ios)["build"]))
+    emit("It has been tested only in the QEMU emulator, NEVER on a real 3DS")
+    emit("console, and it MAY NOT BOOT. Only iOS %s is supported." % versions.DEFAULT)
+    emit("Back up your SD card and read docs/other-versions.md before continuing.")
+    emit("*" * 72)
+
+
+def sha1_file(path):
+    h = hashlib.sha1()
+    with open(path, "rb") as f:
+        for b in iter(lambda: f.read(1 << 20), b""):
+            h.update(b)
+    return h.hexdigest()
+
+
+def verify_ipsw(path, ios):
+    """Refuse an IPSW whose sha1 is not the one pinned for this iOS version.
+
+    --force never bypasses this: a wrong firmware would be decrypted with keys
+    for a different build and could produce an image that boots incorrectly.
+    """
+    info = versions.get(ios)
+    want = info["sha1"]
+    if not want:
+        die("no published sha1 for iOS %s; refusing to build" % ios)
+    got = sha1_file(path)
+    if got != want:
+        die("this is not the iOS %s IPSW: sha1 %s, expected %s.\n"
+            "       Download %s (see docs/other-versions.md for where to get it).\n"
+            "       The sha1 check cannot be bypassed with --force."
+            % (ios, got, want, ipsw_name(ios)))
+    say("   IPSW sha1 %s: verified iOS %s (%s)" % (got, ios, info["build"]))
+
+
+def check_staging(staging, ios):
+    """A pre-extracted staging folder must match the selected version."""
+    man = os.path.join(staging, "manifest.json")
+    if not os.path.isfile(man):
+        say("   note: no %s; cannot verify the staged firmware version" % man)
+        return
+    try:
+        with open(man) as f:
+            src = json.load(f)["source"]
+    except (OSError, ValueError, KeyError) as e:
+        die("cannot read %s: %s" % (man, e))
+    want = versions.get(ios)["build"]
+    if src.get("product") != "iPod2,1" or src.get("build") != want:
+        die("%s holds %s %s, not iOS %s (%s). Extract the right IPSW first\n"
+            "       (make fwprep IPSW=... IOS=%s, or install.py without --staging)."
+            % (staging, src.get("product"), src.get("build"), ios, want, ios))
 
 
 def free_bytes(path):
@@ -117,10 +202,13 @@ def hfsplus_tool(prebuilt, work):
 
 def fwprep(ipsw, staging, keys, force, ios=versions.DEFAULT):
     man = os.path.join(staging, "manifest.json")
+    info = versions.get(ios)
+    say("firmware: iOS %s (%s); public keys from api.ipsw.me unless --keys is given"
+        % (ios, info["build"]))
     if os.path.exists(man) and os.path.exists(os.path.join(staging, "rootfs.hfs")):
         try:
             src = json.load(open(man))["source"]
-            if src.get("ipsw") == os.path.basename(ipsw) and src.get("build") == versions.get(ios)["build"]:
+            if src.get("ipsw") == os.path.basename(ipsw) and src.get("build") == info["build"]:
                 say("already extracted in %s (delete it to redo)" % staging)
                 return
         except (ValueError, KeyError):
@@ -198,18 +286,21 @@ def deploy(tree, sd):
             say("   %s" % os.path.relpath(dst, sd))
 
 
-def main():
+def parser():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("ipsw", nargs="?", help="iPod2,1_4.2.1_8C148_Restore.ipsw")
+    ap.add_argument("ipsw", nargs="?", help="iPod2,1 restore IPSW for the selected --ios version")
     ap.add_argument("sd", nargs="?", default="ios3ds-sd",
                     help="SD card root (mounted) or output folder (default: ./ios3ds-sd)")
-    ap.add_argument("--ios", default=versions.DEFAULT,
-                    help="iOS version to install (default 4.2.1; see scripts/versions.py)")
+    ap.add_argument("--ios", default=versions.DEFAULT, type=check_version, metavar="VERSION",
+                    help="iOS version: 4.2.1 (default, supported), 4.1, 3.1.3 or 2.2.1 "
+                         "(experimental, QEMU only; docs/other-versions.md)")
     ap.add_argument("--work", default="ios3ds-work", help="scratch folder (default: ./ios3ds-work)")
     ap.add_argument("--keep-work", action="store_true", help="keep the scratch folder (faster re-runs)")
     ap.add_argument("--keys", help="firmware keys JSON (ipsw.me v4 format) instead of downloading")
     ap.add_argument("--staging", help="use an already extracted fwprep folder instead of the IPSW")
-    ap.add_argument("--force", action="store_true", help="accept an IPSW other than iPod2,1 8C148")
+    ap.add_argument("--force", action="store_true",
+                    help="try an IPSW whose plist identity differs from the selected version "
+                         "(the sha1 check always applies)")
     ap.add_argument("--no-cydia", action="store_true",
                     help="don't download and pre-install Cydia (docs/cydia.md)")
     ap.add_argument("--no-tlsfix", action="store_true",
@@ -227,10 +318,16 @@ def main():
     ap.add_argument("--prebuilt", default=os.path.join(ROOT, "prebuilt"), help=argparse.SUPPRESS)
     ap.add_argument("--check", action="store_true",
                     help="only check this release and the tools on this PC, then exit")
-    a = ap.parse_args()
+    return ap
 
-    say("ios3ds installer (%s)" % open(os.path.join(a.prebuilt, "VERSION")).read().strip()
-        if os.path.exists(os.path.join(a.prebuilt, "VERSION")) else "ios3ds installer")
+
+def main():
+    a = parser().parse_args()
+    warn_experimental(a.ios)
+
+    label = ("ios3ds installer (%s)" % open(os.path.join(a.prebuilt, "VERSION")).read().strip()
+             if os.path.exists(os.path.join(a.prebuilt, "VERSION")) else "ios3ds installer")
+    say("%s, target iOS %s" % (label, a.ios))
     need = ["ios3ds.firm", "ios3ds.3dsx", "shim.bin", "gpu.bin", "rootfs-add"]
     missing = [n for n in need if not os.path.exists(os.path.join(a.prebuilt, n))]
     if missing:
@@ -253,10 +350,13 @@ def main():
     if a.staging and a.ipsw and not a.ipsw.lower().endswith(".ipsw"):
         a.ipsw, a.sd = None, a.ipsw         # install.py --staging DIR SD
     if not a.ipsw and not a.staging:
-        ap.print_usage()
-        die("give the path of your %s" % TARGET_IPSW)
+        parser().print_usage()
+        die("give the path of your %s" % ipsw_name(a.ios))
     if a.ipsw and not os.path.isfile(a.ipsw):
         die("no such file: %s" % a.ipsw)
+    if a.ipsw and os.path.basename(a.ipsw).lower() != ipsw_name(a.ios).lower():
+        say("   note: the usual file for iOS %s is %s; checking its sha1 instead"
+            % (a.ios, ipsw_name(a.ios)))
     sd = os.path.abspath(a.sd)
     work = os.path.abspath(a.work)
     if sd == work or sd.startswith(work + os.sep) or work.startswith(sd + os.sep):
@@ -272,10 +372,12 @@ def main():
 
     staging = os.path.abspath(a.staging) if a.staging else os.path.join(work, "staging")
     if not a.staging:
-        step(2, "Extracting your IPSW (kernel, device tree, root filesystem; a few minutes)")
+        step(2, "Checking your IPSW, then extracting it (a few minutes)")
+        verify_ipsw(a.ipsw, a.ios)
         fwprep(a.ipsw, staging, a.keys, a.force, a.ios)
     else:
         step(2, "Using the extracted firmware in %s" % staging)
+        check_staging(staging, a.ios)
 
     step(3, "Patching the kernel, building the iOS disk image (a few minutes)")
     tree = os.path.join(work, "sd")
