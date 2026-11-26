@@ -916,6 +916,13 @@ void a9_main(int argc, char **argv)
     }
     /* stereo3d=1 -> boot-arg ios3ds_stereo=1 so the CA render server stamps
        depth classes into the frame's alpha (docs/stereo3d.md) */
+    /* Substrate safe mode (issue 1): boot.cfg safe_mode=1, or L held now ->
+       ios3ds-applog loads no tweaks in SpringBoard or the apps this boot */
+    if ((cfg.safe_mode || !(HID_PAD & HID_L)) && strlen(ba->CommandLine) + 14 < sizeof(ba->CommandLine)) {
+        strlcpy_(ba->CommandLine + strlen(ba->CommandLine), " ios3ds_safe=1", 15);
+        log_warn("safe mode (%s): Substrate tweaks stay off this boot\n", cfg.safe_mode ? "boot.cfg safe_mode=1" : "L held");
+        status(12, CON_YELLOW, "SAFE MODE: no Substrate tweaks");
+    }
     if (cfg.stereo3d && strlen(ba->CommandLine) + 20 < sizeof(ba->CommandLine))
         strlcpy_(ba->CommandLine + strlen(ba->CommandLine), " ios3ds_stereo=1", 17);
     log_ok("boot_args at %08x: dt va %08x len %u\n", cfg.bootargs_pa, ba->deviceTreeP, dsize);

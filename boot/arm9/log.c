@@ -93,6 +93,91 @@ void log_flush(void)
     dirty = false;
 }
 
+/* ---- log archive (issue 1): sd:/ios3ds/logs/<RTC date-time>.log ------------
+   log.txt (this boot) and log_prev.txt (the boot before) keep their names for
+   the tools and docs that read them. The log that would have been deleted -
+   the old log_prev.txt - is moved (a rename, no copy) to logs/, named after
+   the RTC line its boot logged ("[mcu] version ..: RTC 2026-11-25 23:20:00"),
+   so logs/ holds every older boot. At most LOG_KEEP files stay there; the
+   oldest names (dates sort in order) go first. */
+#define LOG_DIR   "0:/ios3ds/logs"
+#define LOG_KEEP  32
+
+/* "YYYY-MM-DD_HH-MM-SS" from the RTC line in the first 64 KiB of `path` */
+static bool log_stamp_of(const char *path, char *out)
+{
+    static char b[2048 + 64];
+    FIL f;
+    UINT br;
+    u32 keep = 0, total = 0;
+    bool found = false;
+    if (f_open(&f, path, FA_READ) != FR_OK) return false;
+    while (!found && total < 65536 && f_read(&f, b + keep, 2048, &br) == FR_OK && br) {
+        u32 n = keep + br;
+        total += br;
+        for (u32 i = 0; i + 24 <= n; i++) {
+            if (memcmp(b + i, ": RTC 20", 8) != 0) continue;
+            const char *d = b + i + 6;  /* 2026-11-25 23:20:00 */
+            bool ok = d[4] == '-' && d[7] == '-' && d[10] == ' ' && d[13] == ':' && d[16] == ':';
+            for (u32 k = 0; ok && k < 19; k++)
+                if (k != 4 && k != 7 && k != 10 && k != 13 && k != 16 && (d[k] < '0' || d[k] > '9')) ok = false;
+            if (!ok) continue;
+            memcpy(out, d, 19);
+            out[10] = '_'; out[13] = '-'; out[16] = '-';
+            out[19] = 0;
+            found = true;
+            break;
+        }
+        keep = n < 64 ? n : 64;         /* a match across the chunk boundary */
+        memmove(b, b + n - keep, keep);
+    }
+    f_close(&f);
+    return found;
+}
+
+static void log_prune(void)
+{
+    DIR d;
+    FILINFO fi;
+    for (int guard = 0; guard < 64; guard++) {
+        char oldest[64] = "";
+        u32 n = 0;
+        if (f_opendir(&d, LOG_DIR) != FR_OK) return;
+        while (f_readdir(&d, &fi) == FR_OK && fi.fname[0]) {
+            u32 l = strlen(fi.fname);
+            if ((fi.fattrib & AM_DIR) || l < 5 || l >= sizeof(oldest) || memcmp(fi.fname + l - 4, ".log", 4)) continue;
+            n++;
+            if (!oldest[0] || strncmp(fi.fname, oldest, sizeof(oldest)) < 0) memcpy(oldest, fi.fname, l + 1);
+        }
+        f_closedir(&d);
+        if (n <= LOG_KEEP || !oldest[0]) return;
+        char path[96];
+        snprintf(path, sizeof(path), LOG_DIR "/%s", oldest);
+        if (f_unlink(path) != FR_OK) return;
+    }
+}
+
+static char log_archived[96];           /* reported once logging runs */
+
+static void log_archive_prev(void)
+{
+    FILINFO fi;
+    char stamp[24], path[96];
+    if (f_stat("0:/ios3ds/log_prev.txt", &fi) != FR_OK) return;
+    if (!log_stamp_of("0:/ios3ds/log_prev.txt", stamp)) memcpy(stamp, "undated", 8);
+    f_mkdir(LOG_DIR);
+    for (u32 k = 0; k < 100; k++) {
+        if (k) snprintf(path, sizeof(path), LOG_DIR "/%s_%u.log", stamp, (unsigned)k);
+        else snprintf(path, sizeof(path), LOG_DIR "/%s.log", stamp);
+        if (f_stat(path, &fi) == FR_OK) continue;
+        if (f_rename("0:/ios3ds/log_prev.txt", path) == FR_OK) {
+            snprintf(log_archived, sizeof(log_archived), "%s", path + 2);
+            log_prune();
+        }
+        return;
+    }
+}
+
 int log_mount_sd(char *why, u32 whylen)
 {
     FRESULT r = f_mount(&fs, "0:", 1);
@@ -101,6 +186,7 @@ int log_mount_sd(char *why, u32 whylen)
         return -1;
     }
     f_mkdir("0:/ios3ds");
+    log_archive_prev();
     /* keep the previous boot's log as log_prev.txt (8.3: LOG_PREV.TXT) */
     f_unlink("0:/ios3ds/log_prev.txt");
     f_rename("0:/ios3ds/log.txt", "0:/ios3ds/log_prev.txt");
@@ -116,6 +202,7 @@ int log_mount_sd(char *why, u32 whylen)
         f_sync(&logf);
         pending_len = 0;
     }
+    if (log_archived[0]) log_color(CON_WHITE, "[log] older boot's log kept as sd:%s\n", log_archived);
     return 0;
 }
 

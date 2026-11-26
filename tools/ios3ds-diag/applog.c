@@ -472,6 +472,102 @@ static void tlsfix_deferred(void)
     if (t) add(main_rl(), t, *common);
 }
 
+/* ---- Substrate safe mode (issue 1: a tweak that breaks SpringBoard must not
+ * stop the device from booting). Every Substrate load on ios3ds goes through
+ * load_substrate() below, so it is the one place to say no:
+ *   - boot-arg ios3ds_safe=1 (boot.cfg safe_mode=1, or L held while the ARM9
+ *     loads iOS): no tweaks in SpringBoard or any app for this boot;
+ *   - automatically: SpringBoard counts its starts in SB_STARTS and clears the
+ *     count once it has run SB_STABLE_S seconds. Two starts in a row that did
+ *     not get that far (a tweak crashing or hanging SpringBoard) make the next
+ *     start a safe one; SB_SAFE tells the apps. The next respring after a
+ *     stable safe-mode run tries the tweaks again, like Substrate's own safe
+ *     mode. */
+#define SB_STARTS   "/private/var/mobile/Library/Caches/ios3ds-springboard-starts"
+#define SB_SAFE     "/private/var/mobile/Library/Caches/ios3ds-substrate-safe"
+#define SB_STABLE_S 90.0
+static int safe_bootarg(void)
+{
+    char ba[512];
+    size_t n = sizeof(ba) - 1;
+    if (sysctlbyname("kern.bootargs", ba, &n, NULL, 0) != 0) return 0;
+    ba[n < sizeof(ba) ? n : sizeof(ba) - 1] = 0;
+    const char *p = strstr(ba, "ios3ds_safe=");
+    return p && p[12] && p[12] != '0';
+}
+static void say_console(const char *msg)
+{
+    int fd = open("/dev/console", O_WRONLY | O_NOCTTY);
+    if (fd < 0) return;
+    write(fd, msg, strlen(msg));
+    close(fd);
+}
+static int sb_starts_read(void)
+{
+    char b[16] = { 0 };
+    int fd = open(SB_STARTS, O_RDONLY);
+    if (fd < 0) return 0;
+    ssize_t r = read(fd, b, sizeof(b) - 1);
+    close(fd);
+    return r > 0 ? atoi(b) : 0;
+}
+static void sb_starts_write(int k)
+{
+    char b[16];
+    int fd = open(SB_STARTS, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0) return;
+    int l = snprintf(b, sizeof(b), "%d\n", k);
+    write(fd, b, l);
+    fsync(fd);
+    close(fd);
+}
+static void sb_stable(void *timer, void *info)
+{
+    (void)timer; (void)info;
+    sb_starts_write(0);
+    if (unlink(SB_SAFE) == 0)
+        say_console("[safe] SpringBoard ran stably in safe mode: the next respring loads the tweaks again\n");
+}
+static void sb_stable_arm(void)
+{
+    void *cf = dlopen("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation", RTLD_NOW);
+    if (!cf) return;
+    void *(*mk)(void *, double, double, unsigned long, long, void (*)(void *, void *), void *) =
+        (void *(*)(void *, double, double, unsigned long, long, void (*)(void *, void *), void *))
+            dlsym(cf, "CFRunLoopTimerCreate");
+    double (*now)(void) = (double (*)(void))dlsym(cf, "CFAbsoluteTimeGetCurrent");
+    void *(*main_rl)(void) = (void *(*)(void))dlsym(cf, "CFRunLoopGetMain");
+    void (*add)(void *, void *, void *) = (void (*)(void *, void *, void *))dlsym(cf, "CFRunLoopAddTimer");
+    void **common = (void **)dlsym(cf, "kCFRunLoopCommonModes");
+    if (!mk || !now || !main_rl || !add || !common) return;
+    void *t = mk(NULL, now() + SB_STABLE_S, 0, 0, 0, sb_stable, NULL);
+    if (t) add(main_rl(), t, *common);
+}
+/* 1 = load the tweaks in this process */
+static int substrate_allowed(void)
+{
+    int sb = !strcmp(getprogname(), "SpringBoard");
+    if (safe_bootarg()) {
+        if (sb) say_console("[safe] boot-arg ios3ds_safe=1: Substrate tweaks are not loaded this boot\n");
+        return 0;
+    }
+    if (!sb) return access(SB_SAFE, 0 /* F_OK */) != 0;
+    int k = sb_starts_read();
+    sb_starts_write(k + 1);
+    sb_stable_arm();
+    if (k >= 2) {
+        char m[200];
+        snprintf(m, sizeof(m), "[safe] SpringBoard did not run %d s the last %d starts: Substrate tweaks are "
+                 "not loaded (safe mode); remove the tweak that broke it in Cydia\n", (int)SB_STABLE_S, k);
+        say_console(m);
+        int fd = open(SB_SAFE, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (fd >= 0) close(fd);
+        return 0;
+    }
+    unlink(SB_SAFE);
+    return 1;
+}
+
 static void load_substrate(void)
 {
     static const char ms[] = "/Library/MobileSubstrate/MobileSubstrate.dylib";
@@ -480,6 +576,7 @@ static void load_substrate(void)
     unsigned int n = sizeof(exe);
     if (!e || strstr(e, ms) || strlen(e) >= sizeof(old)) return;   /* already inserted */
     if (_NSGetExecutablePath(exe, &n) != 0 || !strstr(exe, ".app/")) return;
+    if (!substrate_allowed()) return;
     memcpy(old, e, strlen(e) + 1);
     snprintf(v, sizeof(v), "%s:%s", old, ms);
     /* Substrate's loader looks for itself in DYLD_INSERT_LIBRARIES and takes

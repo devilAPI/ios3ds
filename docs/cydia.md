@@ -162,6 +162,24 @@ crashes SpringBoard should bring it back in safe mode; not exercised in QEMU.
 Our interposers are plain `DYLD_INSERT_LIBRARIES` entries, not extensions, so
 they load in safe mode too.
 
+**ios3ds safe mode (issue 1).** Every Substrate load on ios3ds goes through
+`ios3ds-applog`'s `load_substrate()`, which now asks `substrate_allowed()`
+first:
+
+- boot-arg `ios3ds_safe=1` (boot.cfg `safe_mode=1`, or **L** held while the
+  ARM9 loads iOS; the ARM9 logs `safe mode (...)`): no tweaks in SpringBoard or
+  any app for that boot (`[safe] boot-arg ios3ds_safe=1 ...` on the console);
+- automatic: SpringBoard counts its starts in
+  `/var/mobile/Library/Caches/ios3ds-springboard-starts` and clears the count
+  after 90 s of running. After two starts in a row that did not get that far,
+  the next start loads no tweaks and creates `ios3ds-substrate-safe` next to
+  it, which keeps apps tweak-free too. After 90 s of a stable safe start the
+  flag goes and the next respring tries the tweaks again.
+
+What it cannot catch: a boot that hangs before SpringBoard starts (launchd or
+a daemon). Tweak daemons that Cydia installs (e.g. `sbsettingsd`,
+`rocketd`) are ordinary launchd jobs and are not affected by safe mode.
+
 ## What the build does (scripts/cydia.py)
 
 Hooked into `scripts/mkrootfs.py` right after the volume is grown and before our own

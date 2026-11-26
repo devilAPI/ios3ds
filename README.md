@@ -170,7 +170,7 @@ As with any homebrew, **back up your SD card** first. More: [docs/real-hardware.
 
 ## Troubleshooting
 
-- **Logs:** every boot writes **`sd:/ios3ds/log.txt`**, and the previous one is kept as `log_prev.txt`. Please [open an issue](https://github.com/devilAPI/ios3ds/issues/new/choose) and attach `log.txt`.
+- **Logs:** every boot writes **`sd:/ios3ds/log.txt`**, and the previous one is kept as `log_prev.txt`. Older boots are not deleted any more: they move to **`sd:/ios3ds/logs/`** as `YYYY-MM-DD_HH-MM-SS.log` (the 3DS clock when that boot started; the newest 32 are kept). Please [open an issue](https://github.com/devilAPI/ios3ds/issues/new/choose) and attach `log.txt`.
 - **Crash reports:** when an app or SpringBoard dies, iOS writes a `.plist`, `.crash` or `.panic` file into `sd:/ios3ds/rootfs.hfs` at `/private/var/mobile/Library/Logs/CrashReporter`. To send them, put the SD card in your PC and run `python3 scripts/crashlogs.py /path/to/SD_CARD crash-reports` (Linux: the whole card device, e.g. `/dev/sdX`; macOS: `/dev/disk2`) or point the script at a copy of `ios3ds/rootfs.hfs`. It writes every report into `crash-reports/` and prints the file names; attach those files to the issue. It only reads the image; for a raw card image it makes a temporary 1 GiB copy of the iOS disk under `build/` (`--tmpdir` changes that), because the HFS+ editor needs a plain file. The card itself is never written. Needs `build/tools/hfsplus` (`make hfsplus`) and `mtools`.
 - **Settings:** they live in **`sd:/ios3ds/boot.cfg`**, a text file. Useful switches:
 
@@ -184,6 +184,7 @@ As with any homebrew, **back up your SD card** first. More: [docs/real-hardware.
   | `wifi_led=0` | don't light the console's Wi-Fi LED while connected |
   | `boot_delay=0` | skip the 1 s wait before XNU (or press **A** during it); the old name `countdown_ms` still works |
   | `diag=1` | extra diagnostics in the log |
+  | `safe_mode=1` | no Cydia Substrate tweaks this boot (same as holding **L** while the 3DS loads iOS); see the FAQ |
   | `stereo3d=1` | experimental stereoscopic 3D home screen (PICA200 two-eye mirror + barrier; needs a console test); flat frames use the normal GPU mirror |
 
 ### FAQ
@@ -210,6 +211,15 @@ As with any homebrew, **back up your SD card** first. More: [docs/real-hardware.
   credits before the chip was ready; fixed after 0.4.0 (issue #11). Any other
   `FAILED in stage ...` line, or a red `Wi-Fi fw:` line from the launcher, is
   a different problem — attach the whole log.
+- **A tweak broke SpringBoard / the 3DS no longer boots after installing one?**
+  Hold **L** while the 3DS loads iOS (until `SAFE MODE` shows on the top
+  screen), or put `safe_mode=1` into `boot.cfg`: Substrate tweaks are not
+  loaded in SpringBoard or any app, so you can remove the tweak in Cydia.
+  Without that, if SpringBoard dies twice in a row within 90 s of starting,
+  its next start is a safe one by itself (`[safe]` lines in `log.txt`).
+  Pressing SELECT+START (the forced panic) or pulling power while Cydia or a
+  tweak writes files can leave iOS's disk inconsistent; let installs finish
+  and use the iOS power-off slider where you can.
 - **Why is the wallpaper only on the lock screen?** Apple did not enable
   home-screen wallpaper on the iPod touch 2G (`iPod2,1`): SpringBoard's
   `homescreen-wallpaper` capability is absent from that device's capabilities

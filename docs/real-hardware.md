@@ -9,7 +9,7 @@
 | Writing NAND (eMMC) | **never** | `boot/arm9/sdmmc.c` has no eMMC code at all (removed when imported); the only device ever selected is `devicenumber = 0` (SD, `REG_SDPORTSEL` port 0). XNU has no driver for the 3DS eMMC, and the TMIO controller at 0x10006000 is only reachable from the ARM9. |
 | Modifying FIRM0/FIRM1, boot9strap, Luma | **never** | Nothing writes to NAND (see above). ios3ds is just a payload file on SD that Luma chainloads into RAM. |
 | Persistent chip state (MCU, PMIC, CODEC) | none written | No I2C/MCU writes anywhere. The touch driver configures CODEC registers over SPI; those reset at power-off. |
-| SD card damage | possible, limited | The ARM9 writes only `sd:/ios3ds/log.txt`, `log_prev.txt` and `rootfs.hfs` (iOS's disk image), through FatFs. A power loss during a write can at worst corrupt that FAT volume, as with any homebrew. Mitigation: back up the SD card (or use a spare card). |
+| SD card damage | possible, limited | The ARM9 writes only `sd:/ios3ds/log.txt`, `log_prev.txt`, `logs/*.log` and `rootfs.hfs` (iOS's disk image), through FatFs. A power loss during a write can at worst corrupt that FAT volume, as with any homebrew. Mitigation: back up the SD card (or use a spare card). |
 | Hang / black screen | recoverable | Hold POWER for ~3 s to start a clean shutdown (if iOS still responds), or ~10 s to force the console off. ios3ds runs entirely from RAM, so the next normal boot is your usual Luma + HOME Menu. A hard cut can leave the HFS+ root image unclean; see §3. |
 | Battery / heat | low | Same as any long-running homebrew: no clock or voltage changes. |
 
@@ -29,7 +29,7 @@ There is no software path back into NAND. The worst realistic outcome is a corru
 
 ## 3. Test stages
 
-Every stage writes to the screen and to `sd:/ios3ds/log.txt`. The previous run is kept as `log_prev.txt`. After each stage, power off and send `log.txt`.
+Every stage writes to the screen and to `sd:/ios3ds/log.txt`. The previous run is kept as `log_prev.txt`, older runs as `logs/<date>_<time>.log` (newest 32). After each stage, power off and send `log.txt`.
 
 | Stage | How | Expected | If it fails |
 |---|---|---|---|

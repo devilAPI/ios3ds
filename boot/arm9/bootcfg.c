@@ -63,7 +63,7 @@ void parse_bootcfg(char *txt)
         { "mic", &cfg.mic }, { "hp_route", &cfg.hp_route }, { "hp_codec", &cfg.hp_codec }, { "camera", &cfg.camera }, { "cam_test", &cfg.cam_test },
         { "n3ds_clock", &cfg.n3ds_clock }, { "n3ds_l2", &cfg.n3ds_l2 }, { "n3ds_hid", &cfg.n3ds_hid },
         { "n3ds_ram", &cfg.n3ds_ram }, { "auto_brightness", &cfg.auto_brightness },
-        { "stereo3d", &cfg.stereo3d },
+        { "stereo3d", &cfg.stereo3d }, { "safe_mode", &cfg.safe_mode },
         { "diag", &cfg.diag }, { "ioprof", &cfg.ioprof }, { "log_ts", &cfg.log_ts },
     };
     int lineno = 0;

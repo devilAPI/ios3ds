@@ -6083,3 +6083,58 @@ Apple80211.framework. Details in docs/wifi.md section 11.
   2.2.1 `wifi_test --case ok` **PASS**, `wifi_ui_test` **8/8 PASS**, fresh
   2.2.1 soak (`--require-app`, targets above) **PASS**, 4.2.1 hashes
   unchanged (same six values), fresh 4.2.1 soak **PASS**.
+
+## NEXT. Issue 1 follow-up: home Wi-Fi, cam_test, log archive, Substrate safe mode (2026-11-26)
+
+Tester logs of 2026-11-25 (New 2DS XL, build m1-0.4.0-244).
+
+**Home Wi-Fi.** The home AP (2.4 GHz, channel 13, RSN, 407-byte probe response)
+is in the scan, but the join logged `[a80211] associate: key type 2 / 13 bytes
+not supported (WEP?)`: WiFiManager took it for WEP and sent the password as a
+WEP-104 key. The ARM9 copies a beacon's IEs, in order, into the 76-byte
+`wlan_bss_t.ie` and skips what does not fit; a long country IE (one triplet per
+channel) and HT caps ahead of RSN pushed the RSN IE out, so iOS saw the privacy
+bit without RSN/WPA. Tethering (109 IE bytes) fit. Fix: `scan_record` copies
+SSID, rates, DS, RSN, WPA and extended rates first, then the rest
+(`[wifi-diag] scan: N needed IE(s) did not fit` if even that overflows).
+[V] host test `test_scan_ie_priority` (fails on the old code). [G] hardware join.
+
+**cam_test=1.** The attached logs are cam_test=0 boots, so the cause is not in
+them. After the self-test the ARM9 now soft-resets every sensor, power-cycles
+the CAM blocks and probes again (`[cam-test] sensors reset ...`), so iOS starts
+as after a cam_test=0 boot. [G] unverified.
+
+**Logs.** `log.txt`/`log_prev.txt` keep their names (tools read `log.txt`). At
+mount the old `log_prev.txt` is renamed (no copy) to
+`logs/YYYY-MM-DD_HH-MM-SS.log`, named from that boot's own `[mcu] ... RTC`
+line (`undated` without one); newest 32 kept. [V] QEMU: `[log] older boot's
+log kept as sd:/ios3ds/logs/2026-11-25_23-20-05.log`.
+
+**SBSettings / Substrate.** In the tweak session Substrate worked (SBSettings,
+Activator, toggles ran in SpringBoard); the "crash" was SELECT+START (requested
+panic) while SpringBoard was slow. The next boot found rootfs.hfs dirty;
+launchd printed `launch_msg(): Socket is not connected` (absent in good boots)
+and never executed anything (no AMFI lines, no daemons); from t=120 s the CPU
+spun in launchd's text with no md0 I/O. The tweak debs' maintainer scripts
+(sbsettings 6.0.5, libactivator 1.9.13, flipswitch, rocketbootstrap, libhide,
+preferenceloader, toggles) do not touch launchd.conf or launchd; they add the
+jobs `sbsettingsd`/`rocketd` and use `launchctl load -w` (launchd overrides
+db). Suspects: a file damaged by the panic on the unjournaled dirty volume, or
+one of those jobs; not proven [G], no QEMU repro yet. Recovery: boot-arg
+`ios3ds_safe=1` (boot.cfg `safe_mode=1` or **L** held while the ARM9 loads)
+stops ios3ds-applog loading Substrate anywhere; automatic SpringBoard safe start
+after two starts in a row under 90 s (docs/cydia.md). A launchd-level hang is
+not covered. [V] QEMU: `safe mode (boot.cfg safe_mode=1)` and `[safe] boot-arg
+ios3ds_safe=1 ...` from SpringBoard.
+
+### Hardware checklist
+- Home network join: no `key type 2`; `[wifi] connect ... (WPA2-PSK/CCMP)`.
+- cam_test=1: `[cam-test] sensors reset`, then a picture in Camera.app.
+- One dated file per boot in `sd:/ios3ds/logs/`.
+- Hold L: `SAFE MODE` on the top screen, `[safe]` lines in log.txt.
+
+### Verification
+- [V] No kernel/devtree/fakeio/shim/gpu/mkboot source changed; fresh build:
+  kernel 692874e8, devtree 0965a3f2, fakeio b89cfc32, shim 2f36ac60
+  (24268 bytes), gpu 5c3b584d, boot.cfg ff838865.
+- [V] Fresh 4.2.1 soak `--cycles 5 --icount 2` -> PASS; `make test` passes.
