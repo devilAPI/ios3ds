@@ -251,7 +251,7 @@ def main():
                     break
                 if url == name:             # a page on the internet (slirp): no local hit to check
                     # A cold HTTPS page can sit in "Loading" for much longer than
-                    # two minutes on a slow ARM11 (re-log NEXT).  Wait for the
+                    # two minutes on a slow ARM11 (re-log 156).  Wait for the
                     # full page timeout before calling it a pass; the screenshot
                     # still has to show the page, not Safari's loading bar.
                     if time.time() - t1 > a.page_timeout:

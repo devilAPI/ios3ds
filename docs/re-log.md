@@ -7031,7 +7031,7 @@ instruction timing, ~250 MHz) for the camera path.
   `ff838865…` (the branch's current baseline; the 152 values predate this
   branch's other merges).
 
-## NEXT. iOS 4.1: the first HTTPS fetch was a cold trust daemon, not a late DNS (2026-11-26)
+## 156. iOS 4.1: the first HTTPS fetch was a cold trust daemon, not a late DNS (2026-11-26)
 
 Continues 152 (hwtest kit) and 143 (Safari's cold first page). The hwtest kit
 reported the first 4.1 fetch after joining Wi-Fi as `NSCocoaErrorDomain 256`

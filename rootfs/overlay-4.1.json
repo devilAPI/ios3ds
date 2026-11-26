@@ -11,7 +11,7 @@
    "RunAtLoad": true
   }
  },
- "_plist_set": "8B117 starts securityd on demand. Its cold launch (with ios3ds-hwaes.dylib) took long enough that the first HTTPS read after Wi-Fi returned NSCocoaErrorDomain 256; Safari's first HTTPS page stayed in Loading. On 4.1 only, start the TLS trust daemon at boot (re-log NEXT).",
+ "_plist_set": "8B117 starts securityd on demand. Its cold launch (with ios3ds-hwaes.dylib) took long enough that the first HTTPS read after Wi-Fi returned NSCocoaErrorDomain 256; Safari's first HTTPS page stayed in Loading. On 4.1 only, start the TLS trust daemon at boot (re-log 156).",
  "file_patches_search": true,
  "_new_hex_replace": "relocate the literal CFStrings in liblockdown's activation table: ProductVersion 4.2.1 -> 4.1 (length 5 -> 3, keeping the 160-byte patch), BuildVersion 8C148 -> 8B117 (same length)",
  "new_hex_replace": [
