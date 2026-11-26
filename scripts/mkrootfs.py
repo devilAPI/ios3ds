@@ -278,7 +278,7 @@ def build(staging, out, recipe_path=None, verbose=True, hfsplus=None, rootfs_add
         # Old versions cannot put applog into apps through SpringBoard's
         # SBGuardMallocAlways (4.x only) or a launchd-wide environment (hangs
         # the boot): add it as a real LC_LOAD_DYLIB dependency of the chosen
-        # stock executables instead (scripts/inject_dylib.py, re-log NEXT).
+        # stock executables instead (scripts/inject_dylib.py, re-log 139).
         # Only overlays set "inject_dylibs"; 4.2.1's recipe has no such key.
         if recipe.get("inject_dylibs"):
             import inject_dylib

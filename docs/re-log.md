@@ -5725,7 +5725,7 @@ category activation or leave `input available 0`.
   swipes in the 2.x QEMU input build do not reach the second home-screen page,
   so the Safari window could not be captured in landscape here. The kernel
   probe, HID samples and SpringBoard orientation are verified above.
-## NEXT. iOS 4.1: the gyro vtable and CoreMotion capability mask (2026-11-26)
+## 139. iOS 4.1: the gyro vtable and CoreMotion capability mask (2026-11-26)
 
 Ports the two kernel and one dyld-cache change that re-log 131 listed as still
 missing on 8B117. Everything below was read from this worktree's staged
@@ -5763,7 +5763,7 @@ missing on 8B117. Everything below was read from this worktree's staged
   3:d0`, `[gyrotest] gyroAvailable ...` nonzero and changing `t=N gyro` lines
   after turning the 3DS about its y axis; `gyro=0` must keep the rates at 0.
 
-## NEXT. iOS 4.1: CLCD backlight log-enable, retry-off not needed (2026-11-26)
+## 140. iOS 4.1: CLCD backlight log-enable, retry-off not needed (2026-11-26)
 
 - **[V]** 8B117 has the same three `Where is my backlight?` IOLog call sites as
   8C148 (string literal 0x8075f940, referenced three times). Two were already
@@ -5785,7 +5785,7 @@ missing on 8B117. Everything below was read from this worktree's staged
   `log.txt` contains no `Where is my backlight?` line and that brightness
   returns after Home.
 
-## NEXT. Fake GPS in stock apps on 3.1.3 and 2.2.1 (2026-11-26)
+## 141. Fake GPS in stock apps on 3.1.3 and 2.2.1 (2026-11-26)
 
 - **[V]** `LSEnvironment` does not exist in 7E18's SpringBoard or dyld cache,
   and 3.x/2.x have no `SBGuardMallocAlways`. A launchd-wide
@@ -5820,7 +5820,7 @@ missing on 8B117. Everything below was read from this worktree's staged
   `navigator.geolocation` gets the same coordinates. No locationd or `/bin/sh`
   is involved; `ios3ds-gps set` still needs a real shell on these versions.
 
-## NEXT. Verification of this round (2026-11-26)
+## 142. Verification of this round (2026-11-26)
 
 - **[V]** `make test`: 101 offline tests including the new
   `tests/test_inject_dylib.py` (append, idempotence, slack limit, bad magic),

@@ -131,7 +131,7 @@ class TestVersions(unittest.TestCase):
             # 26: VirtualAudio's N72/N81 product swap (mic input), the
             # 8B117 MusicLibrary .cbk patch (re-log 131, 4.1 completeness),
             # and the two CoreMotion provider-mask immediates for the gyro
-            # (re-log NEXT).
+            # (re-log 139).
             self.assertEqual(len(recipe["file_patches"]), 26)
             self.assertIn("0x53bc3c", [fp["offset"] for fp in recipe["file_patches"]])
             self.assertIn("0x53bc4c", [fp["offset"] for fp in recipe["file_patches"]])

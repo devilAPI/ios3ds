@@ -144,7 +144,7 @@
   "cy+kernel.darwin": "9.4.1",
   "cy+lib.corefoundation": "478.29"
  },
- "_gps": "Fake GPS (docs/location.md): 2.x builds of ios3ds-applog.dylib, ios3ds-gps, ios3ds-gpstest and ios3ds-diag are installed. CoreLocation hooks work in a process that loads applog; the stock Maps and MobileSafari executables get an LC_LOAD_DYLIB for it (below), because 2.x has no SBGuardMallocAlways and a launchd-wide DYLD_INSERT_LIBRARIES hangs the boot (re-log NEXT).",
+ "_gps": "Fake GPS (docs/location.md): 2.x builds of ios3ds-applog.dylib, ios3ds-gps, ios3ds-gpstest and ios3ds-diag are installed. CoreLocation hooks work in a process that loads applog; the stock Maps and MobileSafari executables get an LC_LOAD_DYLIB for it (below), because 2.x has no SBGuardMallocAlways and a launchd-wide DYLD_INSERT_LIBRARIES hangs the boot (re-log 139).",
  "inject_dylibs": {
   "/Applications/Maps.app/Maps": "/usr/lib/ios3ds-applog.dylib",
   "/Applications/MobileSafari.app/MobileSafari": "/usr/lib/ios3ds-applog.dylib"

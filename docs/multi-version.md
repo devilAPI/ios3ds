@@ -835,7 +835,7 @@ or not registered, with the reason):
 | Audio | works in QEMU: speaker output (UI sounds, `ios3ds-tone`; DMA TC IRQs injected through the version's IRQ path), volume → CSND, mic input via the VirtualAudio N82-slot swap at unity gain (re-log 130); [G] real sound, headphones, keyboard click; test song not shown (4.x library format) | works in QEMU: mediaserverd runs and reaches IOAudio/I2C, `ios3ds-tone` output streams with TC IRQs and a 5999-peak CSND WAV (re-log 134). no mic route: the 0x9a358 product swap breaks category activation and was removed; headset-jack emulation still reports no input. Three product-table/ID variants were built and tested (next section): category can be repaired but the N72 routing database still has no built-in-mic port, so `input available 0` remains. [G] hardware headset test, real sound |
 | Wi-Fi (`ios3ds-wifid`/a80211) | works: Settings toggle/scan/WPA2 join/DHCP, auto-join from the keychain, status-bar bars, Safari loads pages (first cold-start page fails, later ones load); shim mailbox VA from the KPI base, 3.x event device + 144-byte scan results (re-log 133) [G] | off: no IOUserEthernet in 5H11a and a dynamic Apple80211.framework (Aeropuerto); needs a kernel ifnet (re-log 133) |
 | Camera (`vcd`) | n/a: iPod2,1 7E18 has no Camera.app and no MediaCapture plugin (Camera.framework/Celestial capture code exists but has no driver to bind); a 3DS camera here means a new capture stack, not a driver | n/a: same |
-| GPS | partial: `ios3ds-applog` hooks work on 3.x (2.0 `CLLocation` initializer, instance `-locationServicesEnabled`): `ios3ds-gpstest` gets 52.52,13.405 at 1 Hz. Maps and MobileSafari now load applog through an `LC_LOAD_DYLIB` added to their executables (re-log NEXT): QEMU confirms `[applog] Maps … GPS hooks installed`, but map tiles/fix circle need a console/network test. No `/bin/sh`, so `ios3ds-gps set` from gpstest fails | partial: same, with 2.x builds (dylib glue `-DDYLD2_DYLIB`); `[applog] Maps pid …` verified in QEMU after the same executable injection |
+| GPS | partial: `ios3ds-applog` hooks work on 3.x (2.0 `CLLocation` initializer, instance `-locationServicesEnabled`): `ios3ds-gpstest` gets 52.52,13.405 at 1 Hz. Maps and MobileSafari now load applog through an `LC_LOAD_DYLIB` added to their executables (re-log 139): QEMU confirms `[applog] Maps … GPS hooks installed`, but map tiles/fix circle need a console/network test. No `/bin/sh`, so `ios3ds-gps set` from gpstest fails | partial: same, with 2.x builds (dylib glue `-DDYLD2_DYLIB`); `[applog] Maps pid …` verified in QEMU after the same executable injection |
 | Cydia / TLSFix | Cydia 1.1.30 + APT/dpkg installed and Cydia opens [V]; TLSFix left out (needs Substrate via ios3ds-applog, not installed on 3.x); refresh untested (Wi-Fi works on 3.1.3 since re-log 133, refresh not tried) | off: Cydia 1.1.30/APT binaries use LC_DYLD_INFO_ONLY, which 2.x dyld cannot load (icon appeared, tap launched nothing) |
 
 4.1 (8B117) Wi-Fi: works with the 4.2.1 tools unchanged (wifi_test 20/20,
@@ -849,7 +849,7 @@ unnecessary because 8B117 has no pending-flag/retry loop.
 The 4.2.1 build is unchanged by all of this: every older-version switch is
 either in `rootfs/overlay-*.json`, `kernel/patchsets/*.json`, or a
 `versions.py` flag that only non-default versions set (six 4.2.1 hashes
-re-checked in the re-log NEXT verification).
+re-checked in the re-log 139 verification).
 
 **Enabling the 3.1.3 GPU path (hardware testing):** it is a *build-time*
 switch, because it needs a dyld-cache patch and a SpringBoard plist value:
