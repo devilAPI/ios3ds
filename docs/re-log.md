@@ -5725,3 +5725,97 @@ category activation or leave `input available 0`.
   swipes in the 2.x QEMU input build do not reach the second home-screen page,
   so the Safari window could not be captured in landscape here. The kernel
   probe, HID samples and SpringBoard orientation are verified above.
+## NEXT. iOS 4.1: the gyro vtable and CoreMotion capability mask (2026-11-26)
+
+Ports the two kernel and one dyld-cache change that re-log 131 listed as still
+missing on 8B117. Everything below was read from this worktree's staged
+`build/fw-4.1/staging/` firmware; no Apple code is stored in the repo.
+
+- **[V]** `gyro-usage` / `gyro-dispatch`: the 8C148 `AppleLIS331DLH` vtable at
+  0x806200d0 is at 0x805d50dc in 8B117. It has no symbol, so it was relocated
+  by its pointer layout (+0x3b0 = 0x805d0970 where 8C148 has 0x8061b970,
+  followed by the same 3x3 calibration/getter sequence). The usage slot +0x3b4
+  held `mov r0,#3` (0x805d0978) and now points to the existing `mov r0,#9; bx
+  lr` at 0x80337eb8 (the 8C148 0x8034433c equivalent, found by its neighbouring
+  getters `mov r0,#10..#12`). The dispatch slot +0x3c0 held
+  `AppleEmbeddedHIDEventService::dispatchAccelerometerEvent` 0x804fb771 and
+  now uses the unchanged shim jump-table slot +0x2c, i.e. `@shim+0x2c@` expands
+  to the same 0x8084002c as on 8C148. Both new kernel patches are in
+  `kernel/patchsets/4.1.json`; the original words were verified in the cache.
+- **[V]** CoreMotion: 8C148's one `0x2012 -> 0x2052` literal (recipe offset
+  0x3224dd4) became *two immediate instructions* in 8B117's
+  `CLPlatformInfo::getProviders` (symbol VA 0x3053bbcc, cache offsets
+  0x53bc3c and 0x53bc4c). The 8B117 function is a 12-case jump table instead
+  of 8C148's 16-case one; `getSystemHardware`'s model strings show cases 3/5/7
+  are N45/N72/N18, and case 11 (N81) already stores 0x52 — proving 0x40 is the
+  gyro bit. Both `mov r2,#0x12` sites are now `mov r2,#0x52` via two
+  `extra_file_patches` in `rootfs/overlay-4.1.json`.
+- **[V]** Fresh 4.1 image, `diag=1`, `--icount 2`: `[gyrotest] gyroAvailable 64
+  deviceMotionAvailable 64 accelerometerAvailable 1`, `gyroActive 1`, and
+  after `qom-set gyro-y 30000` the pull rate became `-0.523 0 0 rad/s` (−30 °/s
+  in iOS x because boot.cfg `gyro_axes=-y,x,z`), changing at the next 1 s tick
+  and holding steady. 64 is 8B117's raw provider bit from
+  `-[CMMotionManager isGyroAvailable]` (`and r0,r0,#64` at 0x30554348): truthy,
+  where 4.2.1 normalises to 1. `deviceMotion` rate/attitude stayed 0 on 4.1
+  with the same setup (4.2.1 follows the gyro); not chased in this round.
+- **[G]** QEMU models the ITG-3200 register file, not a soldered chip. On a
+  console, boot 4.1 with `diag=1` and confirm `[gyro] ITG-3200 family at I2C
+  3:d0`, `[gyrotest] gyroAvailable ...` nonzero and changing `t=N gyro` lines
+  after turning the 3DS about its y axis; `gyro=0` must keep the rates at 0.
+
+## NEXT. iOS 4.1: CLCD backlight log-enable, retry-off not needed (2026-11-26)
+
+- **[V]** 8B117 has the same three `Where is my backlight?` IOLog call sites as
+  8C148 (string literal 0x8075f940, referenced three times). Two were already
+  nopped (`clcd-backlight-log-set` 0x80758408, `clcd-backlight-log-disable`
+  0x80758460); the third, in `AppleM2CLCD::enable_backlight` (0x80758478), was
+  not. A diag=1 QEMU boot before the patch printed
+  `void AppleM2CLCD::enable_backlight(), Where is my backlight?` on every wake
+  from Lock. Added `clcd-backlight-log-enable` at 0x807584b8 (verified `blx r3`
+  bytes) to `kernel/patchsets/4.1.json`; after a fresh build, a POWER-then-Home
+  lock/wake round printed 0 such lines while `[mcud]` still logged the
+  backlight going 500 → 0 → 500.
+- **[V]** `clcd-backlight-retry-off` is unnecessary on 8B117: 8C148's
+  `safe_enable_backlight` (0x807a95d0) has a `+0xea0` pending flag, a service
+  getter and a retry path that the patch short-circuits. The whole 8B117 CLCD
+  cluster is simpler: the enable function has no `strb ...,[r4,#0xea0]`
+  instruction anywhere in the kernelcache, and each wake produced exactly one
+  log line, not a ~3/s retry storm. Only the IOLog was patched.
+- **[G]** Hardware: boot 4.1 with `diag=1`, lock/wake five times and check
+  `log.txt` contains no `Where is my backlight?` line and that brightness
+  returns after Home.
+
+## NEXT. Fake GPS in stock apps on 3.1.3 and 2.2.1 (2026-11-26)
+
+- **[V]** `LSEnvironment` does not exist in 7E18's SpringBoard or dyld cache,
+  and 3.x/2.x have no `SBGuardMallocAlways`. A launchd-wide
+  `setenv DYLD_INSERT_LIBRARIES ...` in `/etc/launchd.conf` was tried first:
+  launchctl read the file, then no process reached SpringBoard for 200 s
+  (kernel idle at 0xc006991c, no crash) — the same family of hang as 4.2.1's
+  global Substrate injection (re-log 71). It is not used.
+- **[V]** Shipped instead: a real `LC_LOAD_DYLIB` for
+  `/usr/lib/ios3ds-applog.dylib` appended into the slack between the end of the
+  load commands and the first section of `/Applications/Maps.app/Maps` and
+  `/Applications/MobileSafari.app/MobileSafari` (600 / 1176 bytes of slack on
+  7E18, enough for the 56-byte command). `scripts/inject_dylib.py` only changes
+  `ncmds`/`sizeofcmds` and writes in that slack, so all file offsets stay put;
+  unit tests in `tests/test_inject_dylib.py`. `mkrootfs` applies the new
+  `inject_dylibs` recipe key from the 3.1.3/2.2.1 overlays only; the 4.2.1 and
+  4.1 recipes never enter the loop. AMFI logs `Invalid signature but permitting
+  execution` for the changed apps and they launch normally.
+- **[V]** 3.1.3 QEMU, `gps=52.52,13.405`, `--icount 2`, a temporary marker
+  build of applog (reverted before commit): tapping the Maps icon gave
+  `[applog] Maps pid 98 constructor`, `gps_install_hooks: entry`, `GPS hooks
+  installed` in `/private/var/tmp/ios3ds-applog-hooks-98.txt`; the console also
+  showed `Maps 98 FS_WRITE_DATA SBF /dev/console 13 (seatbelt)`, i.e. the
+  sandboxed app's applog constructor really ran. Maps opened to its map view
+  and the locate button became active. No map tiles/fix circle can be drawn
+  offline in QEMU, so the visible grey map is expected.
+- **[V]** 2.2.1 QEMU with the 2.x applog build: `[applog] Maps pid 32` on the
+  console after the same tap; Maps opened normally. CoreLocation hooks in a
+  process that loads applog were already verified with gpstest (re-log 135).
+- **[G]** Hardware checklist: boot 3.1.3/2.2.1 with `gps=52.5200,13.4050` and
+  `diag=1`, open Maps and Safari, confirm `[applog] Maps`/`MobileSafari` on
+  the console, then check Maps shows the set location when online and Safari's
+  `navigator.geolocation` gets the same coordinates. No locationd or `/bin/sh`
+  is involved; `ios3ds-gps set` still needs a real shell on these versions.

@@ -154,6 +154,13 @@
   "why": "IOLog('%s, Where is my backlight?') in AppleM2CLCD::disable_backlight (0x807a9570)'s no-backlight-service branch -> nop. The 3DS has no S5L backlight service (the MCU daemon drives the LCD backlight), and since lock/wake cycles (re-log 41) the line was printed ~3 times a second (3504 lines in soak 6), flooding the console and the SD log [4.1: relocated by anchor from 8C148 0x807a95b0]"
  },
  {
+  "name": "clcd-backlight-log-enable",
+  "va": "0x807584b8",
+  "orig": "33ff2fe1",
+  "new": "0000a0e1",
+  "why": "IOLog('%s, Where is my backlight?') in 8B117 AppleM2CLCD::enable_backlight (0x80758478, the 8C148 0x807a95d0 site) -> nop. 4.1 has no S5L backlight service (the MCU daemon drives the LCD backlight): each wake from Lock printed 'void AppleM2CLCD::enable_backlight(), Where is my backlight?' (verified in QEMU with diag=1). The setter (0x80758408) and disable (0x80758460) IOLogs are already patched. 4.1's enable function has no +0xea0 pending flag or retry loop (unlike 8C148's safe_enable_backlight), so clcd-backlight-retry-off has nothing to disable here."
+ },
+ {
   "name": "iic-device-transfer",
   "va": "0x802e3d1e",
   "orig": "90b501af8ab0002a01d0002b2bd0",
@@ -230,5 +237,19 @@
   "orig": "15382e80",
   "new": "@shim+0x28@",
   "why": "AppleS5L8720XClockController::start: literal of the AppleARMPlatform function lookup (8B117 0x802e3814, byte-identical to 8C148 0x802e4814) for 'function-core_voltage_%ld' (string literal at 0x807040a8 -> 0x80707404) -> shim_quiet_clk_function, which takes clkrstgen off the busy count during the endless PMU wait (launchctl's IOKitWaitQuiet no longer sits out its 5 s timeout) [4.1: relocated from 8C148 0x807510a4 by the pool neighbours: Bad DPSM Tables string, panic]"
- }
+ },
+  {
+   "name": "gyro-usage",
+   "va": "0x805d5490",
+   "orig": "78095d80",
+   "new": "b87e3380",
+   "why": "AppleLIS331DLH vtable (8B117 0x805d50dc, relocated from 8C148 0x806200d0 by the vtable's shared function-pointer layout: +0x3b0 points to 0x805d0970 where 8C148 has 0x8061b970) +0x3b4 getPrimaryUsage: 0x805d0978 (mov r0,#3: accelerometer) -> 0x80337eb8 (an existing ARM 'mov r0,#9; bx lr' in another kext, 8C148 0x8034433c). Only the gyro DT node instantiates this class on the n72, so its IOHIDEventService registers PrimaryUsagePage 0xff00 / PrimaryUsage 9, the service CoreMotion's CLIoHidManager matches for gyro events"
+  },
+  {
+   "name": "gyro-dispatch",
+   "va": "0x805d549c",
+   "orig": "71b74f80",
+   "new": "@shim+0x2c@",
+   "why": "AppleLIS331DLH vtable +0x3c0 dispatchAccelerometerEvent (8B117 0x804fb771, like 8C148 0x80546771, called by the driver's ReportInterval timer) -> shim_gyro_dispatch (ARM, shim +0x2C), which sends dispatchGyroEvent (vtable +0x3c4, IOHIDEvent type 20) with the ARM9's gyro sample (deg/s, 16.16) instead (docs/mcu.md section 11)"
+  }
 ]

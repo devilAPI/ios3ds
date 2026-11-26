@@ -68,6 +68,20 @@
    "orig": "1100001a",
    "new": "0000a0e1",
    "why": "8B117 MusicLibrary MLSSqliteVFSOpen (0x30570718), the 4.1 form of 8C148's _AOU243378_7_1 patch (which 8B117 does not have; the check is inlined): bne at 0x305708c4 jumps to the branch that sets the file's '<db>.cbk' path (+20) and has-checksum flag (+24) when the name is in AOU243378_5's signed-file set. -> nop: every library file opens as a plain sqlite file, so the library scripts/music.py builds (unsigned) opens in the iPod app."
+  },
+  {
+   "path": "/System/Library/Caches/com.apple.dyld/dyld_shared_cache_armv6",
+   "offset": "0x53bc3c",
+   "orig": "1220a0e3",
+   "new": "5220a0e3",
+   "why": "8B117 CoreMotion CLPlatformInfo::getProviders (VA 0x3053bbcc, cache offset 0x53bbcc): the N45/N72 hardware cases both branch to 0x3053bc38, where 'mov r2,#0x12' (provider mask without gyro) is stored to the cached provider. 8C148's single 0x2012 -> 0x2052 literal (recipe offset 0x3224dd4) became an immediate in 8B117; 0x52 is 8B117's N81 mask at 0x3053bc58 (gyro bit 6 set, as verified by getSystemHardware's model table). Without it CMMotionManager.gyroAvailable stays NO even with the HID gyro service (docs/mcu.md section 11)."
+  },
+  {
+   "path": "/System/Library/Caches/com.apple.dyld/dyld_shared_cache_armv6",
+   "offset": "0x53bc4c",
+   "orig": "1220a0e3",
+   "new": "5220a0e3",
+   "why": "8B117 CLPlatformInfo::getProviders' N18 case (shares the N72 provider set on 8C148) has its own copy of the 'mov r2,#0x12' immediate at VA 0x3053bc4c; patch it to 0x52 together with the N45/N72 site so every model sharing the N72 mask reports a gyro capability."
   }
  ],
  "_extra_file_patches": "Patches absent from the 4.2.1 recipe: the base recipe's lockdown_copy_value body and table changed too much to relocate (\u00a75.2), so the equivalent 8B117 stub/table is spelled out here with verified original bytes.",

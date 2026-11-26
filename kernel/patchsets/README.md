@@ -17,10 +17,11 @@ checking every original byte sequence in the 8B117 kernelcache:
 - `unique-orig`: the original bytes occur once in 8B117.
 
 Every entry keeps the strict original-byte check, so a wrong kernelcache still
-stops the build. Six cosmetic/optional patches whose code changed in 8B117
-(gyro usage/dispatch, CLCD backlight log-enable and retry-off, the clock
-controller's voltage lookup and the RTC wait literal) are deliberately absent;
-see the stage-3 blocker log in `docs/multi-version.md`. No Apple code is stored
+stops the build. The clock voltage lookup and RTC wait literal were relocated
+in re-log 131; gyro usage/dispatch and CLCD backlight log-enable followed in
+the NEXT re-log section. CLCD backlight retry-off is absent on purpose: 8B117
+has none of the `+0xea0` pending-flag retry path that 8C148's
+`safe_enable_backlight` has. See `docs/multi-version.md` for the history. No Apple code is stored
 here beyond the same short verification patterns already used by 8C148's
 recipes.
 
