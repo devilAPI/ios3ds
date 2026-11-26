@@ -28,6 +28,13 @@ def main():
     for lib in libs.values():
         for k in ("text", "data", "weak", "reexports"):
             have |= set(lib.get(k, []))
+    # link-time stand-ins built from source next to the 2.x GL dylib
+    # (tools/ios3ds-gl/ios2/stub_*.c: 5H11a OpenGLES, MBX2D, IOMFB names)
+    stubs = os.path.join(ROOT, "build", "gl-ios2")
+    if os.path.isdir(stubs):
+        for f in os.listdir(stubs):
+            out = subprocess.run([NM, "-g", os.path.join(stubs, f)], capture_output=True, text=True).stdout
+            have |= {l.split()[-1] for l in out.splitlines() if l.strip()}
     missing = {}
     for d, _, files in os.walk(ADD):
         for f in files:

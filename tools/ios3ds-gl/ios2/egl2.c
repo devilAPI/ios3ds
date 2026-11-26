@@ -229,7 +229,7 @@ static void *wd_main(void *arg)
         idle_ab = ab && !strncmp(ab, "idle:", 5) && now / 1000u > (uint64_t)atoi(ab + 5) && now - t > 40000;
         if (ab && ((wd_in && now - t > 20000) || idle_ab)) {
             gl_log("ios2: watchdog: aborting for a crash report (all thread stacks)");
-            abort();
+            __builtin_trap();     /* no abort() in the CI stub SDK: a trap gives the same report */
         }
     }
     return NULL;

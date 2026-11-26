@@ -6425,3 +6425,118 @@ second Home restores it.
 - **[V]** Flag-off 3.1.3 soak 0/5 stuck, PASS; 4.2.1 soak PASS; hashes
   unchanged (kernel 505f451a, devtree 25b1bd23, fakeio e5fecd66, shim
   a35631eb, gpu 6bdaf617, boot.cfg 8d4079cf); `make test` passes.
+
+## NEXT. GPU (PICA200) CoreAnimation on 2.2.1: an EGL/GLES interposer in SpringBoard (2026-11-26)
+
+2.2.1 drew in software only: 5H11a's OpenGLES.framework *is* the IMG MBX
+driver (no engine bundle to replace, §135). This round makes CoreAnimation
+composite on the PICA200 there, opt-in at build time like 3.1.3
+(`IOS3DS_GPU221=1 make sdimg IOS=2.2.1`). Firmware staged read-only from the
+compat16 worktree into this worktree's `build/fw-2.2.1`. 5H11a code read with
+`llvm-objdump-18` (QuartzCore keeps its symbols; addresses are 5H11a VAs).
+
+### How 2.x CoreAnimation uses GL
+
+- **[V]** The render server (SpringBoard, `CADisplayH1Server` for the
+  AppleM2CLCD display) picks `gles_context` when `CA_ENABLE_OGL=1` and
+  `gles_get_config` (0x31e3a0b4) gets an EGL config:
+  `eglEnableInternalSurface(1)`, `eglGetDisplay(0)`, `eglInitialize`,
+  `eglChooseConfig({EGL_SURFACE_TYPE, EGL_PIXMAP_BIT})`, then
+  `eglGetConfigAttrib` for R,G,B,A,DEPTH,STENCIL,SAMPLES,SAMPLE_BUFFERS
+  (table at 0x39dcfddc); 8/8/8/8 with the rest 0 is the 'BGRA' config.
+  Otherwise it falls back to MBX2D (off: `CA_ENABLE_MBX2D=0`) and then to
+  the software compositor.
+- **[V]** Render targets are EGL *pixmap* surfaces on CoreSurface buffers
+  (`eglCreatePixmapSurface(dpy, cfg, CoreSurfaceBufferRef, 0)`,
+  `eglMakeCurrent(dpy, s, s, ctx)`); the display is the CLCD's default layer
+  surface. Layer images and offscreen surfaces are sampled with
+  `glTexImageCoreSurfaceAPPLE(target, CoreSurfaceBufferRef)` (target 0x84F5).
+  The rest is plain GLES 1.1 (44 functions, `nm -u` of QuartzCore).
+
+### The interposer
+
+- **[V]** `tools/ios3ds-gl/ios2/egl2.c` + the GL core (api/draw/raster/
+  pica_be/ca/stereo) build as `/usr/lib/ios3ds-gles2.dylib` (2.x target,
+  `-ffixed-r9`, `dyld2_glue.S -DDYLD2_DYLIB`). It is appended to SpringBoard's
+  `DYLD_INSERT_LIBRARIES` (after the a80211 dylib) and its `__interpose`
+  table replaces QuartzCore's EGL/GL imports with the engine's dispatch
+  table. Apps are not touched (their EAGL stays the IMG framework). Link
+  names come from small source stubs (`ios2/stub_*.c`), no Apple binary.
+- **[V]** `eglInitialize` runs the 4.x gate (`pica_ca_gate`: boot.cfg
+  ca_gpu/gpu, back-end self-check, CA scene check); a failure leaves CA on
+  its software compositor. Pixmap surfaces are drawn in place (32 bpp, GL
+  row 0 = last memory row), the PICA200 back end keeps the GPU copy and
+  writes it back (direct present into the VRAM CLCD buffer, arena copy for
+  scattered CoreSurface memory). Switching the current surface syncs it and
+  bumps a per-buffer seed so textures of that buffer re-upload.
+- Bring-up walls, in order (each one a fresh-image QEMU run):
+  1. **[V]** `glGetString(0x1F04)` (a second, IMG extension list) returned
+     NULL → strstr crash. Then `CoreAnimation: unsupported graphics
+     hardware; need APPLE_texture_rectangle extension; need
+     APPLE_core_surface_texture extension`: both names are now in the
+     answer to `GL_EXTENSIONS` and 0x1F04.
+  2. **[V]** SIGBUS in MBXConnect from `CADisplayH1::gpu_swap_token`
+     (0x31e39718 → `mbx2DSwapNotification`) and `gpu_flush` (`mbx2DFlush`):
+     both answered in the dylib (our GPU work is synchronous).
+  3. **[V]** SIGSEGV in dyld's lazy binder (0x2fe1e724) on the render thread,
+     right after `ca_frame()`: compiler-rt's prebuilt `__udivdi3`/`__umoddi3`
+     use r9, which 5H11a reserves as the thread pointer. `ios2/udivdi3.c`
+     (built `-ffixed-r9`) replaces them; no other function in the dylib
+     touches r9 (objdump).
+  4. **[V]** `CADisplayIOMFB::finish_update` passes swap flag 1 ("wait for
+     the MBX swap token") to `IOMobileFramebufferSwapSetLayer` after a GL
+     frame (0x31e3b85c..0x31e3b940); nothing signals it. Interposed: bit 0
+     cleared, as the software path passes 0.
+  5. **[V]** Lock never finished (screen never went off, later taps
+     ignored). A watchdog thread in the dylib (`IOS3DS_GL_WATCHDOG`, with
+     `IOS3DS_GL_WATCHDOG_ABORT=idle:570`) trapped SpringBoard for a crash
+     report: render thread in `IOMobileFramebufferSwapWait` from
+     `CADisplayIOMFB::set_enabled` (0x31e3ac3c, after SwapEnd), main thread
+     waiting for it in `CADisplayServer::set_blanked`. In GL mode the wait
+     is answered in the dylib (`[gl] ios2: IOMFB swap wait (token N, flags
+     0x2) answered here`). With that the soak passes.
+- **[V]** `scripts/crashlogs.py` failed on 5H11a listings (`hfsplus ls`
+  prints a time column there): regex fixed. `check-stub-symbols.py` also
+  accepts the names our own `build/gl-ios2` stubs provide.
+- `gpu_mirror=1` in the GPU image (as 3.1.3). With `gpu_mirror=0` (ARM9
+  CPU copy) before fix 5 the screen showed stale animation frames, so the
+  mirror is kept.
+
+### Results
+
+- **[V]** Fresh-image soaks, `--cycles 5 --icount 2 --require-app --crashlogs
+  --targets "275,226;199,226;123,226;47,226;275,50"`: see the table in the
+  verification subsection below.
+- **[V]** Log of the GPU image: `[gl] CA compositor: OpenGL ES on the
+  PICA200 (GPU self-check and scene check passed)`, `[gl] ios2: EGL display
+  up for CoreAnimation`, `first pixmap surface 320x480`, `first CA display
+  frame (320x480) on the ios3ds PICA200`, `[gl] pica: GPU present check
+  passed`, `[gpu] display mirror ACTIVE`; 0 SpringBoard restarts, screenshots
+  of home and apps correct (orientation, colours).
+- **Frame times (QEMU, `--icount 2`):** the ARM9 mirror reports
+  2.8–5.2 fps while animating (`[gpu] mirror: 158 frames in 30 s`, GPU per
+  frame upload 3.6–13.8 ms, draw 1.0–10 ms, read-out 2–10 ms; frame avg
+  9.5–12 ms). CA's own `[perf] CA:` line needs ≥ 2 frames within a second
+  and never printed in QEMU. Home after an app settles in 6–20 s against
+  6 s with software CA, i.e. **slower in QEMU**, like 3.1.3 (§135): the
+  PICA200 model, the arena copies and the read-out run on the host CPU.
+  Hence opt-in.
+- Known: `[pica] arena full: 614400 bytes wanted, ~1 MiB free in 73 blocks`
+  a few times per run (fragmentation by 600 KiB CA surfaces; the back end
+  evicts/falls back per target and the run continues). CoreSurface buffers
+  of CA's offscreen surfaces are not physically contiguous (arena copy).
+
+### Needs hardware [G]
+
+- Build `IOS3DS_GPU221=1 IOS3DS_GPU221_DIAG=1 make sdimg IOS=2.2.1`, boot
+  with `diag=1`. Look for the lines above, `[gl] CA:` every 60 frames (render
+  thread CPU per frame, presents, arena copies), `[perf] CA:` histograms and
+  `[gpu] mirror: N frames`. Open/close Notes and Settings 5×, Lock + wake
+  (Home, slide): the screen must come back. Compare timings with the
+  default image; if slower or broken, ship the default.
+- Watch for `[gl] ios2: watchdog: render thread inside ... for N ms` (a stall
+  inside the engine; the DIAG image traps after 20 s for a crash report).
+- Answering SwapWait at once may tear on a real CLCD (no MBX fence exists
+  here); a photo during a scroll shows it.
+- The same SwapSetLayer token flag / SwapWait pattern may be behind 3.1.3's
+  GPU-path "first frame after Home" issue (§148); not checked there.
