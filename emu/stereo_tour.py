@@ -202,6 +202,10 @@ def main():
         q.cmd("qom-set", path="/machine", property="mcu-3d-slider", value=a.slider3d)
         while time.time() - t0 < booted + 400 and "sbwarm" not in read_log(a.sd):
             time.sleep(5)
+        # SpringBoard sometimes comes up on (or races into) Spotlight with
+        # its keyboard (the known iOS 4 home/Spotlight race): a swipe to the
+        # left leaves Spotlight for page 1 and only rubber-bands on page 1
+        drag(280, 240, 40, 240)
         time.sleep(60)
 
         def burst(label, action, after=None, gap=1.5):

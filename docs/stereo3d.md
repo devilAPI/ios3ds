@@ -132,9 +132,12 @@ full-screen. Three engine rules keep the depth right through them
   the "Searching..." spinner alone kept the screen flat.
 - **An app window is flat.** An opaque full-width layer from just under the
   status bar to the bottom (an app window at 0,20-320,480, the end of the app
-  zoom) makes the frame flat, so the app's later damage updates are not
-  stamped either. (A broader "any opaque layer over 85 % of the screen" rule
-  also matched home-screen layers and kept the home screen flat.)
+  zoom) makes the frame flat unless at least four icon-grid draws follow it
+  in the same frame (then it is a home-screen snapshot, as the folder close
+  draws one), so the app's later damage updates are not stamped either.
+  (A broader "any opaque layer over 85 % of the screen" rule, and this shape
+  without the icon test, also matched home-screen layers and left the home
+  screen flat after a folder closed.)
 - **Large moving layers keep their class.** A layer covering at least 1/8
   of the screen (the folder's sliding home-screen halves, the zooming app,
   the switcher's raised home screen) remembers the class it got when it first

@@ -44,6 +44,7 @@ static unsigned st_home, st_flat, st_wipes, st_stamps, st_frames;
 static int st_full;                 /* this frame had a full-screen draw */
 static int st_scene_home = 1;       /* the last complete frame was the home screen */
 static unsigned st_sticky, st_partial, st_dropped, st_covers;
+static int st_cover, st_cover_icons;   /* this frame: an app-window-shaped layer, icons before it */
 /* A large layer that moves through a band boundary (the folder's sliding
    home-screen halves, the app zoom, the switcher's sliding home screen)
    would change class from one frame to the next and its depth would jump.
@@ -156,21 +157,18 @@ int stereo_prepare(GC *gc, RT *rt, const Vtx *v, int n)
         maxy >= (float)(gc->vp[1] + gc->vp[3]) - tol && miny > (float)gc->vp[1] + tol &&
         miny <= (float)gc->vp[1] + (float)gc->vp[3] / 16.0f) {
         /* An opaque full-width layer from just under the status bar to the
-           bottom (an app window, 0,20-320,480, and the end of the app zoom)
-           hides everything that had a depth: the frame is flat, like an
-           app's full-screen frame. Without this, an app's updates had no
-           full-screen draw, counted as damage updates of the home screen
-           and were stamped (the status bar popped out over a flat app).
-           Only this shape: a broader "85 % of the screen" rule also hit
-           home-screen layers and kept the home screen flat (tour run 2). */
-        st_f.phase = STP_FLAT;
-        if (st_f.draws < 255)
-            st_f.draws++;
-        st_full = 1;
-        st_rt = *rt;
-        st_have_rt = 1;
-        st_covers++;
-        return -1;
+           bottom: an app window (0,20-320,480, also the end of the app zoom)
+           or a home-screen snapshot (the folder close draws one). If fewer
+           than STEREO_MIN_ICONS icon-grid draws follow it in this frame, it
+           is an app: the frame is flat (decided in stereo_end_frame), and
+           the app's later damage updates are not stamped. Without this an
+           app's updates had no full-screen draw, counted as damage updates
+           of the home screen and were stamped (the status bar popped out
+           over a flat app). */
+        if (!st_cover) {
+            st_cover = 1;
+            st_cover_icons = st_f.icons;
+        }
     }
     cls = stereo_draw(&st_f, (int)minx, (int)miny, (int)maxx, (int)maxy, gc->vp, full, opaque);
     if (full)
@@ -337,6 +335,11 @@ int stereo_end_frame(GC *gc)
 
     if (st_state != 2 || !st_f.draws || !st_have_rt)
         return 0;
+    if (st_cover && st_f.icons - st_cover_icons < STEREO_MIN_ICONS) {
+        st_f.phase = STP_FLAT;      /* an app window with nothing of the home screen over it */
+        st_full = 1;
+        st_covers++;
+    }
     home = stereo_frame_home(&st_f);
     st_frames++;
     if (!st_full && st_f.draws < ST_PARTIAL_DRAWS && st_f.phase != STP_FLAT) {
@@ -398,6 +401,7 @@ int stereo_end_frame(GC *gc)
     st_log_n = 0;
     st_have_rt = 0;
     st_full = 0;
+    st_cover = 0;
     return home ? 0 : 1;
 }
 
@@ -471,6 +475,7 @@ void stereo_forget(const void *mem)
         stereo_frame_begin(&st_f);
         st_log_n = 0;
         st_full = 0;
+        st_cover = 0;
     }
 }
 

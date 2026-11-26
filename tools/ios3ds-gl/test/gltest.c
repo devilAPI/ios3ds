@@ -952,6 +952,22 @@ static int stereo_frame_check(void)
             bad++;
         }
     }
+    /* A home-screen snapshot of the same shape (the folder close) with the
+       icon grid drawn over it is the home screen, not an app. */
+    glBindFramebufferOES(GL_FRAMEBUFFER, off_fb);
+    glViewport(0, 0, W, H);
+    glColor4f(0.2f, 0.3f, 0.4f, 1);
+    quad(0, 0, W, H, 0);                             /* wallpaper */
+    quad(0, 20, W, H, 0);                            /* snapshot */
+    glColor4f(0.5f, 0.5f, 0.5f, 1);
+    for (i = 0; i < 8; i++)
+        quad(40 + (i % 4) * 70, 120 + (i / 4) * 160, 90 + (i % 4) * 70, 190 + (i / 4) * 160, 0);
+    glFlush();
+    glReadPixels(60, 150, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
+    if (px[3] != 0x66) {
+        printf("gltest: stereo snapshot frame: icon alpha 0x%02x, want 0x66 FAIL\n", px[3]);
+        bad++;
+    }
     printf("gltest: stereo %s (%d failed)\n", bad ? "FAIL" : "PASS", bad);
     return bad != 0;
 }
