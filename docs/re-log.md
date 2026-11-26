@@ -6599,7 +6599,7 @@ compat16 worktree into this worktree's `build/fw-2.2.1`. 5H11a code read with
   `sd:/ios3ds/log.txt` with the version and IPSW sha1 to an issue. The
   opt-in GPU paths need the console checklists in re-log 135 and 149.
 
-## NEXT. 3.1.3 GPU path: the "dark icons after Home" were one slow GPU frame, not a hang (2026-11-26)
+## 151. 3.1.3 GPU path: the "dark icons after Home" were one slow GPU frame, not a hang (2026-11-26)
 
 Continues §148. Traced with the QEMU gdbstub (hardware breakpoints through
 `emu/gdb/rsp.py`) on a fresh `IOS3DS_GPU313=1 make sdimg IOS=3.1.3` image.

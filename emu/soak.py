@@ -418,7 +418,7 @@ def main():
             if diff > 12:
                 # Look again before touching anything: one slow frame can
                 # hold a close animation still for >2 s (3.1.3's GPU
-                # compositor in QEMU, re-log NEXT), which settled() takes
+                # compositor in QEMU, re-log 151), which settled() takes
                 # for the end. Only a screen that is still wrong after
                 # this wait needs (and is counted as) a recovery.
                 time.sleep(6)
