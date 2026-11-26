@@ -6395,7 +6395,7 @@ from firmware staged under this worktree's `build/fw-*`.
   2/2 with 4 route changes; one new output stream/CSND start for the song,
   CSND WAV tail peak 22936).
 
-## NEXT. 3.1.3 GPU path: dark icons after Home are not fixed by a second SwapSignal (2026-11-26)
+## 148. 3.1.3 GPU path: dark icons after Home are not fixed by a second SwapSignal (2026-11-26)
 
 Continues §136. Symptom: with `IOS3DS_GPU313=1`, the first frame after Home
 shows the dimmed icon grid with the app snapshot shrunk in the middle; a
