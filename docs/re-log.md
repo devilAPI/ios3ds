@@ -6840,3 +6840,73 @@ driver work:
   `emu/wifi_ui_test.py --net-row` allows) on a lightly loaded host, then get a
   PASS through both joins, plus one console join from the "Select a Wi-Fi
   Network" alert on the reporter's Old 3DS.
+
+## NEXT. Stereo 3D round 4: transitions, `stereo_depth`, and the PDC0 switch that never reached PDC0 (2026-11-26)
+
+Goal: keep per-layer depth through app open/close, the switcher, folders and
+page swipes (no flicker, no eye mismatch, flat when the depth is unknown),
+add a depth-strength setting, keep `stereo3d=0` byte-identical.
+
+### The real blocker: PDC0 never left 2D
+- **[V]** `kernel/shim/pica_stereo.c` addresses PDC0 as `0xBFE00000 + off`,
+  but that VA is the GX block's base (PA `0x10400000`); PDC0 is `+0x400`
+  (entry.S `PDC0`). Since re-log 90 every 2D/3D switch wrote
+  `0x10400024..0x10400098`. QEMU (`xp` on PDC0): `+0x70 = 0x00080341`
+  (line doubling, 2D) with the barrier on and the ARM9 logging "both eyes";
+  `pdc-3d-mode` read 0x40. Every earlier "3D" QEMU result showed the 2D
+  scan-out; re-log 127's hardware checklist would have shown a flat picture.
+- **[V]** Fix without touching `gpu.bin` (hash rule): `scripts/mkboot.py`
+  writes `gpu3d.bin` = `gpu.bin` with that file's single GX-base literal
+  (inside `shim_stereo_poll`) moved to `0xBFE00400` (one byte differs,
+  `cmp -l`: offset 10618, 0x00 -> 0x04). The ARM9 loads it instead of
+  `gpu.bin` only with `stereo3d=1` (log: `[stereo] stereo3d=1: GPU part
+  0:/ios3ds/gpu3d.bin instead of gpu.bin`). After it, QEMU shows PDC0 in AB
+  interlace and real per-class disparity (tour below).
+- **[G]** On a console this is the first build whose 3D switch writes the
+  real PDC0 timing registers (`st_off` 0x24..0x64 with the libn3ds stereo
+  preset) and format. Before, it wrote GPU external registers 0x10400024..
+  0x10400098 on every switch.
+
+### Transitions (engine, `tools/ios3ds-gl/stereo.c`) [V host test + QEMU]
+- Baseline (origin/main firm + engine, tour 1, diag frame log): the idle home
+  screen was **wiped flat** by the status-bar spinner's damage updates
+  (4..15 draws, too few stamps -> wipe), so `stereo_is_home` failed most of
+  the time; folder halves flipped class 2 <-> 3 as they crossed the dock band.
+- Damage updates (no full-screen draw, < 16 draws) keep the scene: home ->
+  classified by position and stamped (even their first draws), app ->
+  dropped. Large layers (>= 1/8 screen) keep a sticky class per texture
+  (`Tex.stereo_cls`, 30-frame lifetime). An opaque full-width layer from
+  under the status bar to the bottom with < 4 icon draws over it is an app
+  window: flat frame. After an app, a frame is home only with the
+  wallpaper's texture as background (or same size + >= 12 icon draws).
+  Two broader rules were tried and dropped: "opaque >= 85 % of the screen"
+  and the app shape without the icon test (both left the home screen flat).
+- ARM9 hysteresis (`display.c`): 3D after 2 home probes in a row, held
+  through 8 non-home probes; a held flat frame gives identical eyes.
+- `boot.cfg stereo_depth=0..100` (default 100, not in the generated file):
+  `k' = ceil(k * depth / 100)` on the ARM9 (`stereo_depth_k()`), 0 = flat.
+
+### Evidence
+- `emu/stereo_tour.py` (new): boots a `stereo3d=1` image, slider 255, bursts
+  of frames through each transition; saves **both eyes** from PDC0
+  framebuffer A/B (`pmemsave`), plus the anaglyph, and measures per-band
+  disparity and L/R residual. Final run (`build/emu/tour-new5`, not
+  committed): every burst `modes 33333333333333`, 0 3D/2D toggles, 0 depth
+  sign flips; home: status bar -6, icons 0, dock -6 screen px (= 2k iOS px
+  at k=4, 0.75 scale); folder/switcher/app zoom keep icons at 0 and the
+  dock/status bar in front; app frames have identical eyes (L/R mean diff
+  0.0; before: status bar popped out over the app).
+- Eye-mismatch check: 2 of ~140 3D frames had a large residual: one frame
+  mid-swipe from Spotlight (`swipe_to_home_12`) shows the left eye one
+  scroll step ahead of the right (L/R diff 66 vs 7). Either the capture
+  caught the mirror between its two eye renders or the mirror really
+  presented eyes from two uploads for one VBlank. [G: watch for a
+  one-frame double image during fast swipes on the console]
+- Known: Game Center's "Loading" view still gets a small stamped region
+  (L/R diff 1.7 vs 6.9 on home); the barrier stays on (with identical or
+  nearly identical eyes) in apps whose alpha happens to look stamped to the
+  ARM9 probe.
+- Host: `IOS3DS_GLTEST_STEREO=1` now also checks damage updates after a home
+  and an app frame, the app-window frame and a home snapshot;
+  `test_stereo_copy` checks the hysteresis and `stereo_depth=0`;
+  `tests/test_stereo.py` checks `stereo_depth_k()`.

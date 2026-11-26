@@ -319,6 +319,14 @@ IOS3DS_QEMU=$PWD/build/qemu-hy4/b/qemu-system-arm \
 # flag off: ordinary screen
 ```
 
+`emu/stereo_tour.py` (round 4) walks through the transitions (page swipe,
+Spotlight and back, Utilities folder open/close, app open/close, the app
+switcher) with the slider up and saves **both eye images** per frame from
+PDC0's framebuffers A and B (`*_L.png`, `*_R.png`) next to the anaglyph,
+plus a per-band disparity/residual report (`report.md`). Note that an
+anaglyph of two identical eyes is just the normal picture, so only the eye
+dumps or `pdc-3d-mode` (refreshed on a screendump) tell 2D from flat 3D.
+
 `emu/soak.py --slider3d 255` sets the slider for flag-on soaks (it re-applies
 the QOM property after boot, because QEMU's machine reset can clear an early
 write). The bottom screen and the touch mapping are unchanged.
@@ -328,6 +336,8 @@ write). The bottom screen and the touch mapping are unchanged.
 Everything above is implemented and exercised in QEMU, but **the 3D effect
 has not been seen on a real 3DS**. To test:
 
+0. Copy the whole `ios3ds/` folder: it must contain `gpu3d.bin` (round 4);
+   without it the 3D switch misses PDC0 and the picture stays 2D.
 1. Add `stereo3d=1` to `sd:/ios3ds/boot.cfg` (and keep `diag=1` if you want
    the per-frame classifier lines). Boot as usual.
 2. On the home screen, push the 3D slider up and take a **photo of the top
