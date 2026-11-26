@@ -6781,7 +6781,7 @@ is one file instead of a dozen manual steps. User docs:
   the 3D look, and whether the 4.2.1 summary alert is visible after the
   lock/wake check (in QEMU mode 1 the final screenshot was black: the
   screen had been locked by the test itself; the alert appears on wake).
-## NEXT. Public issue #10: the Old 2DS log is from a stale, corrupt build (2026-11-26)
+## 153. Public issue #10: the Old 2DS log is from a stale, corrupt build (2026-11-26)
 
 Dana's four attachments (downloaded to `build/issue-data/attachments/`, treated
 as data and never committed) are two identical `log.txt`/`log_prev.txt` pairs.
@@ -6815,7 +6815,7 @@ driver work:
   with working input. Until then the issue is **partly fixed on main**, not
   confirmed fixed on the reporter's Old 2DS.
 
-## NEXT. Public issue #6: WPA2+WPA3 popup harness repaired, join run still blocked (2026-11-26)
+## 154. Public issue #6: WPA2+WPA3 popup harness repaired, join run still blocked (2026-11-26)
 
 - **[V]** The product fix is already in main (`8f66c8d`, §84,
   `docs/wifi.md` §10.8): `wlan_ie_wpa2_view()` strips SAE/PSK-SHA256 AKMs and
