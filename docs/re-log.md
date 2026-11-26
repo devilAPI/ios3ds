@@ -6394,3 +6394,34 @@ from firmware staged under this worktree's `build/fw-*`.
   `emu/audio_check.py --tests jack,song` → **PASS** (jack model 2/2 and guest
   2/2 with 4 route changes; one new output stream/CSND start for the song,
   CSND WAV tail peak 22936).
+
+## NEXT. 3.1.3 GPU path: dark icons after Home are not fixed by a second SwapSignal (2026-11-26)
+
+Continues §136. Symptom: with `IOS3DS_GPU313=1`, the first frame after Home
+shows the dimmed icon grid with the app snapshot shrunk in the middle; a
+second Home restores it.
+
+- **[V]** Fresh-image soaks without any change (`--cycles 5 --require-app
+  --icount 2 --targets "47,314;123,226;199,226;275,226;123,50"`), mirror on:
+  2/5, 2/5, 2/5, 2/5 cycles needed a Home recovery (four runs, incl. one with
+  the mirror forced to copy every VBlank and one with `gpu_vbl_div=4`).
+  So the PICA200 mirror is not just missing a frame: the surface itself holds
+  the stale animation frame (CA did not draw its last frame).
+- **[V]** GPU CA with `gpu_mirror=0` (ARM9 copy): 0/5, 0/5, 1/5 stuck. The
+  symptom is on the CA side; the mirror only changes how often it shows.
+- **[V]** Each CA swap after Home had its direct `PICA_OP_PRESENT`, and
+  `IOMobileFramebufferSwapSignal` returned 0; the CLCD source PA never
+  changed (all frames into one surface, PA 0x18000000).
+- **[V]** Tried: a second `IOMobileFramebufferSwapSignal` per CA swap in the
+  3.x engine (`#ifdef GL_IOS3` in `tools/ios3ds-gl/iface.c`). Two soaks gave
+  0/10, but a third fresh soak still had cycle 0 stuck (home diff 32.9,
+  recovered by page swipe + Home; same dark-grid picture). **Not a fix**;
+  the change is not committed.
+- **[G]** Open: why CA stops before the final frame. Next step: gdbstub
+  breakpoints (as in §128) on `IOMFBServer::link_callback`,
+  `set_next_update` and `EAGLServer::render_update` across the Home close
+  animation, to see whether the vsync source runs out (`[this+0xf0]`
+  budget) or CA waits on a swap-completion.
+- **[V]** Flag-off 3.1.3 soak 0/5 stuck, PASS; 4.2.1 soak PASS; hashes
+  unchanged (kernel 505f451a, devtree 25b1bd23, fakeio e5fecd66, shim
+  a35631eb, gpu 6bdaf617, boot.cfg 8d4079cf); `make test` passes.
