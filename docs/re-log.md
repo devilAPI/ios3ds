@@ -6426,7 +6426,7 @@ second Home restores it.
   unchanged (kernel 505f451a, devtree 25b1bd23, fakeio e5fecd66, shim
   a35631eb, gpu 6bdaf617, boot.cfg 8d4079cf); `make test` passes.
 
-## NEXT. GPU (PICA200) CoreAnimation on 2.2.1: an EGL/GLES interposer in SpringBoard (2026-11-26)
+## 149. GPU (PICA200) CoreAnimation on 2.2.1: an EGL/GLES interposer in SpringBoard (2026-11-26)
 
 2.2.1 drew in software only: 5H11a's OpenGLES.framework *is* the IMG MBX
 driver (no engine bundle to replace, §135). This round makes CoreAnimation
