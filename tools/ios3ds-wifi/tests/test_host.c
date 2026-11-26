@@ -962,6 +962,46 @@ static void test_ar6k_wmi_queue(void)
     CHECK(wq_count == 0 && mock_write_calls == 2 && mock_tx[6] == 0x16);
 }
 
+
+/* issue 1: a home router's probe response with a long country IE and HT caps
+   ahead of the RSN IE. The RSN IE must survive the 76-byte IE copy, or iOS
+   takes the network for WEP. */
+static void test_scan_ie_priority(void)
+{
+    u8 f[28 + 200];
+    u32 n = 28, i;
+    memset(f, 0, sizeof f);
+    f[0] = 0xA8; f[1] = 0x09;                       /* 2472 MHz */
+    f[2] = 2; f[3] = 30; f[4] = 0xBF; f[5] = 0xFF;  /* probe resp, snr, rssi -65 */
+    f[6] = 0x02; f[11] = 0x77;                      /* BSSID */
+    f[24] = 100; f[26] = 0x11; f[27] = 0x04;        /* interval, caps (privacy) */
+    static const u8 ssid[] = { 0, 4, 'h', 'o', 'm', 'e' };
+    static const u8 rates[] = { 1, 8, 0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24 };
+    static const u8 ds[] = { 3, 1, 13 };
+    memcpy(f + n, ssid, sizeof ssid); n += sizeof ssid;
+    memcpy(f + n, rates, sizeof rates); n += sizeof rates;
+    memcpy(f + n, ds, sizeof ds); n += sizeof ds;
+    f[n] = 7; f[n + 1] = 41; f[n + 2] = 'D'; f[n + 3] = 'E'; f[n + 4] = ' ';
+    for (i = 0; i < 13; i++) { f[n + 5 + 3 * i] = (u8)(i + 1); f[n + 6 + 3 * i] = 1; f[n + 7 + 3 * i] = 20; }
+    n += 43;
+    f[n] = 45; f[n + 1] = 26; n += 28;              /* HT capabilities */
+    static const u8 rsn[] = { 0x30, 0x14, 0x01, 0x00, 0x00, 0x0F, 0xAC, 0x04, 0x01, 0x00, 0x00, 0x0F, 0xAC, 0x04,
+                              0x01, 0x00, 0x00, 0x0F, 0xAC, 0x02, 0x0c, 0x00 };
+    memcpy(f + n, rsn, sizeof rsn); n += sizeof rsn;
+    nscan = 0;
+    scan_record(f, n);
+    CHECK(nscan == 1);
+    const wlan_bss_t *b = &scan_tab[0];
+    CHECK(b->ie_len <= WLAN_IE_MAX);
+    CHECK((b->flags & WLAN_BSS_RSN) && b->ssid_len == 4 && b->channel_mhz == 2472);
+    int found = 0;
+    for (u32 p = 0; p + 2 <= b->ie_len; p += 2 + b->ie[p + 1])
+        if (b->ie[p] == 0x30 && b->ie[p + 1] == sizeof rsn - 2 && !memcmp(b->ie + p, rsn, sizeof rsn)) found = 1;
+    CHECK(found);
+    CHECK(b->ie[0] == 0 && b->ie[1] == 4);          /* SSID still first */
+    nscan = 0;
+}
+
 int main(void)
 {
     test_ring();
@@ -981,6 +1021,7 @@ int main(void)
     test_wpa2_long_frame();
     test_rsn_parse();
     test_rsn_view();
+    test_scan_ie_priority();
     printf("%s: %d checks, %d failed\n", fails ? "FAIL" : "ok", checks, fails);
     return fails != 0;
 }

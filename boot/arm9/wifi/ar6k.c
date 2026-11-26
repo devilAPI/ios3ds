@@ -930,11 +930,28 @@ static void scan_record(const u8 *d, u32 n)
         if (p[0] == 0x30) b->flags |= WLAN_BSS_RSN;
         if (p[0] == 0xDD && p[1] >= 6 && p[2] == 0x00 && p[3] == 0x50 && p[4] == 0xF2 && p[5] == 1)
             b->flags |= WLAN_BSS_WPA;
-        if ((u32)b->ie_len + 2 + p[1] <= WLAN_IE_MAX) {
-            memcpy(b->ie + b->ie_len, p, 2 + p[1]);
-            b->ie_len = (u8)(b->ie_len + 2 + p[1]);
-        }
     }
+    /* WLAN_IE_MAX is small: home routers send 400+ IE bytes (country with one
+       triplet per channel, HT/VHT caps, vendor IEs). Copy the IEs iOS and our
+       supplicant need first (SSID, rates, DS, RSN, WPA, extended rates), then
+       the rest while room is left. Before, a long country/HT IE ahead of the
+       RSN IE pushed it out: iOS saw a privacy bit without RSN/WPA, took the
+       network for WEP and sent the passphrase as a WEP key (issue 1). */
+    u32 dropped = 0;
+    for (int pass = 0; pass < 2; pass++)
+        for (const u8 *p = ie; p + 2 <= end && p + 2 + p[1] <= end; p += 2 + p[1]) {
+            int key = p[0] == 0 || p[0] == 1 || p[0] == 3 || p[0] == 0x30 || p[0] == 50 ||
+                      (p[0] == 0xDD && p[1] >= 6 && p[2] == 0x00 && p[3] == 0x50 && p[4] == 0xF2 && p[5] == 1);
+            if (key != !pass) continue;
+            if ((u32)b->ie_len + 2 + p[1] <= WLAN_IE_MAX) {
+                memcpy(b->ie + b->ie_len, p, 2 + p[1]);
+                b->ie_len = (u8)(b->ie_len + 2 + p[1]);
+            } else if (key) {
+                dropped++;
+            }
+        }
+    if (dropped && fresh && A.scans_logged < 3)
+        DIAG("scan: %u needed IE(s) did not fit in %u bytes", dropped, WLAN_IE_MAX);
     /* the first three scans: one line per network (BSSINFO layout, RSSI
        units and channels are model assumptions, docs/wifi.md 6.1) */
     if (fresh && A.scans_logged < 3) {
