@@ -40,6 +40,20 @@ static stereo_frame_t st_f;
 static RT st_rt;                    /* the display target of this frame */
 static int st_have_rt;
 static unsigned st_home, st_flat, st_wipes, st_stamps, st_frames;
+/* Transitions (re-log NEXT, docs/stereo3d.md section 4.1) */
+static int st_full;                 /* this frame had a full-screen draw */
+static int st_scene_home = 1;       /* the last complete frame was the home screen */
+static unsigned st_sticky, st_partial, st_dropped;
+/* A large layer that moves through a band boundary (the folder's sliding
+   home-screen halves, the app zoom, the switcher's sliding home screen)
+   would change class from one frame to the next and its depth would jump.
+   Its texture remembers the class it got when it first appeared; the class
+   sticks while the layer keeps being drawn (at most this many frames
+   between two draws) and is dropped when the texture's pixels change. */
+#define ST_STICKY_FRAMES 30u
+/* a CA update without a full-screen draw and with fewer draws than this is
+   a partial (damage) update of the previous frame, not a new scene */
+#define ST_PARTIAL_DRAWS 16
 static int st_log;                  /* diag=1: log the frame structure */
 /* the first draws of the frame, for the log */
 #define ST_LOG_MAX 12
@@ -138,6 +152,33 @@ int stereo_prepare(GC *gc, RT *rt, const Vtx *v, int n)
         }
     }
     cls = stereo_draw(&st_f, (int)minx, (int)miny, (int)maxx, (int)maxy, gc->vp, full, opaque);
+    if (full)
+        st_full = 1;
+    else if (cls < 0 && st_f.phase == STP_START && st_scene_home && st_f.draws < ST_PARTIAL_DRAWS) {
+        /* a damage update of the home screen starts with small draws: they
+           are not wallpaper tiles but the layers that moved, so classify
+           them by position as in a full home frame (dropped at the end of
+           the frame if it turns out to be a new scene that is not home) */
+        stereo_frame_t tmp = st_f;
+        tmp.phase = STP_HOME;
+        tmp.bg = 1;
+        tmp.draws--;
+        cls = stereo_draw(&tmp, (int)minx, (int)miny, (int)maxx, (int)maxy, gc->vp, 0, opaque);
+    }
+    if ((cls == STC_ICONS || cls == STC_FRONT) && gc->tu[0].enabled &&
+        (maxx - minx) * (maxy - miny) * 8.0f >= (float)gc->vp[2] * (float)gc->vp[3]) {
+        Tex *t = gl_bound_tex(gc, 0);
+        if (t) {
+            if (t->stereo_cls && st_frames - t->stereo_seen <= ST_STICKY_FRAMES) {
+                if (t->stereo_cls != cls)
+                    st_sticky++;
+                cls = t->stereo_cls;
+            } else {
+                t->stereo_cls = cls;
+            }
+            t->stereo_seen = st_frames;
+        }
+    }
     st_rt = *rt;
     st_have_rt = 1;
     if (cls >= 0) {
@@ -277,10 +318,30 @@ int stereo_end_frame(GC *gc)
         return 0;
     home = stereo_frame_home(&st_f);
     st_frames++;
-    if (home) {
+    if (!st_full && st_f.draws < ST_PARTIAL_DRAWS && st_f.phase != STP_FLAT) {
+        /* A small damage update (a moving dock item, the clock, one step
+           of an animation that redraws only its own layers) carries no
+           decision about the scene: it keeps the class map of the frame
+           it updates. Before, one with >= 4 draws but too few stamps was
+           wiped flat, and the following home frames re-stamped only their
+           damage: a flat flash and a half-flat map (re-log 127 tour). */
+        st_partial++;
+        if (st_scene_home) {
+            home = 1;
+            st_home++;
+            stereo_flush_stamps(gc);
+        } else {
+            st_flat++;
+            st_dropped++;
+            st_qn = 0;              /* an app's update: its frame is flat already */
+            st_nseg = 0;
+        }
+    } else if (home) {
+        st_scene_home = 1;
         st_home++;
         stereo_flush_stamps(gc);
     } else if (st_f.phase == STP_FLAT || st_f.draws >= STEREO_MIN_ICONS) {
+        st_scene_home = 0;
         st_flat++;
         st_wipes++;
         st_qn = 0;                  /* the wipe replaces this frame's stamps */
@@ -315,6 +376,7 @@ int stereo_end_frame(GC *gc)
     stereo_frame_begin(&st_f);
     st_log_n = 0;
     st_have_rt = 0;
+    st_full = 0;
     return home ? 0 : 1;
 }
 
@@ -387,7 +449,15 @@ void stereo_forget(const void *mem)
         st_nseg = 0;
         stereo_frame_begin(&st_f);
         st_log_n = 0;
+        st_full = 0;
     }
+}
+
+void stereo_transition_stats(unsigned *sticky, unsigned *partial, unsigned *dropped)
+{
+    if (sticky) *sticky = st_sticky;
+    if (partial) *partial = st_partial;
+    if (dropped) *dropped = st_dropped;
 }
 
 void stereo_batch_stats(unsigned *batches, unsigned *verts)

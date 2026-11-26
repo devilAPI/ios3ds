@@ -353,6 +353,8 @@ void gm_report(u32 now, u32 cpu_blits, u32 cpu_ticks, u32 regs_pa, int mode, boo
         l_sn = gm->st_n; l_ss = gm->st_sum; l_s3 = gm->st_sum_3d;
         l_fn = gm->fl_n; l_fs = gm->fl_sum; l_f3 = gm->fl_sum_3d;
     }
-    logp("[stereo] active path: %s (slider k=%u, %u 3D / %u 2D GPU frames, %u ARM9 eye cols reused)\n",
-         gm_stereo_path(), (unsigned)gm->stereo_k, (unsigned)gm->st_frames, (unsigned)gm->flat_frames, sk);
+    logp("[stereo] active path: %s (slider k=%u, %u 3D / %u 2D GPU frames, %u ARM9 eye cols reused, "
+         "%u transitions held in 3D)\n",
+         gm_stereo_path(), (unsigned)gm->stereo_k, (unsigned)gm->st_frames, (unsigned)gm->flat_frames, sk,
+         display_stereo_holds());
 }

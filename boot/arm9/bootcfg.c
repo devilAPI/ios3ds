@@ -5,6 +5,7 @@
 #include "display.h"
 #include "util.h"
 #include "log.h"
+#include "stereo.h"
 
 bootcfg_t cfg;
 
@@ -41,6 +42,7 @@ void parse_bootcfg(char *txt)
     cfg.n3ds_ram = 1;
     cfg.auto_brightness = 1;
     cfg.wifi_led = 1;
+    cfg.stereo_depth = STEREO_DEPTH_DEFAULT;
 
     static const struct { const char *k; u32 *v; } nums[] = {
         { "kernel_pa", &cfg.kernel_pa }, { "entry_pa", &cfg.entry_pa },
@@ -63,7 +65,7 @@ void parse_bootcfg(char *txt)
         { "mic", &cfg.mic }, { "hp_route", &cfg.hp_route }, { "hp_codec", &cfg.hp_codec }, { "camera", &cfg.camera }, { "cam_test", &cfg.cam_test },
         { "n3ds_clock", &cfg.n3ds_clock }, { "n3ds_l2", &cfg.n3ds_l2 }, { "n3ds_hid", &cfg.n3ds_hid },
         { "n3ds_ram", &cfg.n3ds_ram }, { "auto_brightness", &cfg.auto_brightness },
-        { "stereo3d", &cfg.stereo3d }, { "safe_mode", &cfg.safe_mode },
+        { "stereo3d", &cfg.stereo3d }, { "stereo_depth", &cfg.stereo_depth }, { "safe_mode", &cfg.safe_mode },
         { "diag", &cfg.diag }, { "ioprof", &cfg.ioprof }, { "log_ts", &cfg.log_ts },
         { "hwtest", &cfg.hwtest },
     };

@@ -44,6 +44,7 @@ typedef struct {
     u32 safe_mode;       /* 1 = boot-arg ios3ds_safe=1: no Substrate tweaks (also: hold L while loading) */
     u32 stereo3d;        /* 1 = experimental stereoscopic 3D home screen (docs/stereo3d.md) */
     u32 hwtest;          /* 1 = one-boot hardware test with prompts, 2 = automatic checks only (boot-arg ios3ds_hwtest=, docs/real-hardware.md) */
+    u32 stereo_depth;    /* stereo3d=1: depth strength 0..100 % of the slider shift (default 100) */
     u32 nloads;
     char load_path[4][64];
     u32 load_pa[4];

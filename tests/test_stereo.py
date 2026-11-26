@@ -51,6 +51,17 @@ int main(void) {
     CHECK(stereo_eye_delta(STC_FLAT, k, 0) == 0, "flat delta 0");
     CHECK(stereo_eye_delta(STC_BG, 0, 0) == 0, "k=0 => no delta");
 
+    /* boot.cfg stereo_depth: 100 = the plain curve, 0 = flat, >= 1 px otherwise */
+    for (unsigned sl = 0; sl < 256; sl++) {
+        CHECK(stereo_depth_k(sl, 100) == stereo_shift_k(sl), "depth 100 = slider curve");
+        CHECK(stereo_depth_k(sl, 250) == stereo_shift_k(sl), "depth > 100 clamps");
+        CHECK(stereo_depth_k(sl, 0) == 0, "depth 0 = flat");
+        CHECK(stereo_depth_k(sl, 50) <= stereo_shift_k(sl), "depth 50 <= full");
+        CHECK((stereo_depth_k(sl, 1) > 0) == (stereo_shift_k(sl) > 0), "depth 1 still 3D when slider up");
+    }
+    CHECK(stereo_depth_k(255, 50) == STEREO_MAX_SHIFT / 2, "depth 50 halves the max shift");
+    CHECK(stereo_depth_k(255, 25) == 1, "depth 25 at max = 1 px");
+
     /* classifier: a home screen has bg + >=4 icon draws */
     stereo_frame_t f;
     stereo_frame_begin(&f);

@@ -41,6 +41,8 @@ typedef struct Tex {
     unsigned be_seq;            /* bumped whenever px changes */
     int rect;                   /* last bound as GL_TEXTURE_RECTANGLE (0x84F5): texcoords in texels */
     int stereo_opq;             /* stereo stamp: 0 unknown, 1 opaque, 2 has alpha < 255 */
+    int stereo_cls;             /* stereo: sticky depth class of a large moving layer (0 = none) */
+    unsigned stereo_seen;       /* stereo: frame number when stereo_cls was last used */
 } Tex;
 
 /* QuartzCore binds IOSurface-backed images and its display surface with
@@ -266,6 +268,7 @@ int  stereo_tex_opaque(Tex *t);
 void gl_be_triangles(GC *gc, RT *rt, const Vtx *v, int n, int cls);  /* pass 1 + stamp pass */
 int  stereo_end_frame(GC *gc);          /* decide + wipe; 1 = a wipe was drawn (sync the target) */
 void stereo_stats(unsigned *frames, unsigned *home, unsigned *flat, unsigned *stamps, unsigned *wipes);
+void stereo_transition_stats(unsigned *sticky, unsigned *partial, unsigned *dropped);
 void stereo_forget(const void *mem);     /* a target is freed: drop its pending stamps/wipe */
 void stereo_batch_stats(unsigned *batches, unsigned *verts);  /* deferred stamp draws, vertices */
 void pica_forget(const void *mem);

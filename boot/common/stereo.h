@@ -76,6 +76,20 @@ static inline int stereo_shift_k(uint32_t slider)
                      (255u - STEREO_MIN_SLIDER));
 }
 
+/* boot.cfg stereo_depth (0..100 %, default 100 = the plain slider curve):
+   scales the slider's shift. 0 = always flat (barrier off); any other value
+   with the slider up gives at least 1 px, so a low setting is still 3D. */
+#define STEREO_DEPTH_DEFAULT 100u
+static inline int stereo_depth_k(uint32_t slider, uint32_t depth)
+{
+    int k = stereo_shift_k(slider);
+    if (depth >= 100u)
+        return k;
+    if (!k || !depth)
+        return 0;
+    return (int)(((uint32_t)k * depth + 99u) / 100u);
+}
+
 /* alpha byte -> depth class, -1 = no class map at this pixel */
 static inline int stereo_class_of(uint8_t a)
 {

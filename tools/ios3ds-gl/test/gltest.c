@@ -884,6 +884,42 @@ static int stereo_frame_check(void)
                nv, nb == 1 && nv == 6 * 11 ? "ok" : "FAIL");
         bad += !(nb == 1 && nv == 6 * 11);
     }
+    /* Transitions: a small damage update (no full-screen draw, < 16 draws)
+       keeps the class map of the scene it updates. After the app frame it
+       must not stamp (the app stays flat); after a home frame it must stamp
+       its own pixels and leave the rest of the map alone (before, it was
+       wiped flat: a flat flash and a half-flat map during animations). */
+    for (k = 0; k < 3; k++) {
+        static const struct { int x, y; unsigned char a[3]; const char *what; } p2[] = {
+            { 60, 150, { 0xff, 0x66, 0x66 }, "updated icon" },   /* 0xff: CA's own alpha, no class */
+            { 5, 200, { 0x00, 0x33, 0x33 }, "wallpaper" },
+            { 160, 440, { 0x00, 0x99, 0x99 }, "dock" },
+        };
+        glBindFramebufferOES(GL_FRAMEBUFFER, off_fb);
+        glViewport(0, 0, W, H);
+        glColor4f(0.5f, 0.5f, 0.5f, 1);
+        if (k == 1) {                                /* the home screen again */
+            glColor4f(0.2f, 0.3f, 0.4f, 1);
+            quad(0, 0, W, H, 0);
+            glColor4f(0.5f, 0.5f, 0.5f, 1);
+            for (i = 0; i < 8; i++)
+                quad(40 + (i % 4) * 70, 120 + (i / 4) * 160, 90 + (i % 4) * 70, 190 + (i / 4) * 160, 0);
+            glColor4f(0.7f, 0.7f, 0.7f, 1);
+            quad(10, 400, W - 10, 470, 0);
+        } else {                                     /* two-draw damage update */
+            quad(40, 120, 90, 190, 0);
+            quad(110, 120, 160, 190, 0);
+        }
+        glFlush();
+        for (i = 0; i < sizeof p2 / sizeof p2[0]; i++) {
+            glReadPixels(p2[i].x, p2[i].y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
+            if (px[3] != p2[i].a[k]) {
+                printf("gltest: stereo partial %d: %s alpha 0x%02x, want 0x%02x FAIL\n", k, p2[i].what, px[3],
+                       p2[i].a[k]);
+                bad++;
+            }
+        }
+    }
     printf("gltest: stereo %s (%d failed)\n", bad ? "FAIL" : "PASS", bad);
     return bad != 0;
 }

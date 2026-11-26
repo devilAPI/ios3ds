@@ -169,7 +169,21 @@ def build_shim(outdir, staging=None, version=versions.DEFAULT, virt_base=None):
         subprocess.run([objcopy, "-O", "binary", "-j", ".gpu", elf, gpart], check=True)
         gpu = open(gpart, "rb").read()
         nm = objcopy[:-len("objcopy")] + "nm"
+        objdump = objcopy[:-len("objcopy")] + "objdump"
         syms = {}
+        stereo_rng = None
+        gpu_va = None
+        for line in subprocess.run([nm, "-S", elf], capture_output=True, text=True).stdout.splitlines():
+            parts = line.split()
+            if len(parts) == 4 and parts[3] == "shim_stereo_poll":
+                stereo_rng = (int(parts[0], 16), int(parts[0], 16) + int(parts[1], 16))
+        for line in subprocess.run([objdump, "-h", elf], capture_output=True, text=True).stdout.splitlines():
+            parts = line.split()
+            if len(parts) > 4 and parts[1] == ".gpu":
+                gpu_va = int(parts[3], 16)
+        if not stereo_rng or gpu_va is None:
+            raise SystemExit("gpu3d.bin: shim_stereo_poll / .gpu not found")
+        stereo_rng = (stereo_rng[0] - gpu_va, stereo_rng[1] - gpu_va)
         for line in subprocess.run([nm, elf], capture_output=True, text=True).stdout.splitlines():
             parts = line.split()
             if len(parts) == 3 and parts[1] in "Tt":
@@ -179,21 +193,42 @@ def build_shim(outdir, staging=None, version=versions.DEFAULT, virt_base=None):
     if len(blob) > 0x6000 or blob[4:8] != b"SHIM":
         raise SystemExit("bad shim build (%d bytes)" % len(blob))
     build_gpu_bin(outdir, gpu)
+    build_gpu_bin(outdir, stereo_gpu_part(gpu, stereo_rng), "gpu3d.bin")
     return blob, syms
+
+
+GX_VA = 0xBFE00000           # kernel/shim/entry.S PDC_VA (PA 0x10400000)
+PDC0_OFF = 0x400
+
+
+def stereo_gpu_part(gpu, rng):
+    """gpu3d.bin's GPU part (stereo3d=1 only): gpu.bin's part with the one
+    GX-base literal of kernel/shim/pica_stereo.c moved to PDC0. That file's
+    register macro adds the PDC0 offsets to the GX block's base instead of
+    PDC0's, so the 2D/3D switch never reached PDC0 (re-log NEXT stereo 4).
+    Patching the literal keeps every other byte and address of the part
+    identical, and gpu.bin itself is not touched."""
+    lo, hi = rng
+    hits = [o for o in range(lo, hi - 3, 4) if struct.unpack_from("<I", gpu, o)[0] == GX_VA]
+    if len(hits) != 1:
+        raise SystemExit("gpu3d.bin: expected one GX base literal in shim_stereo_poll, found %d" % len(hits))
+    part = bytearray(gpu)
+    struct.pack_into("<I", part, hits[0], GX_VA + PDC0_OFF)
+    return bytes(part)
 
 
 GPU_PART_SIZE = 0x8000        # boot/common/gpu_mirror.h: GPU part at 0x208B0000, blob at 0x208B8000
 GPU_BIN_PA = 0x208B0000
 
 
-def build_gpu_bin(outdir, part):
+def build_gpu_bin(outdir, part, name="gpu.bin"):
     """gpu.bin = the shim's GPU part (padded to 32 KiB) + the mirror's command lists."""
     import subprocess
     if len(part) > GPU_PART_SIZE or struct.unpack_from("<I", part, 0)[0] != 0x30555047:
         raise SystemExit("bad shim GPU part (%d bytes)" % len(part))
     subprocess.run(["make", "-s", "-C", os.path.join(ROOT, "tools", "ios3ds-pica"), "mirror"], check=True)
     mirror = open(os.path.join(ROOT, "build", "pica-host", "gpumirror.bin"), "rb").read()
-    with open(os.path.join(outdir, "gpu.bin"), "wb") as f:
+    with open(os.path.join(outdir, name), "wb") as f:
         f.write(part + bytes(GPU_PART_SIZE - len(part)) + mirror)
 
 
@@ -214,6 +249,8 @@ def use_prebuilt_shim(outdir, prebuilt):
     import shutil
     for fn in ("shim.bin", "gpu.bin"):
         shutil.copyfile(os.path.join(prebuilt, fn), os.path.join(outdir, fn))
+    if os.path.exists(os.path.join(prebuilt, "gpu3d.bin")):     # stereo3d=1 GPU part (optional)
+        shutil.copyfile(os.path.join(prebuilt, "gpu3d.bin"), os.path.join(outdir, "gpu3d.bin"))
     blob = open(os.path.join(outdir, "shim.bin"), "rb").read()
     if len(blob) > 0x6000 or blob[4:8] != b"SHIM":
         raise SystemExit("bad prebuilt shim.bin (%d bytes)" % len(blob))

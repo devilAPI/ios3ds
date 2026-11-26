@@ -37,7 +37,7 @@ iOS boots to the home screen in about a minute. Apps open, Safari loads web page
 | ⚠️ | Headphone jack | iOS switches to headphones when plugged in, but 0.4.0 was silent in them; CODEC fix after 0.4.0 not yet confirmed, see [docs/audio.md](docs/audio.md) §4 |
 | 🧪 | Music app: a test song and your own songs | `install.py --music DIR` (or files in `SD/ios3ds/music/`): .mp3, .m4a (AAC/ALAC), .wav, .aif; [docs/audio.md](docs/audio.md) §10 |
 | 🧪 | Gyroscope (CoreMotion) | |
-| 🧪 | Stereoscopic 3D home screen (GPU stereo merged, needs a console test) | `stereo3d=1` in `boot.cfg`: the PICA200 builds both eyes from one uploaded frame and enables the barrier with the slider up, with **no per-frame CPU read-back** (batched alpha stamps); flat frames use the normal GPU mirror; see [docs/stereo3d.md](docs/stereo3d.md) |
+| 🧪 | Stereoscopic 3D home screen (GPU stereo merged, needs a console test) | `stereo3d=1` in `boot.cfg`: the PICA200 builds both eyes from one uploaded frame and enables the barrier with the slider up, with **no per-frame CPU read-back** (batched alpha stamps); flat frames use the normal GPU mirror; depth holds through folders, page swipes, app zoom and the switcher; `stereo_depth=0..100` sets the strength; see [docs/stereo3d.md](docs/stereo3d.md) |
 | 🧪 | Fake GPS location (CoreLocation) | set with `boot.cfg` `gps=` or `/usr/bin/ios3ds-gps` from a terminal; 1 Hz updates in apps, including Safari, see [docs/location.md](docs/location.md) |
 | 🧪 | Modern HTTPS: TLS 1.2/1.3 (TLSFix), current root certificates | Cydia, Safari and other apps; see [Limitations](#limitations) |
 | 🧪 | Cydia Substrate (tweaks) | pre-installed; installing tweaks no longer hangs the 3DS; tweaks load into SpringBoard and apps, see [docs/cydia.md](docs/cydia.md) |
@@ -217,6 +217,7 @@ As with any homebrew, **back up your SD card** first. More: [docs/real-hardware.
   | `hwtest=1` | one-boot hardware test: after the home screen every driver is checked (prompts on screen where your input is needed) and a PASS/FAIL/SKIP summary goes to `log.txt` and the screen; `hwtest=2` = automatic checks only. See [docs/real-hardware.md](docs/real-hardware.md) §6 |
   | `safe_mode=1` | no Cydia Substrate tweaks this boot (same as holding **L** while the 3DS loads iOS); see the FAQ |
   | `stereo3d=1` | stereoscopic 3D home screen (merged GPU stereo: PICA200 two-eye mirror + barrier via GPU present, no CPU read-back; needs a console test); flat frames use the normal GPU mirror |
+  | `stereo_depth=N` | with `stereo3d=1`: depth strength 0..100 % of the slider's shift (default 100; 0 = always flat). Not in the generated `boot.cfg`: add the line yourself |
 
 ### FAQ
 

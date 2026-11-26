@@ -17,6 +17,7 @@
 #include "log.h"
 #include "blksrv.h"
 #include "display.h"
+#include "stereo.h"
 #include "tsc.h"
 #include "swap.h"
 #include "wifi/wifi.h"
@@ -869,7 +870,23 @@ void a9_main(int argc, char **argv)
             monitor("bad load= address");
         }
         u32 max = pa < 0x1FFF0000 && pa >= 0x1FF80000 ? 0x1FFF0000 - pa : 0x100000;
-        r = sd_load(cfg.load_path[i], (void *)pa, max, &sz);
+        r = -1;
+        if (cfg.stereo3d) {
+            /* stereo3d=1: the GPU part whose PDC0 3D switch writes PDC0
+               (gpu3d.bin, kernel/shim/pica_stereo.c ST_PDC_BASE); gpu.bin's
+               writes miss PDC0. Falls back to gpu.bin on an old card. */
+            u32 n = strlen(cfg.load_path[i]);
+            if (n >= 7 && n + 2 < sizeof cfg.load_path[i] && !memcmp(cfg.load_path[i] + n - 7, "gpu.bin", 7)) {
+                char p3[sizeof cfg.load_path[i]];
+                memcpy(p3, cfg.load_path[i], n - 7);
+                strlcpy_(p3 + n - 7, "gpu3d.bin", sizeof p3 - (n - 7));
+                r = sd_load(p3, (void *)pa, max, &sz);
+                if (!r)
+                    log_ok("[stereo] stereo3d=1: GPU part %s instead of gpu.bin (PDC0 3D switch)\n", p3);
+            }
+        }
+        if (r)
+            r = sd_load(cfg.load_path[i], (void *)pa, max, &sz);
         if (r) {
             log_err("load %s failed (%d)\n", cfg.load_path[i], r);
             monitor("load= failed");
@@ -982,6 +999,9 @@ void a9_main(int argc, char **argv)
            build both eyes on the PICA200 (docs/stereo3d.md). The ARM9 two-eye
            copy is only a fallback when the mirror stops. */
         log_color(CON_YELLOW, "[stereo] stereo3d=1: GPU display mirror stays on; the PICA200 builds both eyes with the slider up\n");
+        display_set_stereo_depth(cfg.stereo_depth);
+        logp("[stereo] depth strength %u%% (boot.cfg stereo_depth, 0..100): shift %d px at slider max\n",
+             cfg.stereo_depth > 100 ? 100u : cfg.stereo_depth, stereo_depth_k(255, cfg.stereo_depth));
     }
     if (cfg.shim_pa) {              /* GPU display mirror mailbox (gpu_mirror.h), before XNU */
         u32 g[7] = { cfg.gpu, cfg.gpu_mirror, cfg.gpu_vbl_div, cfg.gpu_spin_us, cfg.gpu_clk, cfg.gpu_diag, cfg.ca_gpu };

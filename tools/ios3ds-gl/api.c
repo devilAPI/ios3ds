@@ -174,6 +174,7 @@ void gl_tex_drop_image(Tex *t)
     t->w = t->h = t->pitch = 0;
     t->base = 0;
     t->stereo_opq = 0;
+    t->stereo_cls = 0;
     for (i = 0; i < MAX_MIP_LEVELS; i++)
         t->mip[i] = NULL;
     t->n_mip = 0;
@@ -1055,6 +1056,7 @@ void gl_tex_dirty(GC *gc, Tex *t)
 {
     t->be_seq++;
     t->stereo_opq = 0;              /* the pixels changed: re-check for stereo */
+    t->stereo_cls = 0;              /* new content: classify it afresh */
     if (gc->be->tex_changed)
         gc->be->tex_changed(gc, t);
 }

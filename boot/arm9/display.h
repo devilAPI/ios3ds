@@ -22,5 +22,9 @@ void display_set_stereo(bool on, u32 slider);
 bool display_stereo_probe(u32 regs_pa);
 /* cumulative work of the two-eye path: columns rebuilt vs reused unchanged */
 void display_stereo_stats(u32 *rebuilt, u32 *skipped);
+/* boot.cfg stereo_depth (0..100): scales the slider's shift, 0 = flat */
+void display_set_stereo_depth(u32 depth);
+/* transitions where 3D was held through a short flat stretch (hysteresis) */
+u32 display_stereo_holds(void);
 /* called with blksrv_poll() every few columns of a CPU copy */
 void display_set_poll(void (*fn)(void));

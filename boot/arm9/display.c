@@ -32,6 +32,27 @@ static bool armed, touched;
 static bool stereo_cfg, stereo_hw, stereo_no_shim, stereo_warned;
 static bool stereo_want;                    /* a stamped home frame with the slider up */
 static u32 stereo_slider;
+static u32 stereo_depth = STEREO_DEPTH_DEFAULT; /* boot.cfg stereo_depth, 0..100 % */
+/* Transitions (folder, app zoom, switcher, page swipe) mix stamped home
+   frames with flat or half-drawn ones. Flipping PDC0/the barrier on every
+   probe would flicker, so the decision has hysteresis: 3D starts after
+   ST_ON_PROBES home probes in a row and stays on through up to
+   ST_HOLD_PROBES non-home probes (~0.5 s at the 15/s copy rate). While held,
+   the two-eye list draws the flat frame: no class pass matches alpha 0, so
+   both eyes get the same picture (a graceful flat frame, not a stale eye). */
+#define ST_ON_PROBES   2
+#define ST_HOLD_PROBES 8
+static u32 st_home_run, st_flat_run, st_holds;
+
+static int stereo_k(void)
+{
+    return stereo_depth_k(stereo_slider, stereo_depth);
+}
+
+void display_set_stereo_depth(u32 depth)
+{
+    stereo_depth = depth > 100 ? 100 : depth;
+}
 
 /* Rebuilding both eyes is several times the cost of the normal copy: the
    per-pixel class lookup and two shifted samples are done for every output
@@ -61,10 +82,11 @@ void display_set_stereo(bool on, u32 slider)
     if (was_cfg != stereo_cfg || stereo_slider != slider)
         stereo_cache_reset();               /* a different k shifts every column */
     stereo_slider = slider;
-    gm_set_shift(stereo_active(1, slider) ? (u32)stereo_shift_k(slider) : 0);
+    gm_set_shift((u32)stereo_k());
     if (!on || !stereo_cfg || slider < STEREO_MIN_SLIDER)
         stereo_no_shim = false;                 /* retry a failed switch next time */
-    if (!stereo_cfg || !stereo_active(1, slider)) {
+    if (!stereo_cfg || stereo_k() <= 0) {
+        st_home_run = st_flat_run = 0;
         bool was_want = stereo_want;
         stereo_want = false;
         if (stereo_hw || was_want) {
@@ -153,12 +175,28 @@ static bool stereo_is_home(const u8 *src, u32 w, u32 h, u32 stride)
 bool display_stereo_probe(u32 regs_pa)
 {
     bool want = false;
-    if (stereo_cfg && stereo_active(1, stereo_slider) && !stereo_no_shim &&
+    if (stereo_cfg && stereo_k() > 0 && !stereo_no_shim &&
         mode != SCREEN_BOTTOM && top_fb[1] && top_fb[1] != top_fb[0] && regs_pa) {
         vu32 *r = (vu32 *)regs_pa;
         u32 w = r[0x30 / 4] >> 16 & 0x1FF, h = r[0x30 / 4] & 0x1FF;
         u32 stride = r[0x28 / 4] * 4;
         want = w && h && stride && stereo_is_home((const u8 *)(uintptr_t)r[0x24 / 4], w, h, stride);
+        if (want) {
+            st_flat_run = 0;
+            if (st_home_run < ST_ON_PROBES)
+                st_home_run++;
+            if (!stereo_want && st_home_run < ST_ON_PROBES)
+                want = false;               /* not yet: one home probe in a transition */
+        } else {
+            st_home_run = 0;
+            if (stereo_want && ++st_flat_run <= ST_HOLD_PROBES) {
+                want = true;                /* hold 3D through a short flat stretch */
+                if (st_flat_run == 1)
+                    st_holds++;
+            }
+        }
+    } else {
+        st_home_run = st_flat_run = 0;
     }
     if (want != stereo_want) {
         if (want) {
@@ -180,7 +218,7 @@ bool display_stereo_probe(u32 regs_pa)
         stereo_barrier(true);
         stereo_hw = true;
         log_ok("[monitor] stereo 3D: both eyes from the stamped home frame, parallax barrier on "
-               "(slider %u, shift %d px)\n", stereo_slider, stereo_shift_k(stereo_slider));
+               "(slider %u, depth %u%%, shift %d px)\n", stereo_slider, stereo_depth, stereo_k());
     } else if (!stereo_want && stereo_hw) {
         stereo_barrier(false);
         stereo_hw = false;
@@ -452,7 +490,7 @@ static void blit_top_stereo(const u8 *src, u32 w, u32 h, u32 stride)
     static u16 ix[SCR_H];
     static u32 ix_w;
     u32 outw = h * 3 / 4, x0, rebuilt = 0;
-    int k = stereo_shift_k(stereo_slider);
+    int k = stereo_k();
     if (outw > SCR_W) outw = SCR_W;
     x0 = (SCR_W - outw) / 2;
     if (k != st_cache_k || ix_w != w) {
@@ -500,6 +538,11 @@ void display_stereo_stats(u32 *rebuilt, u32 *skipped)
 {
     *rebuilt = st_rebuilt;
     *skipped = st_skipped;
+}
+
+u32 display_stereo_holds(void)
+{
+    return st_holds;
 }
 
 /* The CLCD scan-out buffer is ordinary /vram. Until iOS draws its first

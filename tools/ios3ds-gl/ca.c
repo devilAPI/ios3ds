@@ -432,6 +432,9 @@ void ca_frame(void)
         gl_log("CA stereo3D: %u frames, %u home (stamped), %u flat (wiped), %u stamped draws in %u batched "
                "alpha draws (%u vertices), %u wipes; display written back by the GPU present",
                f, h, fl, stp, nb, nv, wp);
+        stereo_transition_stats(&nb, &nv, &wp);
+        gl_log("CA stereo3D transitions: %u sticky layer classes, %u partial updates (%u of an app frame, not stamped)",
+               nb, nv, wp);
     }
     gl_log("CA: %llu frames; per frame over the last %u: render thread CPU %llu us, %u.%u command lists, "
            "%u.%u GPU presents (%u.%u via an arena copy), %u.%u CPU read-backs (%u KiB), %u.%u texture uploads (%u KiB); "
