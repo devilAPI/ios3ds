@@ -776,3 +776,55 @@ SAE-only, open IEs, and a truncated RSN IE. `emu/wifi_popup_test.py` joins the
 mixed AP in QEMU through Settings, forgets it, and joins it again from the
 SpringBoard alert; `--case wpa2` runs the same flow against a plain WPA2 AP.
 Results: re-log 84.
+
+## 11. iOS 2.2.1 (5H11a)
+
+2.2.1 differs from 3.x/4.x in two ways that matter here (re-log, "Wi-Fi on
+2.2.1"):
+
+- **No IOUserEthernet** (and no tun/utun) in the 5H11a kernelcache, so
+  `ios3ds-wifid` cannot create `en0` from userland. The shim registers it
+  itself: `tools/ios3ds-wifi/shim/kif_eth.c`, a Darwin 9 `ifnet`
+  (`ifnet_allocate`/`ifnet_attach` with the stock `ether_*` demux/framer,
+  `bpfattach` for IPConfiguration's DHCP, `KEV_DL_LINK_ON/OFF` through
+  `ifnet_event`, `SIOCGIFMEDIA` answers the link). Frames go through the
+  opaque sysctl `kern.ios3ds_eth` (`shim/kif_proto.h`): reads return the
+  head of the output queue with a sequence number, writes acknowledge it and
+  carry received frames for `ifnet_input`. It is built only when
+  `versions.py` sets `kernel_ifnet` (2.2.1), its KPI addresses come from
+  `scripts/kpi.py` (`KIF_SYMBOLS`, Thumb bit from `n_desc`), and it lives in
+  the shim's GPU part (`link.ld`: `*kif*.o`). The 4.2.1 shim is unchanged.
+  `ios3ds-wifid` built with `-DWIFID_KIF` (2.x toolchain flags,
+  `build/rootfs-add/ios2/`) uses this sysctl instead of
+  `IOEthernetController*`.
+- **en0 is not an IOKit object**, so configd would never create a network
+  service for it: `rootfs/overlay-2.2.1.json` writes a `preferences.plist`
+  with one Wi-Fi service on `en0` (IPv4 DHCP). There is no
+  `/usr/sbin/ipconfig` on 2.x, so wifid only waits for the lease.
+- **No WiFiManager.** configd's `Aeropuerto.bundle` matches
+  `IO80211Controller` and reads the child's `BSD Name`; Settings'
+  `AirPortSettings.bundle` and SpringBoard's status bar call the (dynamic)
+  `Apple80211.framework` **in their own process**. Apple80211 2.x speaks the
+  3.x ioctl protocol (GET 23 event device, 144-byte scan results), so the
+  2.x build of `ios3ds-a80211.dylib` (`-DA80211_IOS2 -DDYLD2_DYLIB`) is
+  inserted into configd **and SpringBoard** (whose apps inherit
+  `DYLD_INSERT_LIBRARIES`). Differences in that build:
+  - Aeropuerto gets `IOResources` as its controller; `IORegistryEntrySearchCFProperty(…,
+    "BSD Name")` on it answers `en0`.
+  - Every process that issues an Apple80211 ioctl starts its own status
+    poller (events go to that process's event stream).
+  - It talks to `debug.ios3ds_wlan`, a twin of `kern.ios3ds_wlan` that any
+    user may write (Settings and SpringBoard run as `mobile`; xnu-1228's
+    `__sysctl` wants root for every write below `CTL_KERN` regardless of
+    `CTLFLAG_ANYBODY`). Registered by `kif_eth.c`, 2.x only.
+  - One SCAN_DONE per scan request (Apple80211 2.x counts outstanding scans
+    and completes only when all are answered), and the result list can be
+    read again for each.
+  - RSSI/noise in scan results are reported as dBm + 100: Apple80211 drops
+    results whose RSSI is below the scan's threshold, which Settings leaves
+    at 0.
+- Verified in QEMU: `emu/wifi_test.py --case ok` (wifi.cfg join, DHCP, DNS,
+  HTTP), `emu/wifi_ui_test.py --psk <letters> --settings-icon 275,226
+  --wifi-row 160,96 --key-pause 2 --keep-ca` (8/8: Settings lists the three
+  networks, WPA2 join with the keyboard, DHCP), Safari loading a page from
+  the host by typed URL.

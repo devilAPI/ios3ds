@@ -5851,6 +5851,7 @@ missing on 8B117. Everything below was read from this worktree's staged
   `scripts/inject_dylib.py`. With that, `make test` passes again and the six
   4.2.1 hashes above are unchanged.
 
+<<<<<<< HEAD
 ## 143. Safari's first cold page on 4.1 and 3.1.3: -urlpoll opened p1 before Wi-Fi (2026-11-25)
 
 Continues §104/§112 and §133. Task: on 4.1 the first Safari page after a cold
@@ -5985,3 +5986,95 @@ wall of §104/§112. That is not what these runs show.
   is a separate, hardware-only memory report): `[pica] arena 10240 KiB`,
   camera preview/still, `[mem] free_nospec` and any
   `[applog] MobileSafari ENOMEM` line.
+=======
+
+
+## NEXT. Wi-Fi on 2.2.1: a shim ifnet, Aeropuerto and in-process Apple80211 (2026-11-26)
+
+Before: 2.2.1's driver-matrix row said Wi-Fi "off" (re-log 133): 5H11a has no
+IOUserEthernet, and 2.x's Wi-Fi manager is Aeropuerto on a dynamic
+Apple80211.framework. Details in docs/wifi.md section 11.
+
+### Kernel interface
+
+- **[V]** No reusable facility: no IOUserEthernet, tun or utun; PPP/L2TP
+  would give a point-to-point IP link without DHCP. The 5H11a LC_SYMTAB has
+  the full Darwin 9 network KPI (`ifnet_allocate/attach/input/event`,
+  `bpfattach`, `bpf_tap_in/out`, `ether_demux/add_proto/del_proto/
+  check_multi/frameout`, `mbuf_*`).
+- **[V]** `struct ifnet_init_params` checked against 5H11a's
+  `ifnet_allocate`: output +0x18, demux +0x1C, add_proto +0x20, del_proto
+  +0x24, check_multi +0x28, framer +0x2C, softc +0x30, ioctl +0x34,
+  set_bpf_tap +0x38, detach +0x3C, event +0x40, broadcast +0x44/+0x48.
+  The first try (ioctl/bpf/detach after output) made `ifnet_attach` return
+  ENODEV (it requires add_proto and del_proto); a second allocate with the
+  same unique id is EBUSY, so the ifnet is now kept across retries.
+- **[V]** `tools/ios3ds-wifi/shim/kif_eth.c` (GPU part via `link.ld`
+  `*kif*.o`, built only with versions.py `kernel_ifnet`, KPI addresses from
+  `kpi.py KIF_SYMBOLS` with the Thumb bit from `n_desc`) and the sysctl
+  `kern.ios3ds_eth`. 2.2.1 shim: main part 24276 of 24320 bytes (+8 for the
+  registration call), GPU part 29136 of 32768. The 4.2.1 shim is unchanged.
+- **[V]** `ios3ds-wifid -DWIFID_KIF` (2.x flags, `dyld2_glue.S`) uses it.
+  configd only configures services from preferences, and en0 has no IOKit
+  object, so the overlay writes a `preferences.plist` with a Wi-Fi service on
+  en0 (DHCP); the first try lacked `mkdirs` for its directory and xpwn's
+  `add` dropped it silently.
+- **[V]** `emu/wifi_test.py --case ok` on 2.2.1: **PASS** (SDIO … 4-way, `[kif]
+  en0 attached`, DHCP lease in 7 s, default route, DNS, HTTP fetch).
+
+### Settings > Wi-Fi
+
+- **[V]** Aeropuerto matches `IO80211Controller` with
+  `IOServiceAddMatchingNotification`, reads `BSD Name` with
+  `IORegistryEntrySearchCFProperty`, checks `IOObjectConformsTo(…,
+  "IO80211Controller")`. The 2.x a80211 (`-DA80211_IOS2`) hands it
+  `IOResources` and answers `en0`.
+- **[V]** Settings still said "No Wi-Fi": `AirPortSettings.bundle` (in the
+  Preferences process) and SpringBoard call Apple80211 themselves. The dylib
+  is now also in SpringBoard's environment (apps inherit it; only configd
+  unsets it), and each process that issues an Apple80211 ioctl starts its
+  own poller. Settings then showed "Not Connected" and the status bar the
+  Wi-Fi icon.
+- **[V]** Scan requests from Preferences failed with EPERM: xnu-1228
+  `__sysctl` requires root for any write under CTL_KERN. 2.x only:
+  `kif_eth.c` registers `debug.ios3ds_wlan` (same handler/buffer,
+  `CTLFLAG_ANYBODY`).
+- **[V]** Apple80211 2.x keeps a count of outstanding async scans and calls
+  back only when it reaches 0 (Settings re-scans before the previous scan
+  completes): one SCAN_DONE per request, and the list is re-readable.
+- **[V]** The callback then got an empty list: `__addScanResultToList`
+  drops results with RSSI below `__asyncScanResultsRSSIThresh`, which
+  Settings leaves at 0 (read at runtime with a temporary probe). Scan
+  results now carry dBm + 100 on 2.x.
+- **[V]** `emu/wifi_ui_test.py --psk <letters> --settings-icon 275,226
+  --wifi-row 160,96 --key-pause 2 --keep-ca` → **8/8 PASS**: three
+  networks listed with lock icons, WPA2 join with the keyboard, 4-way
+  handshake, DHCP; screenshot shows the check mark and the status-bar icon.
+  New test options: `--settings-icon`; the interface check accepts the
+  2.x/3.x log line.
+- **[V]** Safari: with wifi.cfg, a typed `http://10.0.2.2:<port>` (URL
+  keyboard driven by taps through `emu/session.py`) loaded the host's page
+  (host log shows the request, screenshot shows it rendered). No
+  `ios3ds-diag` 2.x build exists on main, so `emu/safari_test.py` is not
+  usable on 2.2.1 yet.
+
+### Hardware checklist (diag=1 log.txt)
+
+- `[kif] en0 attached (Darwin 9 ifnet, kern.ios3ds_eth)`, `[wifid] interface
+  en0 up (shim ifnet)`, `[wifid] en0 configured by configd`.
+- `[a80211] loaded into configd`, `[a80211] Apple80211 user: SpringBoard`,
+  `… user: Preferences` after opening Settings > Wi-Fi, `[a80211] scan
+  done: N networks`, `[a80211] association done`.
+- Signal bars on 2.x use the dBm + 100 values; their scale on hardware is
+  unknown [G].
+
+### Verification
+
+- **[V]** 4.2.1 hashes of a fresh default build equal the origin/main values
+  (re-log 133): kernel `505f451a…`, devtree `25b1bd23…`, fakeio
+  `e5fecd66…`, shim `a35631eb…`, gpu `6bdaf617…`, boot.cfg `8d4079cf…`.
+- **[V]** Fresh 2.2.1 soak `--cycles 5 --icount 2 --require-app --targets
+  "275,226;199,226;123,226;47,226;275,50"` → **PASS** (with the dylib in
+  SpringBoard and every app).
+- **[V]** Fresh 4.2.1 soak `--cycles 5 --icount 2` → **PASS**.
+>>>>>>> 683b546 (docs: Wi-Fi on 2.2.1 (wifi.md 11, re-log, driver matrix))
