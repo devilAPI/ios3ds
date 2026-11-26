@@ -6084,7 +6084,7 @@ Apple80211.framework. Details in docs/wifi.md section 11.
   2.2.1 soak (`--require-app`, targets above) **PASS**, 4.2.1 hashes
   unchanged (same six values), fresh 4.2.1 soak **PASS**.
 
-## NEXT. Issue 1 follow-up: home Wi-Fi, cam_test, log archive, Substrate safe mode (2026-11-26)
+## 145. Issue 1 follow-up: home Wi-Fi, cam_test, log archive, Substrate safe mode (2026-11-26)
 
 Tester logs of 2026-11-25 (New 2DS XL, build m1-0.4.0-244).
 
