@@ -11,6 +11,12 @@ bool audio_init(void);
    (kernel/shim/audio.c) in the SD log. shim_pa = cfg.shim_pa (0 = no shim). */
 void audio_poll(u32 shim_pa);
 
+/* Opt-in idle policy (boot.cfg power_opt=1): clear CSND_CNT once the shim has
+   stopped its channels and the screen is off; restore it on wake or on the
+   next iOS output stream. True = the shim currently has CSND running. */
+void audio_idle_gate(u32 shim_pa, bool off);
+bool audio_csnd_active(u32 shim_pa);
+
 /* boot.cfg mic=0: never touch the MIC block (iOS's input stays silent) */
 void audio_set_mic(bool enabled);
 

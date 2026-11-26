@@ -209,6 +209,8 @@ As with any homebrew, **back up your SD card** first. More: [docs/real-hardware.
   | `ca_gpu=0` | draw the iOS interface in software (slower) |
   | `screen=0/1/2` | start in screen layout top / both / bottom |
   | `camera=0`, `gyro=0`, `hp_route=0` | turn off the cameras, the gyroscope, or headphone switching |
+  | `power_opt=1` | opt-in idle telemetry (`[pwr]`) and screen-off gating of camera/CSND/Wi-Fi/GPU; needs `IOS3DS_IDLE=1` to build the GPU helper, see [docs/mcu.md](docs/mcu.md) §15 |
+  | `idle_clock=1` | opt-in: on New models, drop the ARM11 from 804 to 536 MHz while the screen is off (same opt-in build as `power_opt=1`) |
   | `cam_test=1` | run the ARM9 camera self-test before XNU; sensors and CAM blocks are reset afterwards before iOS starts (hardware check still pending; see [docs/camera.md](docs/camera.md)) |
   | `gps=52.5200,13.4050` | report a fake location to apps (latitude,longitude[,accuracy in metres]); empty = off |
   | `wifi_led=0` | don't light the console's Wi-Fi LED while connected |

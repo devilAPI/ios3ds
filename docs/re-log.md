@@ -7130,3 +7130,132 @@ late and removes the retry.
   `securityd up` and no `NSCocoaErrorDomain 256` first-fetch line. None of
   this version has a console run yet; the QEMU securityd start-up is slower
   than a real 3DS under TCG, so a console should only be easier.
+## NEXT. Battery life: opt-in idle telemetry, block gating and a New 3DS idle clock (2026-11-26)
+
+Task: battery life on the main 4.2.1 image. Measure/estimate idle and
+screen-off draw from what the emulator and the MCU/battery drivers expose,
+gate unused blocks, and lower the ARM11 clock when it is safe. The shipped
+default stays byte-identical; every action is behind `boot.cfg`
+`power_opt=1` / `idle_clock=1` plus the developer build flag `IOS3DS_IDLE=1`.
+
+### What the sources expose
+
+- **[V]** The MCU battery service is voltage/percent/flags only: `mcubox_t`
+  (regs 0x0A–0x0F) is refreshed by `mcu_poll()` (2 s) and registered as an
+  `IOPMPowerSource` by the shim (re-log 132). QEMU's MCU holds 4200 mV and
+  never discharges, so **no mA can be read from the emulator**. The real
+  signals it does expose are duty counters: `[power]` lines and ARM9
+  loops/sleeps in `powersave.c`, shim stats `+0x4C/+0x78/+0x8C/+0x98`,
+  `gmbox_t.frames`, `mcubox_t.als_state`, `aud_stat_t.state` and
+  `netmbox_t.link`. `boot/common/power_model.h` multiplies those counters by
+  round-number mA coefficients (30 mA board, 23/37/50 mA ARM11 at
+  268/536/804 MHz, 30+120 mA LCD/backlight, 25 mA GPU/camera, 10 mA CSND,
+  70/30/15 mA Wi-Fi linked-PS/linked-max/idle) and divides an assumed
+  1300/1750 mAh. Host-tested by `tests/test_power_model.py`.
+- **[V]** Old 3DS opt-in image (`IOS3DS_IDLE=1 make sdimg CYDIA=0`),
+  `emu/soak.py --cycles 5 --icount 2 --require-app --crashlogs`: **Result:
+  PASS** (five apps, 0 restarts/panics/crashes, lock round on the home
+  screen). `[pwr] screen on: ~181–182 mA modeled (7.1 h / 9.6 h assumed)`;
+  `[pwr] GPU clock gated while the screen is off (PDN_GPU_CNT 0001007f -> 0)`
+  then `GPU clock restored before the display mirror`. `idle_clock` is a
+  logged no-op on an Old model.
+
+### The New 3DS clock switch, and two bugs found in QEMU
+
+- **[V]** New 3DS opt-in (`emu/run.py --new3ds --icount 2`, POWER at 150 s,
+  HOME at 200 s): `[pwr] ARM11 clock 536 MHz (idle): PDN_LGR_SOCMODE 3,
+  timer prescaler 255, tick shift 0`, `[pica] idle clock: timer prescaler
+  191 -> 255, tick shift 1 -> 0`, the reverse on wake, and `[hb] clock`
+  ratios 1000/1000, 1000/1000, 999/1000 while idle; a later 20 s lock round
+  kept 1000/1000 across both switches. Screen on ~165–232 mA
+  (5.6–7.9 h Old / 7.5–10.6 h New assumed), screen off ~122 mA on the first
+  sample (CSND still in flight) and ~85–110 mA after the camera/CSND gates
+  (10.5–15.2 h Old / 14.2–20.5 h New assumed). With the mirror paused and
+  Wi-Fi in `REC_POWER` (a modelled assumption) the clock change alone is
+  ~13 mA in the model (804 → 536 MHz).
+- **[V]** First attempt used the wrong MPCore register offsets in the GPU
+  helper (`PT_COUNT` 0x600 is PT_LOAD, `PT_COUNT` is 0x604): the private timer
+  never got its new count, IRQs/s fell from ~300 to ~6 and the 10-cycle soak
+  hung. Fixed by using the entry.S offsets. Second attempt left the watchdog
+  rate at the old PERIPHCLK (QEMU only re-reads it when its control word is
+  written): `[hb] clock` showed 1287/1000 and 1357/1000. The ARM9 now writes
+  an `IDLE_REQ_REFRESH` bit after the PDN ack; the shim rewrites WD/PT control
+  with the current prescaler and clears the bit, and the ratio is 1000/1000.
+  A third bug (reading PDN_SOCMODE 0x10141300 from the shim, whose VA mapping
+  does not cover it) caused `fault_addr=0x10141000`; the diagnostic print now
+  omits that read. A fourth: the GL-wake hook wrote PDN_GPU_CNT through its
+  **physical** address from the ARM11 (kernel abort `fault_addr=0x101411c0`
+  in QEMU); `kernel/shim/pica_idle.c` now maps PDN with the same `ml_io_map`
+  KPI as `pica.c` before restoring the clock. **[G]** all four are only proven
+  in QEMU; the timer reprogramming is the main hardware risk.
+- **[V]** Final hardening in the passing images: the ARM9 waits whole
+  milliseconds for the shim/PDN handshakes, and accepts `GM_ST_WAIT` as well
+  as `GM_ST_ACTIVE` before gating the GPU clock (`ps_update()` clears `want`
+  first; the shim changes ACTIVE → WAIT on its next thread poll).
+- **[V]** `make test` passes, including the new power-model and power_opt
+  boot.cfg key checks. Six fresh default 4.2.1 hashes:
+  kernel `505f451a…`, devtree `25b1bd23…`, fakeio `e5fecd66…`, shim
+  `a35631eb…`, gpu `6bdaf617…`, boot.cfg `8d4079cf…` — all equal
+  origin/main's. The opt-in image leaves the main shim at 24268/24320 bytes
+  (the helper lives in gpu.bin, 27216/32768).
+
+### Soaks and expected hours
+
+- **[V]** Default (no keys) fresh image after rebasing onto origin/main 847a0c6:
+  `emu/soak.py --cycles 5 --icount 2 --require-app --crashlogs` → **Result:
+  PASS** (input after 150 s, five apps, 0 recoveries, 0 restarts/panics/crashes,
+  lock round on the home screen). A final, fresh opt-in Old 3DS image with the
+  hardened code: **PASS** — five apps, 0 recoveries, 0 restarts/panics/crashes,
+  `[pwr] screen on ~181 mA` and one screen-off sample `112 mA` (7.1 h / 11.6 h
+  at the assumed 1300 mAh). `idle_clock` is a one-line no-op on an Old model.
+- **[V]** Opt-in New 3DS 10-cycle `--require-app --crashlogs --long-lock 20`
+  soak on a fresh image: **Result: PASS** — 10/10 apps opened, 0 recoveries,
+  Home always returned, the 20 s lock round ended on the home screen, 0
+  restarts/panics/crashes. `[pwr] screen off: ~85 mA modeled (15.2 h / 20.5 h
+  assumed)` after `[audio] idle: CSND_CNT -> 0`, both `ARM11 clock 536/804`
+  switches and both `MPCore control rewritten` lines present; `[hb] clock`
+  ratios 999/1000, 1000/1000, 999/1000, 1000/1000. A first run with a
+  8 s settle had one tap that opened no app (cycle 7, no failure of any
+  driver check); the repeat with the default 15 s settle passed cleanly.
+- **[V]** `emu/lockburst.py --rounds 12 --no-console` (rapid POWER/shell
+  taps) fails its strict `ARM9 CPU again`/end-brightness checks on the opt-in
+  New 3DS image (2 transient copy pauses, dark end screen after a shell-tap
+  race). The **same harness on a fresh default image also FAILS** (15 such
+  pauses), so it is the harness's tap timing, not the idle policy: the GPU
+  copy resumes after every pause and every POWER/shell event is seen. The
+  `--require-app` soaks above include lock/wake rounds and pass.
+- **[V]** Older-version soaks after the change, fresh images, `--cycles 5
+  --icount 2 --require-app --crashlogs` with each version's targets: 4.1
+  **PASS**, 3.1.3 **PASS**, 2.2.1 **PASS** (five icons opened each, 0
+  recoveries, 0 restarts/panics/crashes). None of those builds gets the opt-in
+  keys by default, so their ARM9 path is unchanged.
+- **[G]** Expected hours are **model outputs, not measurements**: with the
+  shipped default (no telemetry, `powersave=1`) the same counter mix gives
+  ~7 h screen-on / ~11 h screen-off on a 1300 mAh Old battery; with the
+  opt-in policy, ~7 h screen-on (Wi-Fi at max performance) and ~12–15 h
+  screen-off Old / ~16–20 h New (the low end assumes Wi-Fi still linked in
+  `REC_POWER`, the top end is the measured QEMU counter mix with no link).
+  On the New model the log brackets the clock saving directly: `~123 mA`
+  (10.5 h Old / 14.2 h New) at 804 MHz against `~85 mA` (15.2 h / 20.5 h)
+  at 536 MHz, with all gates active. A real current meter is required before
+  any of these is a claim.
+
+### Needs hardware [G]
+
+1. `IOS3DS_IDLE=1 make sdimg`, boot, open an app, POWER → lock, HOME → wake.
+   `log.txt` must show `[pwr] idle policy on`, both `ARM11 clock ...` lines,
+   `[pica] idle clock: MPCore control rewritten ...`, and `[hb] clock`
+   ratios near 1000/1000 after each switch; the status-bar clock must keep
+   moving and the app must still open after the wake.
+2. Measure current with a meter in series with the battery: home screen at
+   brightness 0.5 (GPU frames moving), 30 s locked with `power_opt=0`, then
+   locked with `power_opt=1`; on a New model repeat the locked case with
+   `idle_clock=0/1`, with Wi-Fi off / associated, and with Camera.app's ALS
+   or Music playing before the lock. Compare each reading with the counters
+   and mA estimate on the nearest `[pwr]` line and replace the model's
+   coefficients and the assumed 1300/1750 mAh capacities with measured ones.
+3. Check the gates do not break users: Camera.app after a lock/wake (ALS
+   restore), Music during and after a lock (CSND guard), Wi-Fi reconnect with
+   `REC_POWER`, GL drawing while the screen is off (the shim restores
+   `PDN_GPU_CNT` on any GPU sysctl). If any fails, set `power_opt=0`.
+   Not done: no console with a current meter was available in this worktree.

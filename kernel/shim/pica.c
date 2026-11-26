@@ -55,6 +55,10 @@
 #include "gpu_mirror.h"
 #include "stereo.h"
 #include "cam_proto.h"              /* frame-buffer reservation for the cameras */
+#ifdef IOS3DS_IDLE
+void shim_idle_clock_apply(void);   /* pica_idle.c: optional New 3DS idle clock */
+void shim_idle_gl_wake(void);       /* pica_idle.c: restore a gated GPU clock for GL */
+#endif
 
 struct sysctl_oid {
     void       *oid_parent;
@@ -514,6 +518,9 @@ void shim_gpu_thread_poll(void);
 static PICA_HOT int pica_sysctl(struct sysctl_oid *oidp, void *arg1, int namelen, void *req)
 {
     int *name = (int *)arg1;
+#ifdef IOS3DS_IDLE
+    shim_idle_gl_wake();        /* screen off gated the GPU: restore before any GL op */
+#endif
     pica_req_t r;
     if (namelen == 0) {                 /* "sysctl ios3ds_gpu": status only, no side effects */
         pica_info_t info;
@@ -868,6 +875,9 @@ PICA_HOT void shim_gpu_irq(uint32_t id)
 {
     uint32_t t0, spin;
 
+#ifdef IOS3DS_IDLE
+    if (id == 29) shim_idle_clock_apply();   /* MPCore timer IRQ, once per tick */
+#endif
     if (id == PICA_IRQ_PDC0) {
         /* which framebuffer set each LCD shows: for the ARM9's CPU copy */
         uint32_t s0 = *(vu32 *)(GX_VA + 0x478), s1 = *(vu32 *)(GX_VA + 0x578);

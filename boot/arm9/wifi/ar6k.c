@@ -1457,6 +1457,15 @@ int ar6k_command(const volatile wlan_cmd_t *c)
     return -3;
 }
 
+/* WMI_SET_POWER_MODE from the idle policy. ath6kl: 1 = REC_POWER,
+   2 = MAX_PERFORMANCE (the value do_connect() sends). Only legal once the
+   WMI handshake has completed; a failed send is logged by wmi_queue_flush. */
+int ar6k_power_mode(u8 mode)
+{
+    if (A.state < NET_ST_WMI) return -1;
+    return wmi_send(WMI_SET_POWER_MODE, &mode, 1);
+}
+
 /* status + scan table into the wlan mailbox (wifi.c, every poll) */
 void ar6k_publish(volatile wlanmbox_t *w, u32 *published_scan)
 {

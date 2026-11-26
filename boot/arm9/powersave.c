@@ -23,6 +23,7 @@
 #include "tsc.h"
 #include "mcu.h"
 #include "gpumirror.h"
+#include "power.h"
 
 #define T9_VAL(n)   (*(vu16 *)(0x10003000u + (n) * 4))
 #define T9_CNT(n)   (*(vu16 *)(0x10003002u + (n) * 4))
@@ -100,6 +101,7 @@ bool ps_update(bool display_on, bool ios_display, u32 now)
         off = true;
         if (enabled) {
             gm_want(false);
+            pwr_display_change(true);   /* opt-in: gate unused blocks / lower the clock */
             input_set_idle(true);
             mcu_screen_off(true);
             timer_on(true);
@@ -117,6 +119,7 @@ bool ps_update(bool display_on, bool ios_display, u32 now)
         if (enabled) {
             timer_on(false);
             mcu_screen_off(false);
+            pwr_display_change(false); /* opt-in: restore blocks before the mirror restarts */
             input_set_idle(false);
             gm_want(true);
         }

@@ -803,3 +803,115 @@ one 1 at `[wifi] link up`) with the default setting, and `0` / `0` with
 `wifi_led=0` in `boot.cfg` — no write of 1 in the latter run. Hardware check:
 the blue LED next to the power LED comes on when Settings joins a network and
 goes dark on "Turn Wi-Fi Off" or shutdown.
+
+## 15. Opt-in idle power policy and battery-life estimate (2026-11-26)
+
+The default 4.2.1 image is unchanged: the shipped `boot.cfg` has no
+`power_opt` or `idle_clock`, and the six boot-file hashes are the same as
+origin/main's. This section describes a developer opt-in for measuring and
+reducing idle draw.
+
+### 15.1 What QEMU and the drivers can and cannot tell us
+
+The MCU's register 0x0D (mirrored into `mcubox_t.batt_volt`) is a **voltage**,
+not a current, and QEMU's MCU model keeps it at a fixed 4200 mV. There is no
+fuel gauge with a current shunt in the emulator. So "mA" below is an
+**estimate from real activity counters times assumed currents**, not a
+measurement:
+
+| Input | Source |
+|---|---|
+| backlight / screen state | `mcubox_t.backlight` (`factor=0` = off) and `ps_off()` |
+| ARM9 duty | monitor loops/s, sleeps/s in `powersave.c` |
+| ARM11 duty and time base | shim stats `+0x4C` timer IRQ, `+0x78` VBlank, `+0x8C` `set_decrementer`, `+0x98` all IRQs; `[hb] clock` ratio against the ARM9 timer |
+| GPU | `gmbox_t.frames`, `mirror_busy`, `state` |
+| camera / CSND / Wi-Fi | `mcubox_t.als_state`, `aud_stat_t.state`, `netmbox_t.link/backend` |
+| battery | `mcubox_t.batt_percent`, `batt_volt`, `flags` (MCU regs 0x0A–0x0F) |
+
+`boot/common/power_model.h` (host-tested by `tests/test_power_model.py`) turns
+those into a current: 30 mA board baseline, ~9–17 mA ARM9, 23/37/50 mA ARM11
+at 268/536/804 MHz, 30 + up to 120 mA for the two LCD panels and their
+backlights, 25 mA for mirror frames, 25 mA for a camera, 10 mA for CSND, and
+70/30/15 mA for Wi-Fi linked (max performance / 802.11 power save) / powered
+but idle. Capacity is assumed to be **1300 mAh (Old) / 1750 mAh (New)**.
+
+### 15.2 Switches and build
+
+| Key | Default | Effect |
+|---|---|---|
+| `power_opt=1` | off | `[pwr]` line every 10 s; gate unused blocks at the `powersave=1` screen-off transition and restore them before the mirror restarts |
+| `idle_clock=1` | off | on a New 3DS at 804 MHz with `n3ds_l2=0`, switch to 536 MHz (PDN_LGR_SOCMODE 3) while the screen is off and back to 804 MHz (mode 5) on wake |
+
+Both keys are parsed by the ARM9 but default to 0. `IOS3DS_IDLE=1 make sdimg`
+adds them to a *developer* `boot.cfg` and compiles the extra GPU-part helper
+`kernel/shim/pica_idle.c`; the default build neither adds the keys nor
+compiles the helper. The helper rescales the MPCore timers (prescaler
+191/tick shift 1 → 255/0 and back), keeps `(count >> shift)` continuous, and
+rewrites the timer control words after the PDN handshake so the watchdog rate
+follows the new PERIPHCLK. XNU's 1,047,311 Hz time base is unchanged; the
+`[hb] clock` ratio must stay near 1000/1000 across both switches.
+
+While the screen is off, `power_opt=1`:
+- calls `mcu_set_als(false)` (New models): the inner camera's AE and its CAM
+  clock go to standby; wake restores `auto_brightness`;
+- clears `CSND_CNT` once the shim has stopped its channels (a stream started
+  while locked immediately restores it);
+- asks the AR6014 for WMI `REC_POWER` (1) and sends `MAX_PERFORMANCE` (2) on
+  wake — this needs a real Wi-Fi firmware; QEMU's paravirtual NIC ignores WMI;
+- clears `PDN_GPU_CNT` after the last mirror frame; the shim's GPU part
+  restores it on any GL request as well as on wake.
+
+### 15.3 QEMU results (not hardware measurements)
+
+- Old 3DS, opt-in image, `emu/soak.py --cycles 5 --icount 2 --require-app
+  --crashlogs`: **PASS**; `[pwr] screen on: ~181–182 mA` (7.1 h at the assumed
+  1300 mAh), `GPU clock gated`/`restored` around the lock round. `idle_clock`
+  is ignored on an Old model (logged once).
+- New 3DS, targeted lock/wake (`emu/run.py --new3ds --icount 2`, POWER at
+  150 s, HOME at 200 s): `[pwr] ARM11 clock 536 MHz (idle)` then `804 MHz`,
+  `[pica] idle clock: timer prescaler 191 -> 255, tick shift 1 -> 0`, the
+  reverse on wake, and `[hb] clock` ratios 1000/1000, 1000/1000, 999/1000
+  while the lower clock was active, including the wake switch. Screen on
+  ~165–232 mA (5.6–7.9 h Old, 7.5–10.6 h New assumed), screen off ~122 mA on
+  the first sample (a sound stream was still in flight) and ~86–110 mA once
+  the camera AE and CSND gates applied (10.5–15.2 h Old, 14.2–20.5 h New
+  assumed). All hours are model outputs, not measurements.
+- New 3DS 10-cycle `--require-app --crashlogs` soak with a 20 s long lock:
+  **PASS** (10 apps, 0 recoveries, lock round on the home screen). The settled
+  off line read `~85 mA modeled (15.2 h / 20.5 h assumed)`, against `~123 mA`
+  (10.5 h / 14.2 h) earlier in the same 20 s lock at 804 MHz, and the
+  `[hb] clock` ratio stayed at 999–1000/1000 through both clock switches.
+  Details in [re-log.md](re-log.md) `## NEXT.`.
+- Final opt-in Old 3DS soak with the hardened code: **PASS** (five apps,
+  0 recoveries), `[pwr] screen on ~181 mA` and `screen off ~112 mA`.
+  Fresh-image 4.1/3.1.3/2.2.1 soaks also PASS; none of them gets the opt-in
+  keys by default. `emu/lockburst.py` is not a useful gate for this policy:
+  its strict "no `ARM9 CPU again`" and end-brightness checks fail on a fresh
+  *default* image too (15 transient copy pauses) and on the opt-in image (2);
+  every pause is followed by `screen copy: PICA200`.
+
+These numbers are **not** a promise of console battery life. The emulator
+models no current and no battery discharge; the model's coefficients are
+round-number guesses. A hardware run must replace them.
+
+### 15.4 Hardware checklist
+
+1. Build with `IOS3DS_IDLE=1 make sdimg` (or add `power_opt=1`,
+   `idle_clock=1` to an existing card's `boot.cfg` only if the GPU helper was
+   compiled). Boot, open an app, lock and wake; `log.txt` must show
+   `[pwr] idle policy on`, a `[pwr]` line every 10 s, and (New 3DS) both
+   `ARM11 clock ...` lines. Check `[hb] clock` ratios stay near 1000/1000
+   and the status-bar clock keeps moving after the wake.
+2. With a current meter in series with the battery: log the current at the
+   home screen (brightness 0.5, GPU frames moving), after a 30 s lock with
+   `power_opt=0`, and with `power_opt=1`; then repeat on a New 3DS with
+   `idle_clock=0/1`, with Wi-Fi off/associated, and with Camera.app's ALS or
+   Music playing before the lock. Divide the measured mA into the real
+   battery capacity to replace the hours above. The QEMU counter values in
+   each `[pwr]` line identify which block accounts for any difference.
+3. Confirm the side effects: Camera.app still opens immediately after a wake
+   (ALS re-enable), Music keeps playing if locked during playback and sounds
+   again on wake (CSND guard), Wi-Fi reconnects after a long lock with
+   `REC_POWER`, and GL apps draw normally while the screen is off (the GPU
+   clock restore hook). If any fails, set `power_opt=0`; the 4.2.1 default
+   path never takes any of these branches.

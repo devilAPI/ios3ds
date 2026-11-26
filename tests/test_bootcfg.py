@@ -103,6 +103,15 @@ int main(void)
     parse("hwtest=2\n");
     CHECK(cfg.hwtest == 2);
 
+    parse("");
+    CHECK(cfg.power_opt == 0);                  /* opt-in idle policy, off by default */
+    CHECK(cfg.idle_clock == 0);
+    int w0 = warnings;
+    parse("power_opt=1\nidle_clock=1\n");
+    CHECK(cfg.power_opt == 1);
+    CHECK(cfg.idle_clock == 1);
+    CHECK(warnings == w0);                      /* both keys are known */
+
     printf("%s\n", fails ? "FAILED" : "ok");
     return fails != 0;
 }

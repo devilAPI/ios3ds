@@ -21,6 +21,7 @@ static u8 frame[NET_FRAME_MAX] __attribute__((aligned(4)));
 
 const u8 *ar6k_mac(void);
 int ar6k_command(const volatile wlan_cmd_t *c);
+int ar6k_power_mode(u8 mode);
 void ar6k_publish(volatile wlanmbox_t *w, u32 *published_scan);
 static u32 wlan_cmd_seen, wlan_scan_pub;
 
@@ -182,4 +183,20 @@ bool wifi_poll(void)
         busy = true;
     }
     return busy;
+}
+
+void wifi_idle(bool off)
+{
+    static bool last;
+    if (!be || off == last) return;
+    last = off;
+    if (be == &wifi_backend_ar6014) {
+        int r = ar6k_power_mode(off ? 1u : 2u);    /* REC_POWER / MAX_PERFORMANCE */
+        logp("[wifi] idle: WMI_SET_POWER_MODE %u (%s) while the screen is %s\n",
+             off ? 1u : 2u, r < 0 ? "not sent: firmware handshake not ready" : "sent",
+             off ? "off" : "on");
+    } else {
+        logp("[wifi] idle: %s backend ignores WMI power mode (%s)\n", be->name,
+             off ? "REC_POWER requested" : "max performance requested");
+    }
 }

@@ -24,6 +24,8 @@ typedef struct {
     u32 gyro;            /* 0: no gyroscope for iOS (docs/mcu.md section 11) */
     char gyro_axes[16];  /* iOS x,y,z from the gyro chip's axes, e.g. -y,x,z */
     u32 powersave;       /* 0: no power saving while iOS' screen is off */
+    u32 power_opt;       /* 1: opt-in idle power policy (docs/mcu.md section 15) */
+    u32 idle_clock;      /* 1: also lower the New 3DS ARM11 clock while the screen is off */
     u32 notify_led;      /* 1: notification LED blinks red on low battery */
     u32 wifi_led;        /* 1 (default): MCU Wi-Fi LED follows the link; 0 disables it */
     u32 diag;            /* 1: diagnostics on (boot-arg ios3ds_diag=1 for the test daemons, docs/boot-perf.md) */

@@ -41,6 +41,12 @@ SHIM_SIZE = 0x10000
 DEFAULT_CMDLINE = "rd=md0 debug=0x8 serial=1 amfi_allow_any_signature=1 cs_enforcement_disable=1 amfi_unrestrict_task_for_pid=1"
 
 
+def idle_enabled(version=versions.DEFAULT):
+    """Developer opt-in: idle power policy keys + shim helper (4.2.1 only)."""
+    return version == versions.DEFAULT and os.environ.get("IOS3DS_IDLE", "").lower() in (
+        "1", "yes", "on", "true")
+
+
 def align(x, a):
     return (x + a - 1) & ~(a - 1)
 
@@ -91,6 +97,11 @@ def build_shim(outdir, staging=None, version=versions.DEFAULT, virt_base=None):
         raise SystemExit("no arm-none-eabi toolchain (scripts/setup-toolchain.sh)")
     gcc, objcopy = m.group(1) + "gcc", m.group(1) + "objcopy"
     sd = os.path.join(ROOT, "kernel", "shim")
+    # Opt-in idle power policy. Off by default: no boot.cfg change, no extra
+    # shim source, and the six 4.2.1 hashes stay identical. IOS3DS_IDLE=1 adds
+    # the two keys to the generated boot.cfg and compiles the shim helper that
+    # rescales the MPCore timers for the New 3DS idle clock.
+    idle = idle_enabled(version)
     flags = ["-mcpu=mpcore", "-marm", "-mfloat-abi=soft", "-Os", "-ffreestanding", "-fno-builtin",
              "-fno-tree-loop-distribute-patterns", "-nostdlib", "-Wall", "-Wextra",
              # iOS' ABI lets callees clobber r9; keep our C code off it so calls into the kernel are safe
@@ -98,6 +109,8 @@ def build_shim(outdir, staging=None, version=versions.DEFAULT, virt_base=None):
              "-I" + os.path.join(ROOT, "boot", "common"),
              "-I" + sd,
              "-I" + os.path.join(ROOT, "tools", "ios3ds-pica", "include")]
+    if idle:
+        flags.append("-DIOS3DS_IDLE=1")
     if virt_base != VIRT_BASE:
         shim_va = virt_base + (SHIM_PA - PHYS_BASE)
         flags += ["-DIOS3DS_SHIM_VA=0x%08x" % shim_va,
@@ -115,6 +128,10 @@ def build_shim(outdir, staging=None, version=versions.DEFAULT, virt_base=None):
              os.path.join(ROOT, "tools", "ios3ds-pica", "src", "pica_drv.c"),
              os.path.join(ROOT, "tools", "ios3ds-pica", "src", "pica_mirror.c"),
              os.path.join(sd, "cam.c")]                     # camera data side (docs/camera.md)
+    if idle:
+        # pica_idle.c lands in the GPU part (link.ld matches *pica*.o); the
+        # main shim is untouched, so the default build keeps its hash.
+        srcs.append(os.path.join(sd, "pica_idle.c"))
     if versions.get(version).get("kernel_ifnet"):
         # iOS 2.x: the shim's own en0 (no IOUserEthernet); GPU part (*kif*.o)
         srcs.append(os.path.join(ROOT, "tools", "ios3ds-wifi", "shim", "kif_eth.c"))
@@ -448,6 +465,15 @@ def build(staging, outdir, cmdline=None, patches=True, verbose=True,
         "cmdline=%s" % (cmdline if cmdline is not None else DEFAULT_CMDLINE),
         "",
     ]
+    if idle_enabled(version):
+        # Developer-only image: the shipped default boot.cfg stays byte-identical.
+        cfg[cfg.index("powersave=1") + 1:cfg.index("powersave=1") + 1] = [
+            "# opt-in idle power policy (docs/mcu.md section 15): [pwr] telemetry,",
+            "# camera/CSND/Wi-Fi/GPU gating while the screen is off; idle_clock also",
+            "# needs this image's shim helper (New 3DS only)",
+            "power_opt=1",
+            "idle_clock=1",
+        ]
     if version != versions.DEFAULT:
         cfg.insert(1, "# iOS %s (%s)" % (version, versions.get(version)["build"]))
         # per-version boot.cfg values (scripts/versions.py); 4.2.1 has none

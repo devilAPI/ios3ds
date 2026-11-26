@@ -113,7 +113,16 @@ typedef struct {
        ARM9 can print 3D and 2D frame costs side by side */
     uint32_t st_n, st_sum, st_sum_3d;
     uint32_t fl_n, fl_sum, fl_sum_3d;
+#ifdef IOS3DS_IDLE
+    /* Opt-in idle policy only (scripts/mkboot.py IOS3DS_IDLE=1). Spare words
+       in the ARM9-owned line: the shim's GPU part restores PDN_GPU_CNT if a
+       GL request arrives while the ARM9 had gated the clock for a dark screen. */
+    uint32_t idle_gate;     /* 1 = clock gated by the ARM9 */
+    uint32_t idle_saved;    /* PDN_GPU_CNT value to restore */
+    uint32_t _r6[4];
+#else
     uint32_t _r6[6];
+#endif
 } gmbox_t;
 _Static_assert(sizeof(gmbox_t) == 256, "gmbox_t layout");
 

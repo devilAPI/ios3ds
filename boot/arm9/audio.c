@@ -50,6 +50,7 @@ static bool wait_clear(u8 page, u8 reg, u8 mask, u32 tries)  /* until (~reg & ma
 }
 
 static bool codec_ok;   /* audio_init found the CODEC: jack polling may write its registers */
+static bool csnd_idle_gated;  /* power_opt: CSND_CNT cleared while the screen is off */
 static u8 jack;         /* headphone state the CODEC is routed for */
 static bool hp_route = true;    /* boot.cfg hp_route: tell iOS about the jack (kernel/shim/audio.c hp_service) */
 static u32 hp_codec = 1;        /* boot.cfg hp_codec (audio.h) */
@@ -416,10 +417,23 @@ static void mic_poll(volatile aud_stat_t *st)
     }
 }
 
-void audio_poll(u32 shim_pa)
+static volatile aud_blk_t *aud_block(u32 shim_pa)
 {
     static volatile aud_blk_t *b;
     static bool searched;
+    if (!shim_pa) return NULL;
+    if (!searched) {                            /* aud_blk_t lives in the shim's .data */
+        searched = true;
+        for (u32 o = 0; o + sizeof(aud_blk_t) <= SHIM_BLK_OFF; o += 4) {
+            vu32 *w = (vu32 *)(shim_pa + o);
+            if (w[0] == AUD_CFG_MAGIC0 && w[1] == AUD_CFG_MAGIC1) { b = (volatile aud_blk_t *)w; break; }
+        }
+    }
+    return b;
+}
+
+void audio_poll(u32 shim_pa)
+{
     static u32 starts, stops, csnd, step = ~0u, hp_state, hp_vol = AUD_HPVOL_NONE;
     static bool depop_done;
 
@@ -429,13 +443,7 @@ void audio_poll(u32 shim_pa)
     }
     jack_poll();
     if (!shim_pa) return;
-    if (!searched) {                            /* aud_blk_t lives in the shim's .data */
-        searched = true;
-        for (u32 o = 0; o + sizeof(aud_blk_t) <= SHIM_BLK_OFF; o += 4) {
-            vu32 *w = (vu32 *)(shim_pa + o);
-            if (w[0] == AUD_CFG_MAGIC0 && w[1] == AUD_CFG_MAGIC1) { b = (volatile aud_blk_t *)w; break; }
-        }
-    }
+    volatile aud_blk_t *b = aud_block(shim_pa);
     if (!b) { mic_poll(NULL); return; }
     volatile aud_stat_t *s = &b->stat;
     mic_poll(s);
@@ -469,6 +477,31 @@ void audio_poll(u32 shim_pa)
     }
     if (s->csnd_starts != csnd) {
         csnd = s->csnd_starts;
+        if (csnd_idle_gated) audio_idle_gate(shim_pa, false);   /* iOS started sound while locked */
         if (!(b->cfg.flags & AUD_F_CSND)) log_warn("[audio] CSND disabled in the shim config\n");
+    }
+}
+
+bool audio_csnd_active(u32 shim_pa)
+{
+    volatile aud_blk_t *b = aud_block(shim_pa);
+    return b && (b->stat.state & 4u);
+}
+
+void audio_idle_gate(u32 shim_pa, bool off)
+{
+    volatile aud_blk_t *b = aud_block(shim_pa);
+    if (!b || !(b->cfg.flags & AUD_F_CSND)) return;
+    volatile vu16 *cnt = (volatile vu16 *)(CSND_PA + CSND_CNT);
+    if (off) {
+        if (csnd_idle_gated || (b->stat.state & 4u)) return;    /* never mute a live stream */
+        *cnt = 0;
+        csnd_idle_gated = 1;
+        logp("[audio] idle: CSND_CNT -> 0 (no output stream, screen off)\n");
+    } else if (csnd_idle_gated) {
+        *cnt = CSND_CNT_EN | CSND_CNT_RS_FILTER;
+        csnd_idle_gated = 0;
+        logp("[audio] idle: CSND_CNT -> %04x on wake (CSND %s)\n", (unsigned)*cnt,
+             (b->stat.state & 4u) ? "running" : "idle");
     }
 }

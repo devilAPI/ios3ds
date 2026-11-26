@@ -28,6 +28,7 @@
 #include "gyro.h"
 #include "camera.h"
 #include "powersave.h"
+#include "power.h"
 #include "exthid.h"
 #include "bootcfg.h"
 
@@ -487,6 +488,7 @@ static void __attribute__((noreturn)) monitor(const char *phase)
         /* power saving while iOS' screen is off (powersave.c, docs/mcu.md section 9) */
         if (ps_update(cfg.display_regs && display_active(cfg.display_regs), ios_display, clk_ticks()))
             last_blit = clk_ticks() - blit_gap;     /* woken: copy a fresh frame on the next loop */
+        pwr_poll(clk_ticks());      /* opt-in [pwr] telemetry and deferred GPU gating */
         io_recent = clk_ticks() - last_io < T9_HZ / 5;
         /* X: next screen mode (X is not forwarded to iOS as a button) */
         bool xdown = !(HID_PAD & HID_X);
@@ -1009,6 +1011,9 @@ void a9_main(int argc, char **argv)
     }
     stamp("Wi-Fi, audio, MCU, GPU set up");
     n3ds_setup();                   /* model, 804 MHz, L2, timer calibration (docs/n3ds.md) */
+    pwr_init(cfg.shim_pa, cfg.power_opt != 0 && cfg.powersave != 0,
+             (n3ds_res & N3RES_NEW) != 0, (n3ds_res & N3RES_804) != 0,
+             cfg.idle_clock != 0, cfg.n3ds_l2 != 0, T9_HZ);
     if (cfg.shim[0] && cfg.shim_pa)     /* SELECT+START word: outside shim.bin, whatever RAM held */
         *(vu32 *)(cfg.shim_pa + SHIM_PANIC_REQ) = 0;
     /* Ambient light only exists on New models; on an Old 3DS we do not even

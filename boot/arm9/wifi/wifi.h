@@ -108,3 +108,7 @@ void wifi_init(u32 scratch_pa, u32 scratch_len);
 /* Every monitor-loop iteration: one driver step + move pending frames.
    Returns true if it did work (the loop then skips its idle delay). */
 bool wifi_poll(void);
+/* Opt-in idle policy (boot.cfg power_opt=1): ask the AR6014 for WMI REC_POWER
+   (1) while iOS' screen is off and restore MAX_PERFORMANCE (2) on wake. QEMU's
+   paravirtual NIC ignores WMI; the log line still shows the request. */
+void wifi_idle(bool off);
