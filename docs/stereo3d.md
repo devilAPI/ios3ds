@@ -1,7 +1,8 @@
 # Experimental stereoscopic 3D home screen
 
-Status: **hardware path implemented, not yet confirmed on a console**. Off by
-default (`stereo3d=0`). Enabled with `stereo3d=1` in `sd:/ios3ds/boot.cfg`;
+Status: **merged on main (re-log 127): GPU stereo with no CPU read-back**;
+hardware path implemented and QEMU-soaked, **not yet confirmed on a console**.
+Off by default (`stereo3d=0`). Enabled with `stereo3d=1` in `sd:/ios3ds/boot.cfg`;
 the 3D slider must be above the bottom notch (MCU register 0x08 >= 16).
 The bottom screen and the touch map are unaffected. The GPU display mirror
 stays on: with the slider down (or a flat frame) the PICA200 copies the same
@@ -221,7 +222,8 @@ immediately and no stamp is recorded. With the flag on:
   most 120 columns per copy, and every 30 s the log adds
   `[monitor] stereo eye columns: N rebuilt, N reused`.
 
-Measured numbers are in docs/re-log.md, sections 90, 109 and NEXT.
+Measured numbers are in docs/re-log.md, sections 90, 109 and 127 (the merged
+GPU-present/batched-stamp round).
 
 ## 7. QEMU
 

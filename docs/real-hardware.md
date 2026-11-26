@@ -29,7 +29,7 @@ There is no software path back into NAND. The worst realistic outcome is a corru
 
 ## 3. Test stages
 
-Every stage writes to the screen and to `sd:/ios3ds/log.txt`. The previous run is kept as `log_prev.txt`, older runs as `logs/<date>_<time>.log` (newest 32). After each stage, power off and send `log.txt`.
+Every stage writes to the screen and to `sd:/ios3ds/log.txt`. The previous run keeps its name as `log_prev.txt`; older ones are *renamed* into `logs/<date>_<time>.log`, dated from that boot's RTC (`undated` without one), newest 32 kept. After each stage, power off and send `log.txt` (and a dated `logs/` file if the interesting boot was earlier). See §5 for the issue #1 follow-up checks.
 
 | Stage | How | Expected | If it fails |
 |---|---|---|---|
@@ -73,3 +73,21 @@ boot9strap then boots ios3ds directly. Our FIRM header sets boot9strap's screen-
 **Not tested on real hardware yet.**
 
 Building the launcher needs devkitARM + libctru: `source ../rockbox-3ds/scripts/env.sh && make -C tools/ios3ds-launcher`, then `make sd` adds `3ds/ios3ds.3dsx`.
+
+## 5. Issue #1 follow-up: four console checks (2026-11-26)
+
+All four changes are in the shipped default build. The log archive and safe
+mode were checked in QEMU, the Wi-Fi IE fix has a host test, and the
+`cam_test` reset has no console confirmation yet; a console log is what settles
+them (re-log 145).
+
+| Check | What to do | What the log should show |
+|---|---|---|
+| Home Wi-Fi IE fix | Join your WPA2 home network from Settings, with `diag=1`. Long country/HT IEs used to push the RSN IE out of the 76-byte scan record, making iOS treat the network as WEP. | `[wifi] connect ... (WPA2-PSK/CCMP)` and no `key type 2 / 13 bytes` line. If the IEs still overflow: `[wifi-diag] scan: N needed IE(s) did not fit`. Details: [wifi.md](wifi.md) §10.9. |
+| Log archive | Boot a few times, then look on the SD card. | `log.txt` and `log_prev.txt` keep their names; each older boot is a dated `logs/YYYY-MM-DD_HH-MM-SS.log` (newest 32). Send `log.txt` with an issue; send the dated file if the failure was in an earlier boot. |
+| Substrate safe mode | After a bad tweak or a forced panic leaves SpringBoard broken, hold **L** while the 3DS loads iOS (until `SAFE MODE` appears), or put `safe_mode=1` in `sd:/ios3ds/boot.cfg`; then remove the tweak in Cydia. | `safe mode (...)` from the ARM9 and `[safe] boot-arg ios3ds_safe=1 ...` in `log.txt`. SpringBoard's automatic safe start after two short runs does the same. This does not cover a hang in launchd before SpringBoard starts; see [cydia.md](cydia.md). |
+| `cam_test` reset | Boot once with `cam_test=1` in `boot.cfg`, then use Camera.app as after a normal boot. The ARM9 now resets the sensors and power-cycles the CAM blocks after the self-test. | `[cam-test] sensors reset ...` after the self-test, then a normal preview/photo; if Camera.app fails, attach `log.txt`. |
+
+Do not run SELECT+START (forced panic) or pull power during a Cydia install:
+an unclean rootfs can leave launchd unable to execute anything on the next
+boot. Safe mode skips tweaks, not a damaged disk.

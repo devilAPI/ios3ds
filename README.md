@@ -37,13 +37,12 @@ iOS boots to the home screen in about a minute. Apps open, Safari loads web page
 | ⚠️ | Headphone jack | iOS switches to headphones when plugged in, but 0.4.0 was silent in them; CODEC fix after 0.4.0 not yet confirmed, see [docs/audio.md](docs/audio.md) §4 |
 | 🧪 | Music app: a test song and your own songs | `install.py --music DIR` (or files in `SD/ios3ds/music/`): .mp3, .m4a (AAC/ALAC), .wav, .aif; [docs/audio.md](docs/audio.md) §10 |
 | 🧪 | Gyroscope (CoreMotion) | |
-| 🧪 | Stereoscopic 3D home screen (experimental, needs a console test) | `stereo3d=1` in `boot.cfg`; the GPU mirror builds both eyes and enables the barrier with the slider up; flat frames cost nothing extra; see [docs/stereo3d.md](docs/stereo3d.md) |
+| 🧪 | Stereoscopic 3D home screen (GPU stereo merged, needs a console test) | `stereo3d=1` in `boot.cfg`: the PICA200 builds both eyes from one uploaded frame and enables the barrier with the slider up, with **no per-frame CPU read-back** (batched alpha stamps); flat frames use the normal GPU mirror; see [docs/stereo3d.md](docs/stereo3d.md) |
 | 🧪 | Fake GPS location (CoreLocation) | set with `boot.cfg` `gps=` or `/usr/bin/ios3ds-gps` from a terminal; 1 Hz updates in apps, including Safari, see [docs/location.md](docs/location.md) |
 | 🧪 | Modern HTTPS: TLS 1.2/1.3 (TLSFix), current root certificates | Cydia, Safari and other apps; see [Limitations](#limitations) |
 | 🧪 | Cydia Substrate (tweaks) | pre-installed; installing tweaks no longer hangs the 3DS; tweaks load into SpringBoard and apps, see [docs/cydia.md](docs/cydia.md) |
 | 🧪 | New 3DS: 804 MHz CPU, C-stick, ZL/ZR | L2 cache optional, see [docs/n3ds.md](docs/n3ds.md) |
 | 🧪 | New 3DS: auto-brightness from the ambient light sensor | emulator only, off on Old models; `auto_brightness=0` to disable, see [docs/mcu.md](docs/mcu.md) §13 |
-| 🧪 | 3D screen (home screen only, experimental) | `stereo3d=1` + slider up; PICA200 two-eye mirror implemented, not yet confirmed on a console; see [docs/stereo3d.md](docs/stereo3d.md) |
 | ❌ | IR, NFC, video recording | currently unplanned |
 
 ✅ works on a real 3DS · ⚠️ works on a real 3DS with known problems · 🧪 works in the emulator, not yet confirmed on a console · ❌ not working / not supported
@@ -170,7 +169,7 @@ As with any homebrew, **back up your SD card** first. More: [docs/real-hardware.
 
 ## Troubleshooting
 
-- **Logs:** every boot writes **`sd:/ios3ds/log.txt`**, and the previous one is kept as `log_prev.txt`. Older boots are not deleted any more: they move to **`sd:/ios3ds/logs/`** as `YYYY-MM-DD_HH-MM-SS.log` (the 3DS clock when that boot started; the newest 32 are kept). Please [open an issue](https://github.com/devilAPI/ios3ds/issues/new/choose) and attach `log.txt`.
+- **Logs:** every boot writes **`sd:/ios3ds/log.txt`**, and the previous one is kept as `log_prev.txt` (the tools read those names). At mount, the older `log_prev.txt` is *renamed* into **`sd:/ios3ds/logs/`** as `YYYY-MM-DD_HH-MM-SS.log`, dated from that boot's own RTC line (`undated` if there was none); the newest 32 are kept. Please [open an issue](https://github.com/devilAPI/ios3ds/issues/new/choose) and attach `log.txt`, plus a dated file from `logs/` if the problem was in an earlier boot.
 - **Crash reports:** when an app or SpringBoard dies, iOS writes a `.plist`, `.crash` or `.panic` file into `sd:/ios3ds/rootfs.hfs` at `/private/var/mobile/Library/Logs/CrashReporter`. To send them, put the SD card in your PC and run `python3 scripts/crashlogs.py /path/to/SD_CARD crash-reports` (Linux: the whole card device, e.g. `/dev/sdX`; macOS: `/dev/disk2`) or point the script at a copy of `ios3ds/rootfs.hfs`. It writes every report into `crash-reports/` and prints the file names; attach those files to the issue. It only reads the image; for a raw card image it makes a temporary 1 GiB copy of the iOS disk under `build/` (`--tmpdir` changes that), because the HFS+ editor needs a plain file. The card itself is never written. Needs `build/tools/hfsplus` (`make hfsplus`) and `mtools`.
 - **Settings:** they live in **`sd:/ios3ds/boot.cfg`**, a text file. Useful switches:
 
@@ -180,12 +179,13 @@ As with any homebrew, **back up your SD card** first. More: [docs/real-hardware.
   | `ca_gpu=0` | draw the iOS interface in software (slower) |
   | `screen=0/1/2` | start in screen layout top / both / bottom |
   | `camera=0`, `gyro=0`, `hp_route=0` | turn off the cameras, the gyroscope, or headphone switching |
+  | `cam_test=1` | run the ARM9 camera self-test before XNU; sensors and CAM blocks are reset afterwards before iOS starts (hardware check still pending; see [docs/camera.md](docs/camera.md)) |
   | `gps=52.5200,13.4050` | report a fake location to apps (latitude,longitude[,accuracy in metres]); empty = off |
   | `wifi_led=0` | don't light the console's Wi-Fi LED while connected |
   | `boot_delay=0` | skip the 1 s wait before XNU (or press **A** during it); the old name `countdown_ms` still works |
   | `diag=1` | extra diagnostics in the log |
   | `safe_mode=1` | no Cydia Substrate tweaks this boot (same as holding **L** while the 3DS loads iOS); see the FAQ |
-  | `stereo3d=1` | experimental stereoscopic 3D home screen (PICA200 two-eye mirror + barrier; needs a console test); flat frames use the normal GPU mirror |
+  | `stereo3d=1` | stereoscopic 3D home screen (merged GPU stereo: PICA200 two-eye mirror + barrier via GPU present, no CPU read-back; needs a console test); flat frames use the normal GPU mirror |
 
 ### FAQ
 
@@ -211,12 +211,16 @@ As with any homebrew, **back up your SD card** first. More: [docs/real-hardware.
   credits before the chip was ready; fixed after 0.4.0 (issue #11). Any other
   `FAILED in stage ...` line, or a red `Wi-Fi fw:` line from the launcher, is
   a different problem — attach the whole log.
+- **A home WPA2 network joins as WEP, or the log says `key type 2 / 13 bytes`?** A long country/HT IE list could push the RSN/WPA IE out of the ARM9's 76-byte scan record, so iOS saw the privacy bit without RSN and sent the password as a WEP key. The scan record now copies SSID, rates, DS, RSN, WPA and extended-rate IEs first; an overflow that still cannot fit logs `[wifi-diag] scan: N needed IE(s) did not fit`. The fix has a host test but no console join report yet — attach `log.txt` with the network's security mode and channel (no password needed); see [docs/wifi.md](docs/wifi.md) §10.9.
+- **Camera fails after a boot with `cam_test=1`?** After the self-test the ARM9 now soft-resets every sensor, power-cycles the CAM blocks and probes again, so iOS starts as after a `cam_test=0` boot. This reset is not yet confirmed on a console; attach `log.txt` and look for `[cam-test] sensors reset ...` (re-log 145).
 - **A tweak broke SpringBoard / the 3DS no longer boots after installing one?**
   Hold **L** while the 3DS loads iOS (until `SAFE MODE` shows on the top
   screen), or put `safe_mode=1` into `boot.cfg`: Substrate tweaks are not
   loaded in SpringBoard or any app, so you can remove the tweak in Cydia.
   Without that, if SpringBoard dies twice in a row within 90 s of starting,
-  its next start is a safe one by itself (`[safe]` lines in `log.txt`).
+  its next start is a safe one by itself (`[safe]` lines in `log.txt`). This
+  only skips Substrate tweaks; a boot that hangs in launchd before SpringBoard
+  starts is not covered (see [docs/cydia.md](docs/cydia.md)).
   Pressing SELECT+START (the forced panic) or pulling power while Cydia or a
   tweak writes files can leave iOS's disk inconsistent; let installs finish
   and use the iOS power-off slider where you can.
@@ -249,7 +253,7 @@ rebooting; details and limits: [docs/location.md](docs/location.md).
 - **Cameras:** 320×240 preview at about 12 fps (photos are scaled up from it); no video recording and no 3D photos.
 - **Home-screen wallpaper:** not present on the iPod touch 2G in stock iOS 4.2.1 (Apple enabled it on newer devices); the lock screen does show the wallpaper you pick in Settings. See the [FAQ](#faq).
 - **Updates rebuild the iOS disk:** user data (settings, saved Wi-Fi networks and passwords, photos, voice memos, preferences) is carried over automatically by the installer; installed Cydia packages and the Music library are not (reinstall packages after updating). Use `--fresh` (installer) to start with a clean disk.
-- **No hardware for:** Bluetooth (the 3DS has none), GPS, IR, NFC. The 3D screen path (PICA200 two-eye mirror) is implemented but not yet confirmed on a console ([docs/stereo3d.md](docs/stereo3d.md)). A user-set fake location works in CoreLocation apps ([docs/location.md](docs/location.md)).
+- **No hardware for:** Bluetooth (the 3DS has none), GPS, IR, NFC. The 3D screen path (PICA200 two-eye mirror, GPU present with no CPU read-back) is merged but not yet confirmed on a console ([docs/stereo3d.md](docs/stereo3d.md)). A user-set fake location works in CoreLocation apps ([docs/location.md](docs/location.md)).
 - **Leaving iOS:** a short POWER press locks/unlocks; holding it for about 3 s now starts iOS's own clean shutdown (the same path as "slide to power off") and switches the 3DS off through the MCU. Holding it for ~10 s still forces a hard power cut if iOS is stuck. Apple's boot-time `fsck` cannot check the root disk (`/dev/md0` is already mounted, `EBUSY`); the ARM9 instead logs at boot whether `rootfs.hfs` was cleanly unmounted and sets that flag after a clean shutdown ([docs/mcu.md](docs/mcu.md) §12). A hard cut can still damage files: back up your card.
 - **Not supported:** activation, iTunes sync and the data-protection keybag are stubbed out.
 
@@ -290,12 +294,14 @@ make test                                            # offline unit tests
 
 Experimental: `make sd IOS=VERSION` selects another iPod2,1 firmware from
 `scripts/versions.py` (firmware staged under `build/fw-VERSION/`); 4.2.1 stays
-the default and unchanged. See [docs/multi-version.md](docs/multi-version.md) —
-4.1 boots to the home screen in QEMU (Cydia/TLSFix are disabled there), while
-the older 3.1.3 and 2.2.1 builds are earlier bring-up experiments. 3.1.3 uses
-software CoreAnimation and the ARM9 screen copy by default; for a console test
-of its experimental PICA200 compositor, build with
-`IOS3DS_GPU313=1 make sd IOS=3.1.3` (slower in QEMU, not the default).
+the default and unchanged. In QEMU, **4.1, 3.1.3 and 2.2.1 all boot to the home
+screen, open apps and pass fresh-image soaks**; none of these three has been
+tested on a real console. Cydia is installed on all three: 4.1 and 3.1.3 use
+the 4.x package set (TLSFix only on 4.1), and 2.2.1 uses Cydia 1.0.3222 with no
+default source. 3.1.3 uses software CoreAnimation and the ARM9 screen copy by
+default; for a console test of its experimental PICA200 compositor, build with
+`IOS3DS_GPU313=1 make sd IOS=3.1.3` (slower in QEMU, not the default). The
+per-version driver status is in [docs/multi-version.md](docs/multi-version.md) §6.9.
 
 Optional:
 - `make qemu` builds the emulator, about 10 minutes.
@@ -310,7 +316,7 @@ Optional:
 | | |
 |---|---|
 | [architecture.md](docs/architecture.md) | boot chain, memory map, every hardware bridge |
-| [multi-version.md](docs/multi-version.md) | other iOS versions (experimental `IOS=4.1` build), 1.x feasibility |
+| [multi-version.md](docs/multi-version.md) | other iOS versions (4.1/3.1.3/2.2.1 QEMU status and driver matrix), 1.x feasibility |
 | [real-hardware.md](docs/real-hardware.md) | testing safely on a console |
 | [emulator.md](docs/emulator.md) | the QEMU `nintendo3ds` machine, Azahar |
 | [gpu.md](docs/gpu.md) · [pica200.md](docs/pica200.md) | OpenGL ES engine, CoreAnimation and the screen copy on the PICA200 |

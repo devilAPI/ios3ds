@@ -12,6 +12,11 @@ original repository, check every file against a pinned sha256, and unpack them
 into the rootfs image. Without network the image is built without Cydia (one
 warning line), never fails.
 
+The same installer covers the experimental older builds (all **QEMU only,
+not yet tested on hardware**): 4.1 uses this package set with its own virtual
+package versions, 3.1.3 uses it without TLSFix, and 2.2.1 uses an iPhone OS 2
+set (Cydia 1.0.3222 with no default source) described below.
+
 ## What gets installed
 
 `rootfs/cydia.json` pins 35 packages: Cydia and the closure of its `Depends`/
@@ -177,8 +182,13 @@ first:
   flag goes and the next respring tries the tweaks again.
 
 What it cannot catch: a boot that hangs before SpringBoard starts (launchd or
-a daemon). Tweak daemons that Cydia installs (e.g. `sbsettingsd`,
-`rocketd`) are ordinary launchd jobs and are not affected by safe mode.
+a daemon). A dirty rootfs after a forced panic or power cut can hang launchd
+the same way; safe mode skips tweaks, it does not repair the disk. Tweak
+daemons that Cydia installs (e.g. `sbsettingsd`, `rocketd`) are ordinary
+launchd jobs and are not affected by safe mode. This is a 4.x/Substrate
+feature: 3.1.3 and 2.2.1 install Cydia but no Substrate, so there are no
+tweaks to disable there. The console checklist is in
+[real-hardware.md](real-hardware.md) §5.
 
 ## What the build does (scripts/cydia.py)
 

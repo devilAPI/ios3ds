@@ -1,14 +1,14 @@
 # Multi-version support: research and design (stage 1)
 
-Status: **design only** for the 1.x backend (not implemented in this task). The
-4.2.1 path stays the default and must stay byte-identical. Stage 2 added the
-version switches; stages 3–4 brought up iOS 4.1 in QEMU to the home screen
-(§5.5), with the remaining blockers recorded at the end of this document.
+Status: **design only** for the 1.x backend (not implemented). The 4.2.1 path
+stays the default and byte-identical. Stage 2 added the version switches; later
+rounds brought 4.1, 3.1.3 and 2.2.1 to the home screen with working apps in QEMU
+(§5.5, §6, §6.9). Those three versions are **QEMU only, not yet tested on
+hardware**; only 4.2.1 has console evidence.
 
-Legend: **[V]** = verified in this task (a fetched API response, a file in
-this repository, or an actual build/boot); **[G]** = reasoned guess, needs a
-firmware and a test before it can be relied on. Nothing in this document is
-claimed as tested on real 3DS hardware for other iOS versions.
+Legend: **[V]** = verified (a fetched API response, a file in this repository,
+or an actual build/boot in QEMU); **[G]** = reasoned guess, still needs a test.
+The older sections below are the bring-up history; the current state is §6.9.
 
 ## 1. Which firmwares exist for the iPod touch 2G (iPod2,1 / N72AP / S5L8720)
 
@@ -383,7 +383,8 @@ Blockers found and resolved:
    were rewritten to "4.1"/"8B117" in the overlay where that patch is used.
 5. **Cydia/TLSFix.** **[V]** The downloaded 4.2.1 packages are not used for
    4.1; the overlay disables them. All userland binaries still come from
-   `make userland` and are ABI-tested only on 4.2.1.
+   `make userland` and are ABI-tested only on 4.2.1. (Stage-3 state: re-log 131
+   later enabled Cydia and TLSFix on 4.1; see §6.9.)
 
 ### 5.3 Boot result (4.1, QEMU `nintendo3ds`, `--icount 2`)
 
@@ -407,12 +408,13 @@ screen (md0 strategy is still unpatched, so the root disk is not really read).
 Adding the relocated `mdevstrategy` patch reaches `BSD root: md0` and then
 takes an undefined-instruction exception at `pc 0xc38b3e94`, inside the fake
 GPIO register page — a 4.1-specific interrupt/function-pointer path we have not
-untangled. No 4.1 home screen yet. See `build/emu-4.1/last-4.1-log.txt` for the
-full panic dump (build/ artifacts are not committed).
+untangled. That was the stage-3 state; §5.5 and re-log 131 later reached the
+home screen. See `build/emu-4.1/last-4.1-log.txt` for the full panic dump
+(build/ artifacts are not committed).
 
-Remaining blockers found in this run, all **[V]** unless marked (items 1–2
+Remaining blockers found in that run, all **[V]** unless marked (items 1–2
 were diagnosed and fixed in §5.5 — they were shim KPI addresses, not kernel or
-device-tree bugs):
+device-tree bugs; the rest were closed by re-log 131/139/140):
 
 1. The optional 4.1 kernel patches need per-subsystem validation; at least one
    of the six relocated CLCD/audio/I2C patches causes the early
@@ -557,17 +559,20 @@ startup, `[mcud]`, `[gl]` CA compositor on the PICA200, heartbeat at t=60 s
 **0** fatal exceptions. Screenshot: `build/fw-4.1/run-final41b/screen_120.0s.png`
 (build/ artifacts are not committed).
 
-Remaining known limits: Cydia/TLSFix are disabled for 4.1 (their 4.2.1 packages
-are in the overlay's skip list); six dyld-cache patches and six 4.1 kernel
-patches from §5.2/§5.3 are still skipped; the 4.2.1 userland binaries and our
-private-API hooks are only ABI-tested on 4.2.1.
+Remaining known limits **at that stage**: Cydia/TLSFix were disabled for 4.1
+(their 4.2.1 packages were in the overlay's skip list); six dyld-cache patches
+and six 4.1 kernel patches from §5.2/§5.3 were skipped. Re-log 131/139/140
+later enabled Cydia/TLSFix, the gyro and CLCD patches; only the BUID identity
+lookup is still unmapped (§6.8, §6.9).
 
 ## 6. Older iPod2,1 firmwares: 3.1.3 (7E18) and 2.2.1 (5H11a)
 
 Continues §5.5. Everything in this section was built and booted in QEMU from
 Apple files under `build/fw-3.1.3/` and `build/fw-2.2.1/`; no Apple files are
 committed. **[V]** marks a verified build/boot/byte check, **[G]** a reasoned
-conclusion that still needs more work.
+conclusion that still needs more work. Sections 6.1–6.7 are the first bring-up
+history (including stops that were later fixed); the current state is §6.9.
+None of these versions has been tested on a real console.
 
 ### 6.1 Firmware source and prep
 
@@ -714,12 +719,13 @@ time by `kernel/patcher.py`. Examples where offsets moved:
   without a lockdownd.
 - **[V]** Our userland binaries are ARMv6 Mach-O linked against 4.2.1's
   exported symbol list (`scripts/ios-sdk-symbols.json`) and use private APIs
-  (IOSurface, IOKit, Celestial, CoreMotion, Substrate). They are **not**
-  installed on either old build: Darwin 10.0 renamed/moved many of those
+  (IOSurface, IOKit, Celestial, CoreMotion, Substrate). At this stage they
+  were **not** installed on either old build: Darwin 10.0 renamed/moved many of those
   selectors, and Darwin 9 lacks several frameworks entirely. A real port needs
   a per-version stub-symbol list generated from that rootfs, a version-tagged
   subset of tools (applog/input/mcu first, GL/gps/camera later), and install-
-  time missing-symbol checks. Cydia and TLSFix stay disabled for both versions.
+  time missing-symbol checks. Cydia and TLSFix were disabled at this stage;
+  re-log 131/146 later installed Cydia on both (TLSFix still absent on 3.x/2.x).
 
 ### 6.6 Boot results and exact blockers
 
@@ -790,70 +796,68 @@ here produce the same bytes.)
 
 ### 6.8 4.1 open items (resolved, re-log 131 "iOS 4.1 completeness")
 
-All items below were ported or shown unnecessary; kept for the history.
+Historical list, kept for the evidence. All items below were ported or shown
+unnecessary; the "still open" wording is the state before re-log 131/139/140,
+not the current build (§6.9).
 
-- **Cydia/TLSFix:** still disabled. The downloaded `.deb` files and Substrate
-  tweak are built against 8C148's dyld cache and SpringBoard; making a 8B117
-  set needs new packages and a 4.1-specific install recipe, not a flag.
-  Needed for HTTPS in Cydia/Safari on 4.1, not for booting.
-- **Six skipped kernel patches** (`gyro-usage`, `gyro-dispatch`, CLCD
-  backlight log-enable and retry-off, clock voltage lookup, IORTC wait
-  literal): gyro only for CoreMotion, CLCD ones cosmetic/wake, the last two
-  can add boot/shutdown waits but the MCU shim already supplies time. None is
-  needed for the home screen 4.1 already reaches.
-- **Six skipped dyld patches:** `lockdown_copy_buid_identity` and
-  `lockdown_copy_value`'s lookup body/string table (the activation table was
-  replaced wholesale in §5.5, so only the BUID identity lookup is still
-  open), VirtualAudio routing, CoreMotion capability mask, MusicLibrary
-  signing check. Needed for activation, audio routing, gyro and Music
-  respectively; not for the home screen.
+- **Cydia/TLSFix:** were disabled here. The base 4.2.1 package set also works
+  on 8B117; re-log 131 enabled Cydia and TLSFix and gave 4.1 its own virtual
+  package versions. Not needed for booting.
+- **Six skipped kernel patches:** `clkctl-voltage-quiet` and `iortc-wait-mcu`
+  were ported in re-log 131; `gyro-usage`/`gyro-dispatch` and
+  `clcd-backlight-log-enable` in re-log 139/140. `clcd-backlight-retry-off`
+  is unnecessary on 8B117 (no pending-flag/retry loop). None was needed for
+  the home screen.
+- **Six skipped dyld patches:** `lockdown_copy_buid_identity` turned out not to
+  exist on 8B117; the `lockdown_copy_value` lookup/table were already replaced
+  in §5.5, VirtualAudio routing, the CoreMotion mask and the MusicLibrary
+  signing check were ported in re-log 130/131/139. Not needed for the home
+  screen.
 
-### 6.9 Current status and userland/driver matrix (2026-11-25)
+### 6.9 Current status and driver matrix (2026-11-26)
 
-| Version | QEMU state | Fresh-image soak |
-|---|---|---|
-| 4.2.1 (8C148) | home screen, apps, input, Cydia/TLSFix | **PASS** (5 cycles) |
-| 4.1 (8B117) | home screen, apps, input, Cydia/TLSFix (APT against the local repo, Cydia opens); all re-log 101/111 open items resolved (re-log 131, iOS 4.1 completeness) | **PASS**, 10 cycles with `--require-app` |
-| 3.1.3 (7E18) | **home screen, apps open and render, clock runs, taps, buttons, lock/wake and brightness (re-log 132).** DataMigrator skipped (`SBLastSystemVersion`), shim `mrs sp,spsr` IRQ replay, 822-slot GSEvent input daemon; software CoreAnimation + ARM9 screen copy by default, PICA200 path opt-in with `IOS3DS_GPU313=1` at build time (re-log 135) | **PASS**, 5 cycles with `--require-app` on the default image; GPU-opt-in image also soaked (re-log 135) |
-| 2.2.1 (5H11a) | **home screen, apps open and render, taps and buttons, battery, lock/wake and brightness (re-log 132).** Kernel `cs-invalid-page-allow`, fixed liblockdown stubs, `CA_ENABLE_MBX2D=0`, 2.x tool ABI (classic binding, r9, 48-byte GSEvents) | **PASS**, 10 cycles with `--require-app` |
+| Version | QEMU state | Fresh-image soak | Hardware |
+|---|---|---|---|
+| 4.2.1 (8C148) | home screen, apps, input, Cydia/TLSFix | **PASS**, 5 cycles | the default build; console evidence in `docs/hwlogs/` |
+| 4.1 (8B117) | home screen, apps, input, Cydia/TLSFix; Wi-Fi/Safari, gyro, camera chip init | **PASS**, 10 cycles with `--require-app` | **QEMU only, not yet tested on hardware** |
+| 3.1.3 (7E18) | home screen, apps, input, clock, lock/wake, brightness; software CA + ARM9 copy by default, PICA200 path opt-in (`IOS3DS_GPU313=1`, re-log 135) | **PASS**, 5 cycles with `--require-app`; GPU-opt-in image also soaked | **QEMU only, not yet tested on hardware** |
+| 2.2.1 (5H11a) | home screen, apps, input, battery, lock/wake, brightness; `cs-invalid-page-allow`, fixed liblockdown stubs, `CA_ENABLE_MBX2D=0`, 2.x tool ABI | **PASS**, 10 cycles with `--require-app` | **QEMU only, not yet tested on hardware** |
 
-Driver matrix (QEMU-verified unless marked [G]; "off" = cleanly not installed
-or not registered, with the reason):
+Every entry for 4.1/3.1.3/2.2.1 in the matrix below is **QEMU only, not yet
+tested on hardware**. The 4.2.1 column is the shipped default: it has console
+logs where noted (the mic and gyro still have no console run there either).
+"n/a" means the firmware or app has no such feature; "off" means cleanly not
+installed or not registered, with the reason.
 
-| Driver | 3.1.3 | 2.2.1 |
-|---|---|---|
-| Touch + Home/Power/volume buttons | works: `ios3ds-input -DINPUT_IOS3`, GSEvents to PurpleSystemEventPort | works: `-DINPUT_IOS2` (48-byte records), 2.x link |
-| Display | default: software CA, ARM9 CPU copy every frame (`gpu_mirror=0`); opt-in `IOS3DS_GPU313=1`: CA on the PICA200, GPU mirror | works: software CA, ARM9 CPU copy every frame |
-| GPU (PICA200) | **off by default** (slower in QEMU, re-log 135). Opt in with `IOS3DS_GPU313=1` at build time: CoreAnimation renders through `MBXGLEngine -DGL_IOS3` (QuartzCore `new_server` asked EAGL for API 2, which 7E18 OpenGLES never gives the MBX engine; patched to API 1), mirror on, `[gl] CA compositor: OpenGL ES on the PICA200`; [G] hardware speed not measured. The mirror also treats a CLCD switch to another IOSurface as a new frame, so a late swap after Home is not dropped (kpi flag `clcd_swap_dirty`) | off: 2.x OpenGLES.framework *is* the IMG MBX driver (no engine bundle); a GL engine means replacing the framework (EAGL classes + ~214 GLES/IMGegl exports) with one built on the ios3ds GL core: possible, not done |
-| Battery | works: shim IOPMPowerSource, refreshed by mcud polling | works: shim IOPMPowerSource; kernel patch `audio-pm-msg-no-store` (AppleEmbeddedAudio's PM handler zeroed IOPMrootDomain's retain count) and the Darwin 9 vtable bias (`IOS3DS_KPI_VT_BIAS`); level + charging in the status bar and on the lock screen |
-| Volume slider | works: mcud `-DMCU_OLD` → AVSystemController | works (same) |
-| No-sleep assertion | works: mcud | works: mcud |
-| Lid (shell close/open) | works: close = Lock (POWER tap) + LCDs off, open = Home tap + LCDs on (needs the mcud backlight above) | works: same |
-| Lock / auto-lock | works: kernel patch `s5l-perf-nowait` (the clock controller's performance-state wait blocked the CLCD wake); SELECT/POWER lock, Home wakes, slide unlocks; SpringBoard's default auto-lock | works: same (5H11a patch at 0xc05e2b40) |
-| Brightness | works: mcud `-DMCU_OLD` reads `SBBacklightLevel2` (Settings slider) from mobile's springboard plist, factor 0 while the screen is off; auto-brightness (New 3DS camera ALS) on top | works: same |
-| Accelerometer / gyro | accelerometer works (Apple's AppleLIS302DL on the emulated LIS302DL, as 4.2.1): SpringBoard orientation 0→1→4, Safari turns to landscape. Gyro: n/a (no CoreMotion before 4.0) | accelerometer works (next section): 5H11a's AppleLIS302DL probes reg 0x0f, powers the emulated LIS302DL (CTRL_REG1 0x40), samples the MCU and moves SpringBoard's orientation 0→4 with `mcu-orient`. The re-log 135 "no transfer" claim was a false negative. [G] Safari window rotation not screenshot-tested on 2.x QEMU. Gyro: n/a |
-| Audio | works in QEMU: speaker output (UI sounds, `ios3ds-tone`; DMA TC IRQs injected through the version's IRQ path), volume → CSND, mic input via the VirtualAudio N82-slot swap at unity gain (re-log 130); [G] real sound, headphones, keyboard click; test song not shown (4.x library format) | works in QEMU: mediaserverd runs and reaches IOAudio/I2C, `ios3ds-tone` output streams with TC IRQs and a 5999-peak CSND WAV (re-log 134). no mic route: the 0x9a358 product swap breaks category activation and was removed; headset-jack emulation still reports no input. Three product-table/ID variants were built and tested (next section): category can be repaired but the N72 routing database still has no built-in-mic port, so `input available 0` remains. [G] hardware headset test, real sound |
-| Wi-Fi (`ios3ds-wifid`/a80211) | works: Settings toggle/scan/WPA2 join/DHCP, auto-join from the keychain, status-bar bars, Safari loads pages including the first cold page (the earlier first-page ENOMEM/EINVAL was the test harness opening p1 before DHCP, re-log 143); shim mailbox VA from the KPI base, 3.x event device + 144-byte scan results (re-log 133) [G] | works in QEMU: shim-registered Darwin 9 ifnet en0 (`kern.ios3ds_eth`, GPU part, 2.x only), preferences.plist DHCP service, 2.x a80211 in configd + SpringBoard/apps (Aeropuerto, AirPortSettings): wifi.cfg join + DHCP/DNS/HTTP, Settings scan/WPA2 join, Safari loads a typed URL (docs/wifi.md 11) [G] |
-| Camera (`vcd`) | n/a: iPod2,1 7E18 has no Camera.app and no MediaCapture plugin (Camera.framework/Celestial capture code exists but has no driver to bind); a 3DS camera here means a new capture stack, not a driver | n/a: same |
-| GPS | partial: `ios3ds-applog` hooks work on 3.x (2.0 `CLLocation` initializer, instance `-locationServicesEnabled`): `ios3ds-gpstest` gets 52.52,13.405 at 1 Hz. Maps and MobileSafari now load applog through an `LC_LOAD_DYLIB` added to their executables (re-log 139): QEMU confirms `[applog] Maps … GPS hooks installed`, but map tiles/fix circle need a console/network test. No `/bin/sh`, so `ios3ds-gps set` from gpstest fails | partial: same, with 2.x builds (dylib glue `-DDYLD2_DYLIB`); `[applog] Maps pid …` verified in QEMU after the same executable injection |
-| Cydia / TLSFix | Cydia 1.1.30 + APT/dpkg installed and Cydia opens [V]; TLSFix left out (needs Substrate via ios3ds-applog, not installed on 3.x); refresh untested (Wi-Fi works on 3.1.3 since re-log 133, refresh not tried) | works in QEMU: Cydia 1.0.3222-73 + APT 0.7.25 / dpkg 1.18 from its own set `rootfs/cydia-2.x.json` (re-log 146, Cydia on 2.2.1): icon on page 1, opens straight to its Home tab; with Wi-Fi it loads cydia.saurik.com's home page ("This version of Cydia is no longer supported"), offline "Unable to Load"; Sections lists the installed set. Cydia's /var/stash "Reorganizing" check patched out, role preset to User, no default source (Telesphoreo offers an Essential Upgrade to 1.1.30, which froze the UI in QEMU). TLSFix/Substrate: n/a. [G] hardware launch, refresh/install against a user-added source |
+| Feature | 4.2.1 (default) | 4.1 (8B117, QEMU only) | 3.1.3 (7E18, QEMU only) | 2.2.1 (5H11a, QEMU only) |
+|---|---|---|---|---|
+| Home screen, apps, input | boots, apps open, touch/buttons, hardware logs | home + stock apps; 10-cycle `--require-app` soak; 4.x input daemon | home + stock apps, clock and taps; 5-cycle soak; `-DINPUT_IOS3` GSEvents | home + stock apps and taps; 10-cycle soak; `-DINPUT_IOS2` (48-byte records, classic binding, r9) |
+| Lock / wake / auto-lock | confirmed on hardware; SELECT/POWER + Home | works: `s5l-perf-nowait` already present, 4.x input/mcud; CLCD backlight log nopped (re-log 140) | works: `s5l-perf-nowait`, SELECT/POWER lock, Home wakes, slide unlocks (re-log 132) | works: same patch at 0xc05e2b40, SpringBoard's default auto-lock |
+| Lid / brightness / battery | confirmed on hardware | lid lock/wake and battery registered (`IOPMPowerSource`), 4.x brightness path | lid close = Lock + LCD off, open = Home + LCD on; mcud `-DMCU_OLD` reads `SBBacklightLevel2`; battery via shim IOPMPowerSource | same, plus kernel `audio-pm-msg-no-store` and Darwin 9 vtable bias; battery level/charging in status bar and lock screen |
+| Sound (speaker, volume) | hardware-confirmed | speaker output and volume as on 4.2.1 (re-log 131) | UI sounds and `ios3ds-tone` output with DMA TC IRQs through the 3.x IRQ path; volume → CSND (re-log 130) | mediaserverd reaches IOAudio/I2C; `ios3ds-tone` output peak 5999 with TC IRQs (re-log 134); no boot UI sound |
+| Microphone | QEMU Voice Memos ALAC; no console mic log | `ios3ds-tone rec`: sine 440 Hz, 88200/88200 frames, 4.x gain (re-log 134) | same, unity gain via `mic_gain_q15=32768`; route `SpeakerAndMicrophone` | **off**: no VirtualAudio patch (the product swap breaks category activation); N72 routing database has no built-in mic, `input available 0`. Needs a wired 3-contact headset test on hardware (re-log 134/138) |
+| Wi-Fi + Safari | WPA2 join and Safari confirmed on hardware | 4.2.1 tools unchanged: `wifi_test` 20/20, Settings join 8/8, Safari 3/3 pages including the cold page once `ios3ds_urlwait` is set (re-log 133/143) | shim mailbox VA + 3.x event device/144-byte scans: `wifi_test` 20/20, Settings join 8/8, Safari 3/3 pages, keychain auto-join | shim Darwin 9 ifnet en0 + Aeropuerto/AirPortSettings: `wifi_test` PASS, Settings join 8/8, Safari typed URL loads; no 2.x `safari_test` build (re-log 144, docs/wifi.md §11) |
+| Accelerometer | hardware-confirmed rotation | kernel AppleLIS302DL route, SpringBoard orientation 0→3, Safari landscape | orientation 0→1→4, Safari turns landscape | works: probe, samples and orientation 0→4 (re-log 137 corrects the earlier "no transfer" claim); Safari window rotation not screenshot-tested |
+| Gyro (CoreMotion) | QEMU, no console log | **works** on 4.1: vtable and provider-mask patches, `gyroAvailable 64`, live rates; `deviceMotion` rates stayed 0 | n/a: no CoreMotion before 4.0 | n/a: no CoreMotion before 4.0 |
+| GPS (fake location) | CoreLocation fix in `gps=` apps | `ios3ds-gpstest` gets 52.52,13.405 at 1 Hz | applog hooks + `LC_LOAD_DYLIB` into Maps/Safari; `gpstest` at 1 Hz, `[applog] Maps` in QEMU; tiles/fix need a network/console check | same with 2.x dylib builds; `ios3ds-gps set` needs `/bin/sh`, absent on 3.x/2.x (re-log 141) |
+| Camera (`vcd`) | preview/photos confirmed on hardware | ARM9/kernel side comes up (`[cam] chip id 2280` ×3); Camera.app not exercised (re-log 135) | n/a: no Camera.app or MediaCapture plugin to bind | n/a: same |
+| GPU (PICA200) | CoreAnimation + GPU mirror on hardware | yes: same CA/GPU mirror path as 4.2.1, 4.x shim | default software CA + ARM9 copy (`gpu_mirror=0`); opt-in `IOS3DS_GPU313=1` gives CA on the PICA200 + mirror (slower in QEMU, not the default) | software CA + ARM9 copy; no GL engine (2.x OpenGLES.framework *is* IMG MBX) |
+| Cydia / TLSFix | Cydia 1.1.30 + TLSFix, hardware | Cydia 1.1.30 + TLSFix (8B117 virtual packages), opens; local-repo APT/dpkg install passes (re-log 131) | Cydia 1.1.30 + APT/dpkg, opens; TLSFix left out; refresh untested | Cydia **1.0.3222** + APT 0.7/dpkg from `rootfs/cydia-2.x.json`, no default source, no TLSFix/Substrate; opens and loads saurik's "no longer supported" page with Wi-Fi (re-log 146) |
 
-4.1 (8B117) Wi-Fi: works with the 4.2.1 tools unchanged (wifi_test 20/20,
-Settings join 8/8, Safari loads pages including the first cold page; re-log
-133 and NEXT). The NEXT Safari fix is in the test harness plus a boot-arg
-gate in `ios3ds-diag`, not in any Wi-Fi or memory driver; that fix changes no
-kernel, shim or rootfs recipe.
-Gyro now works too: the vtable and CoreMotion patches were
-relocated (vtable 0x805d50dc, two 8B117 provider-mask immediates) and a diag
-QEMU run reports `gyroAvailable 64` (raw provider bit, i.e. true) with live
-rates after `qom-set gyro-y 30000`; `deviceMotion` rates stayed 0, not chased.
-CLCD's third backlight IOLog is nopped; `clcd-backlight-retry-off` is
-unnecessary because 8B117 has no pending-flag/retry loop.
+4.1 (8B117) Wi-Fi works with the 4.2.1 tools unchanged (wifi_test 20/20,
+Settings join 8/8, Safari 3/3 pages; re-log 133/143). The first-page fix is in
+the test harness plus a boot-arg gate in `ios3ds-diag`, not in a Wi-Fi or
+memory driver; it changes no kernel, shim or rootfs recipe.
+Gyro now works on 4.1: the vtable and CoreMotion patches were relocated
+(vtable 0x805d50dc, two 8B117 provider-mask immediates) and a diag QEMU run
+reports `gyroAvailable 64` with live rates after `qom-set gyro-y 30000`;
+`deviceMotion` rates stayed 0, not chased. CLCD's third backlight IOLog is
+nopped; `clcd-backlight-retry-off` is unnecessary on 8B117.
 
 The 4.2.1 build is unchanged by all of this: every older-version switch is
 either in `rootfs/overlay-*.json`, `kernel/patchsets/*.json`, or a
 `versions.py` flag that only non-default versions set (six 4.2.1 hashes
-re-checked in the re-log 139 verification).
+re-checked in re-log 145/146).
 
 **Enabling the 3.1.3 GPU path (hardware testing):** it is a *build-time*
 switch, because it needs a dyld-cache patch and a SpringBoard plist value:

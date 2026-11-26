@@ -1,15 +1,17 @@
 # Wi-Fi: networking for iOS on the Old 3DS
 
-Status: **works end to end in QEMU, never run on hardware.** In the
-`nintendo3ds` machine the unchanged ARM9 driver brings up an emulated AR6014
-over SDIO, associates with an emulated WPA2 access point, and iOS gets a DHCP
-lease, a default route and DNS, and fetches a page from the host (section 7,
-`emu/wifi_test.py`). iOS's own Settings > Wi-Fi scans and joins through the
-touch screen and the status bar shows the bars (section 10,
-`emu/wifi_ui_test.py`). The model is written from ath6kl, dsiwifi, GBATEK and
-IEEE 802.11i, not from our driver; what it cannot prove, and the hardware
-assumptions that are still open, are in sections 6 and 7.2. Host tests:
-`make -C tools/ios3ds-wifi test` (also run by `make test`).
+Status: **works end to end in QEMU, and has worked on a console** (`docs/hwlogs/`
+run 18–19 and the New 2DS XL issue #1/#5 logs). In the `nintendo3ds` machine the
+unchanged ARM9 driver brings up an emulated AR6014 over SDIO, associates with an
+emulated WPA2 access point, and iOS gets a DHCP lease, a default route and DNS,
+and fetches a page from the host (section 7, `emu/wifi_test.py`). iOS's own
+Settings > Wi-Fi scans and joins through the touch screen and the status bar
+shows the bars (section 10, `emu/wifi_ui_test.py`). Older iOS versions are
+QEMU-only, and the home-AP IE case in §10.9 has a host test but no console
+join yet. The model is written
+from ath6kl, dsiwifi, GBATEK and IEEE 802.11i, not from our driver; what it
+cannot prove, and the hardware assumptions that are still open, are in sections
+6 and 7.2. Host tests: `make -C tools/ios3ds-wifi test` (also run by `make test`).
 
 ```
  AR6014 (SDIO)        ARM9 monitor                     XNU shim              iOS
@@ -584,8 +586,9 @@ optional.
   link sequence numbers), a command block (`scan`, `join` with SSID + 32-byte
   PMK or open, `leave`; sequence-numbered, acknowledged in the status) and a
   scan table of 16 networks (SSID, BSSID, channel, RSSI, noise, capability,
-  beacon interval, the first 76 bytes of IEs). One writer per cache line, as
-  `netmbox_t`.
+  beacon interval, the first 76 bytes of IEs). SSID, rates, DS, RSN, WPA and
+  extended-rate IEs are copied first, then the rest (§10.9). One writer per
+  cache line, as `netmbox_t`.
 - `kern.ios3ds_wlan` (`tools/ios3ds-wifi/shim/net.c`): read = status + scan
   table, write = one command (root only).
 - iOS hands the ARM9 the **PMK** (WiFiManager computes PBKDF2 itself), so a
@@ -776,6 +779,25 @@ SAE-only, open IEs, and a truncated RSN IE. `emu/wifi_popup_test.py` joins the
 mixed AP in QEMU through Settings, forgets it, and joins it again from the
 SpringBoard alert; `--case wpa2` runs the same flow against a plain WPA2 AP.
 Results: re-log 84.
+
+### 10.9 Home AP with long IEs (issue #1 follow-up, re-log 145)
+
+A tester's home AP was listed in the scan but iOS asked to join it as WEP:
+`[a80211] associate: key type 2 / 13 bytes not supported (WEP?)`. The AP's
+407-byte probe response had a long country IE and HT capabilities ahead of its
+RSN IE. The ARM9 copies a beacon's IEs, in beacon order, into the 76-byte
+`wlan_bss_t.ie` and skips what does not fit, so the RSN/WPA IE was dropped while
+the privacy bit remained; WiFiManager classified the network as WEP and sent
+the password as a WEP-104 key.
+
+The scan record now copies SSID, rates, DS, RSN, WPA and extended-rate IEs
+first, then the remaining IEs in order. If even those do not fit, the log says
+`[wifi-diag] scan: N needed IE(s) did not fit`. The host test
+`test_scan_ie_priority` fails against the old ordering and passes with the fix;
+a console join is still outstanding. On a console the expected lines are
+`[wifi] connect ... (WPA2-PSK/CCMP)` and no `key type 2` line; attach `log.txt`
+with the security mode and channel if it still fails (no password or network
+name needed).
 
 ## 11. iOS 2.2.1 (5H11a)
 
