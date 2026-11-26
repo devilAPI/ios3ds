@@ -7259,3 +7259,43 @@ default stays byte-identical; every action is behind `boot.cfg`
    `REC_POWER`, GL drawing while the screen is off (the shim restores
    `PDN_GPU_CNT` on any GPU sysctl). If any fails, set `power_opt=0`.
    Not done: no console with a current meter was available in this worktree.
+
+## NEXT. stereo3d=1 soak re-check: the round-4 SIGKILL failure does not reproduce on main (2026-11-27)
+
+Goal: find why SpringBoard SIGKILLed apps after Home in the `stereo3d=1`
+5-cycle soak (re-log 155) and make that soak pass.
+
+- **[V]** main 5fa2055, no code change. Fresh default build: kernel
+  505f451a, devtree 25b1bd23, fakeio e5fecd66, shim a35631eb, gpu 6bdaf617,
+  boot.cfg 8d4079cf, gpu3d.bin 4aa214b9. `make test` green.
+- **[V]** Flag-on images = the fresh image with `stereo3d=0` changed to
+  `stereo3d=1` in `sd:/ios3ds/boot.cfg` (mtools), each one fresh. QEMU:
+  the shared `/tmp/opencode/qemu-compat2/b/qemu-system-arm` (has the
+  `mcu-3d-slider` property). Every run: `soak.py --cycles 5 --require-app
+  --icount 2 --crashlogs`, plus `--slider3d 255` for the flag-on runs:
+
+| run | config | host | boot | result |
+|---|---|---|---|---|
+| s1 | stereo3d=1, slider 255 | load 3-5 | 70 s | PASS, 0 signals, no CrashReporter reports |
+| s2 | stereo3d=1, slider 255 | load 2.5-2.8 | 70 s | PASS, 0 signals |
+| s3 | stereo3d=1, slider 255, QEMU + harness pinned to one core shared with two busy loops (about 1/3 speed) | load ~5 | 250 s | PASS, 0 signals (home late twice, recovered without input) |
+| s0 | stereo3d=0 | load ~3 | 70 s | PASS |
+
+- **[V]** The flag-on runs really used the two-eye path: `[stereo] switch:
+  PDC0 3D, PICA200 two-eye mirror`, the barrier went on and off around the app
+  launches, `mirror GPU cost: 3D 72 frames, avg 13021 us; 2D 31 frames, avg
+  10224 us`.
+- **[V]** Host speed doesn't explain it either: the soak runs `-icount
+  shift=2,sleep=off` with `thread=single`, so guest timing (SpringBoard's
+  suspend deadlines, ARM9 block service) is set by the instruction count,
+  not by wall time. Host load only stretches the harness's wall-clock waits.
+  s3 at about 1/3 speed still passed.
+- **[G?]** So the cause was not in main's stereo3d=1 path. What differed in
+  round 4: that agent's private QEMU build (`build/qemu-hy4`, built from
+  its own branch's `emu/qemu`) and its worktree state during the controls.
+  Not checked, because building QEMU is outside this task's rules. If the
+  failure comes back, record the QEMU binary and its `git describe` in the
+  soak report first.
+- No fix was needed, so there is no code change; docs/stereo3d.md gets a
+  short note. The flag stays experimental until a console test (re-log 155
+  checklist).

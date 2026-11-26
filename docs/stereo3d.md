@@ -426,3 +426,15 @@ its soak passes; `stereo3d=1` soaks fail on current main with background
 apps SIGKILLed (also with main's engine, see the re-log), so the flag stays
 experimental. Details and the hardware checklist: the re-log section
 "Stereo 3D round 4".
+
+### stereo3d=1 soak re-check (2026-11-27)
+
+The SIGKILL/app-not-opening failure of round 4 does **not reproduce** on
+main 5fa2055 with the shared soak QEMU (`/tmp/opencode/qemu-compat2`),
+unchanged code, fresh images, `stereo3d=1`, `--slider3d 255`,
+`--cycles 5 --require-app --icount 2 --crashlogs`: three PASS runs, one of
+them with QEMU pinned to a core shared with two busy loops (boot 250 s
+instead of 70 s). Real two-eye frames ran in all of them (PDC0 3D switches,
+barrier on/off per app). No code change was needed; details and the likely
+sources of the round-4 failure in the re-log section "stereo3d=1 soak
+re-check".
