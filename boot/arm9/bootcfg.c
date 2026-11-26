@@ -65,6 +65,7 @@ void parse_bootcfg(char *txt)
         { "n3ds_ram", &cfg.n3ds_ram }, { "auto_brightness", &cfg.auto_brightness },
         { "stereo3d", &cfg.stereo3d }, { "safe_mode", &cfg.safe_mode },
         { "diag", &cfg.diag }, { "ioprof", &cfg.ioprof }, { "log_ts", &cfg.log_ts },
+        { "hwtest", &cfg.hwtest },
     };
     int lineno = 0;
     char *line = txt;

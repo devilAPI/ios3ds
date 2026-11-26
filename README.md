@@ -214,6 +214,7 @@ As with any homebrew, **back up your SD card** first. More: [docs/real-hardware.
   | `wifi_led=0` | don't light the console's Wi-Fi LED while connected |
   | `boot_delay=0` | skip the 1 s wait before XNU (or press **A** during it); the old name `countdown_ms` still works |
   | `diag=1` | extra diagnostics in the log |
+  | `hwtest=1` | one-boot hardware test: after the home screen every driver is checked (prompts on screen where your input is needed) and a PASS/FAIL/SKIP summary goes to `log.txt` and the screen; `hwtest=2` = automatic checks only. See [docs/real-hardware.md](docs/real-hardware.md) §6 |
   | `safe_mode=1` | no Cydia Substrate tweaks this boot (same as holding **L** while the 3DS loads iOS); see the FAQ |
   | `stereo3d=1` | stereoscopic 3D home screen (merged GPU stereo: PICA200 two-eye mirror + barrier via GPU present, no CPU read-back; needs a console test); flat frames use the normal GPU mirror |
 

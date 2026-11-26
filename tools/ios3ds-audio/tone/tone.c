@@ -116,8 +116,11 @@ static void say(const char *fmt, ...)
     if (n < 0) return;
     if (n > (int)sizeof line - 2) n = (int)sizeof line - 2;
     line[n++] = '\n';
-    fd = open("/dev/console", O_WRONLY);
-    if (write(fd < 0 ? 2 : fd, line, (size_t)n) < 0) { /* nothing to do */ }
+    /* ios3ds-hwtest (IOS3DS_HWTEST) reads our lines from its stdout pipe
+       and copies them to the console itself */
+    int hw = getenv("IOS3DS_HWTEST") != NULL;
+    fd = hw ? -1 : open("/dev/console", O_WRONLY);
+    if (write(fd >= 0 ? fd : hw ? 1 : 2, line, (size_t)n) < 0) { /* nothing to do */ }
     if (fd >= 0) close(fd);
 }
 

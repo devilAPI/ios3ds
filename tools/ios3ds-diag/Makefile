@@ -7,8 +7,20 @@ OUT2 ?= $(ROOT)/build/rootfs-add/ios2/ios3ds-diag
 LOG2 ?= $(ROOT)/build/rootfs-add/ios2/ios3ds-applog.dylib
 GLUE := $(ROOT)/tools/common/dyld2_glue.S
 OLD2 := -target armv6-apple-ios2.0 -ffixed-r9 -Wl,-w
+HW   ?= $(ROOT)/build/rootfs-add/usr/libexec/ios3ds-hwtest
+HW2  ?= $(ROOT)/build/rootfs-add/ios2/ios3ds-hwtest
+PROTO := $(ROOT)/boot/common
 
-all: $(OUT) $(LOG) $(OUT2) $(LOG2)
+all: $(OUT) $(LOG) $(OUT2) $(LOG2) $(HW) $(HW2)
+
+# boot.cfg hwtest=1: the one-boot hardware test kit (hwtest.c, docs/real-hardware.md)
+$(HW): hwtest.c
+	mkdir -p $(dir $@)
+	$(CC) -Os -Wall -Wextra -I$(PROTO) hwtest.c -o $@
+
+$(HW2): hwtest.c $(GLUE)
+	mkdir -p $(dir $@)
+	$(CC) -Os -Wall -Wextra $(OLD2) -I$(PROTO) hwtest.c $(GLUE) -o $@
 
 # ent.plist: SpringBoard wants com.apple.springboard.opensensitiveurl for -urlpoll
 $(OUT): diag.c ent.plist
@@ -32,5 +44,5 @@ $(LOG2): applog.c ../ios3ds-gps/gps.c ../ios3ds-gps/gps.h $(GLUE)
 	$(CC) -Os -Wall -Wextra $(OLD2) -DDYLD2_DYLIB -I../ios3ds-gps -dynamiclib -install_name /usr/lib/ios3ds-applog.dylib applog.c ../ios3ds-gps/gps.c $(GLUE) -o $@
 
 clean:
-	rm -f $(OUT) $(LOG) $(OUT2) $(LOG2)
+	rm -f $(OUT) $(LOG) $(OUT2) $(LOG2) $(HW) $(HW2)
 .PHONY: all clean

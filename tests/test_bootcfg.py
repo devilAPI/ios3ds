@@ -96,6 +96,13 @@ int main(void)
     CHECK(!strcmp(cfg.gps, "52.5200,13.4050"));
     CHECK(!strcmp(cfg.cmdline, "debug=0x8"));
 
+    parse("boot_delay=0\n");
+    CHECK(cfg.hwtest == 0);                     /* hardware test off by default */
+    parse("hwtest=1\n");
+    CHECK(cfg.hwtest == 1);
+    parse("hwtest=2\n");
+    CHECK(cfg.hwtest == 2);
+
     printf("%s\n", fails ? "FAILED" : "ok");
     return fails != 0;
 }

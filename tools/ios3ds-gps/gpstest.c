@@ -63,7 +63,10 @@ int main(int argc, char **argv)
 {
     int secs = argc > 1 ? atoi(argv[1]) : 12;
     if (secs < 2) secs = 12;
-    int fd = open("/dev/console", O_WRONLY | O_NOCTTY);
+    /* IOS3DS_HWTEST (ios3ds-hwtest): output stays on our stdout pipe and the
+       location is not switched at runtime */
+    int hw = getenv("IOS3DS_HWTEST") != NULL;
+    int fd = hw ? -1 : open("/dev/console", O_WRONLY | O_NOCTTY);
     if (fd >= 0) {
         dup2(fd, 1);
         dup2(fd, 2);
@@ -126,7 +129,7 @@ int main(int argc, char **argv)
         else sleep(1);
         fprintf(out, "[gpstest] tick %d\n", i);
         print_location("location", x_msgSend(mgr, x_sel("location")));
-        if (i == secs / 2) {
+        if (i == secs / 2 && !hw) {
             fprintf(out, "[gpstest] switching location at runtime\n");
             if (system("/usr/bin/ios3ds-gps set 40.7128 -74.0060 20; /usr/bin/ios3ds-gps show") != 0)
                 fprintf(out, "[gpstest] ios3ds-gps set failed\n");

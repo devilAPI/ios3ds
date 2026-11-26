@@ -925,6 +925,15 @@ void a9_main(int argc, char **argv)
     }
     if (cfg.stereo3d && strlen(ba->CommandLine) + 20 < sizeof(ba->CommandLine))
         strlcpy_(ba->CommandLine + strlen(ba->CommandLine), " ios3ds_stereo=1", 17);
+    /* hwtest=1|2 -> boot-arg ios3ds_hwtest=N: launchd starts ios3ds-hwtest
+       (tools/ios3ds-diag/hwtest.c), which checks every driver once the home
+       screen is up and writes a [hwtest] SUMMARY block (docs/real-hardware.md) */
+    if (cfg.hwtest && strlen(ba->CommandLine) + 18 < sizeof(ba->CommandLine)) {
+        char hw[20];
+        snprintf(hw, sizeof(hw), " ios3ds_hwtest=%u", cfg.hwtest > 2 ? 1u : cfg.hwtest);
+        strlcpy_(ba->CommandLine + strlen(ba->CommandLine), hw, sizeof(ba->CommandLine) - strlen(ba->CommandLine));
+        log_color(CON_YELLOW, "[hwtest] hwtest=%u: the hardware test runs after the home screen; results in this log\n", cfg.hwtest);
+    }
     log_ok("boot_args at %08x: dt va %08x len %u\n", cfg.bootargs_pa, ba->deviceTreeP, dsize);
 
     /* XNU log ring (filled by the M2 console hook) */
