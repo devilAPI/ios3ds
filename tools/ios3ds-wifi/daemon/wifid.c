@@ -333,7 +333,7 @@ static void start_nettest(const char *spec)
 
 /* Ask configd's IPConfiguration agent to run DHCP on the new interface (the
    stock /usr/sbin/ipconfig; same as "ipconfig set en0 DHCP" on a Mac). */
-static void start_dhcp(void)
+static void __attribute__((unused)) start_dhcp(void)
 {
     if (!opt_dhcp || ifname[0] == '?') return;
     int pid = fork();
@@ -451,8 +451,15 @@ int main(int argc, char **argv)
                 dhcp_asked = 1;
                 say("[wifid] %s configured by configd", ifname);
             } else if (now - configured_at >= 15) {
+#ifdef WIFID_KIF
+                /* 2.x has no /usr/sbin/ipconfig: the preferences.plist service
+                   (rootfs/overlay-2.2.1.json) is configd's only trigger; just
+                   keep watching for the lease */
+                if (now - configured_at >= 300) dhcp_asked = 1;
+#else
                 dhcp_asked = 1;
                 start_dhcp();
+#endif
             }
         }
         off = 0;
