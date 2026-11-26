@@ -625,7 +625,28 @@ void camera_init(u32 shim_pa, bool enable, bool self_test)
        (run 23 reported "cameras present 0x0" until then), then standby + clock off */
     diag_cam_block("boot");
     power(true);
-    if (self_test) selftest();
+    if (self_test) {
+        selftest();
+        /* Leave nothing of the self-test behind (issue 1: cam_test=1 boots had
+           no picture in Camera.app): soft-reset every sensor it touched
+           (RESET_MISC / PAD_SLEW variants, its activate/standby sequence),
+           then power-cycle the CAM blocks and probe again, so iOS starts from
+           exactly the state of a cam_test=0 boot. */
+        for (u32 i = 0; i < 3; i++) {
+            u16 id = 0;
+            if (!apt_rd(&cams[i], 0x0000, &id) || id != APTINA_CHIP_ID) continue;
+            apt_wr(&cams[i], 0x001A, 0x0003);
+            wait_ms(1);
+            apt_wr(&cams[i], 0x001A, 0x0000);
+            wait_ms(10);
+            apt_standby(&cams[i]);
+        }
+        power(false);
+        wait_ms(5);
+        power(true);
+        log_ok("[cam-test] sensors reset, CAM blocks re-initialised, cameras present 0x%x\n",
+               (unsigned)box->present);
+    }
     for (u32 i = 0; i < CAM_COUNT; i++)
         if (box->present & (1u << i)) apt_standby(&cams[i]);
     power(false);
