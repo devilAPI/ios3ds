@@ -43,7 +43,7 @@ static unsigned st_home, st_flat, st_wipes, st_stamps, st_frames;
 /* Transitions (re-log NEXT, docs/stereo3d.md section 4.1) */
 static int st_full;                 /* this frame had a full-screen draw */
 static int st_scene_home = 1;       /* the last complete frame was the home screen */
-static unsigned st_sticky, st_partial, st_dropped;
+static unsigned st_sticky, st_partial, st_dropped, st_covers;
 /* A large layer that moves through a band boundary (the folder's sliding
    home-screen halves, the app zoom, the switcher's sliding home screen)
    would change class from one frame to the next and its depth would jump.
@@ -150,6 +150,23 @@ int stereo_prepare(GC *gc, RT *rt, const Vtx *v, int n)
                 break;
             }
         }
+    }
+    if (!full && opaque && st_f.phase != STP_FLAT &&
+        (maxx - minx) * (maxy - miny) >= 0.85f * (float)gc->vp[2] * (float)gc->vp[3]) {
+        /* An opaque layer over almost the whole screen that is not the
+           exact full-screen wallpaper quad: an app window under the status
+           bar (0,20-320,480) or the last steps of the app zoom. Nothing
+           below it keeps a depth, so the frame is flat, like an app's full
+           frame. Without this, an app's updates had no full-screen draw,
+           counted as damage updates of the home screen and were stamped. */
+        st_f.phase = STP_FLAT;
+        if (st_f.draws < 255)
+            st_f.draws++;
+        st_full = 1;
+        st_rt = *rt;
+        st_have_rt = 1;
+        st_covers++;
+        return -1;
     }
     cls = stereo_draw(&st_f, (int)minx, (int)miny, (int)maxx, (int)maxy, gc->vp, full, opaque);
     if (full)
@@ -451,6 +468,11 @@ void stereo_forget(const void *mem)
         st_log_n = 0;
         st_full = 0;
     }
+}
+
+unsigned stereo_cover_stats(void)
+{
+    return st_covers;
 }
 
 void stereo_transition_stats(unsigned *sticky, unsigned *partial, unsigned *dropped)

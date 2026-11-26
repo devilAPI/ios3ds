@@ -115,6 +115,65 @@ display target instead: a 600 KiB copy per CA frame on the ARM11
 (re-log 78 measured 31-37 ms per frame for read-back against 13.5-16 ms for
 the GPU present on hardware). That detour is gone.
 
+### 4.1 Transitions (stereo round 4)
+
+The static home screen was easy: one full frame, then nothing. Animations
+are CA damage updates, moving layers and app frames that are not quite
+full-screen. Three engine rules keep the depth right through them
+(`tools/ios3ds-gl/stereo.c`, host-tested by `IOS3DS_GLTEST_STEREO=1`):
+
+- **Damage updates keep the scene.** A CA update with no full-screen draw
+  and fewer than 16 draws (the clock, the status-bar spinner, a dock item,
+  one step of an animation) is not a new scene. If the last complete frame
+  was the home screen its draws are classified by position (even the first
+  few) and stamped; the rest of the class map stays. If the last complete
+  frame was an app, the update is not stamped. Before, such an update with
+  4..15 draws but too few stamps wiped the whole map: on an idle home screen
+  the "Searching..." spinner alone kept the screen flat.
+- **Near-full opaque layers are flat.** An opaque layer over at least 85 %
+  of the screen that is not the exact wallpaper quad (an app window under the
+  status bar, the last steps of the app zoom) makes the frame flat.
+- **Large moving layers keep their class.** A layer covering at least 1/8
+  of the screen (the folder's sliding home-screen halves, the zooming app,
+  the switcher's raised home screen) remembers the class it got when it first
+  appeared (`Tex.stereo_cls`) and keeps it while it is drawn at least every
+  30 frames, until its pixels change. Before, the folder's lower half
+  changed from icon depth to dock depth when it slid into the dock band.
+
+The ARM9 adds hysteresis (`boot/arm9/display.c`): 3D starts after two home
+probes in a row and is held through up to eight non-home probes (~0.5 s). While
+held, the two-eye list draws a flat (alpha 0) frame, so both eyes get the
+same picture: the fallback for an unknown depth is a flat frame, never a
+stale or half-built eye. `[stereo] active path: ... N transitions held in
+3D` counts the holds, and `[gl] CA stereo3D transitions: ...` the engine's
+sticky classes, damage updates and near-full layers.
+
+### 4.2 Depth strength: `stereo_depth`
+
+`stereo_depth=0..100` in `boot.cfg` (default 100, not written by the
+generator: add the line) scales the slider's shift: `k' = ceil(k * depth /
+100)` with `k = 1..4` from the slider (`stereo_depth_k()`), so any non-zero
+depth with the slider up still gives at least 1 px and `stereo_depth=0`
+keeps the screen flat with the barrier off. It is applied on the ARM9 (the
+mirror gets `k'` through `gm_set_shift`), so the kernel, shim and GPU part
+are unchanged by it. The log says `[stereo] depth strength N% ... shift N px
+at slider max`.
+
+### 4.3 `gpu3d.bin`: the PDC0 switch really reaches PDC0
+
+`kernel/shim/pica_stereo.c` addresses "PDC0" as `0xBFE00000 + off`, but
+that VA is the start of the GX block (PA `0x10400000`); PDC0 is at `+0x400`.
+Every 2D/3D switch since re-log 90 wrote `0x10400024..0x10400098` instead,
+and PDC0 stayed in 2D (QEMU: `+0x70` read `0x00080341`, line doubling, with
+the barrier on and the ARM9 logging "both eyes"). The default `gpu.bin` must
+stay byte-identical, so `scripts/mkboot.py` writes a second GPU part,
+`gpu3d.bin`: the same bytes with that file's single GX-base literal moved to
+`0xBFE00400` (one byte differs; nothing else moves). With `stereo3d=1` the
+ARM9 loads `gpu3d.bin` in place of `gpu.bin` when the card has it (`[stereo]
+stereo3d=1: GPU part ... gpu3d.bin`), else `gpu.bin` as before. This is the
+first build whose 3D switch writes the real PDC0 timing/format registers on
+a console: see the hardware checklist in the re-log.
+
 ## 5. Real hardware: the two-eye mirror and the display registers
 
 **GPU mirror** (`tools/ios3ds-pica/mirror/genmirror.c`,

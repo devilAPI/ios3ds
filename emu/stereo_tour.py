@@ -95,6 +95,8 @@ def main():
     ap.add_argument("--slider3d", type=int, default=255)
     ap.add_argument("--burst", type=int, default=12, help="frames grabbed per transition")
     ap.add_argument("--boot-timeout", type=float, default=1200)
+    ap.add_argument("--only", default="", help="comma list of transition labels to run (default: all)")
+    ap.add_argument("--flush", type=float, default=90, help="idle seconds before quitting, so the log reaches the card")
     a = ap.parse_args()
     if a.qemu:
         viewer.QEMU = a.qemu
@@ -203,6 +205,8 @@ def main():
         time.sleep(60)
 
         def burst(label, action, after=None, gap=1.5):
+            if a.only and label not in a.only.split(","):
+                return
             recs = [grab("%s_00_before" % label)]
             action()
             for i in range(1, a.burst + 1):
@@ -229,6 +233,7 @@ def main():
         burst("app_close", lambda: key("ret"))
         burst("switcher_open", lambda: (key("ret", 0.1), time.sleep(0.15), key("ret", 0.1)))
         burst("switcher_close", lambda: key("ret"))
+        time.sleep(a.flush)
     try:
         q.cmd("quit")
         proc.wait(timeout=30)

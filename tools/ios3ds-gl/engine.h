@@ -269,6 +269,7 @@ void gl_be_triangles(GC *gc, RT *rt, const Vtx *v, int n, int cls);  /* pass 1 +
 int  stereo_end_frame(GC *gc);          /* decide + wipe; 1 = a wipe was drawn (sync the target) */
 void stereo_stats(unsigned *frames, unsigned *home, unsigned *flat, unsigned *stamps, unsigned *wipes);
 void stereo_transition_stats(unsigned *sticky, unsigned *partial, unsigned *dropped);
+unsigned stereo_cover_stats(void);       /* near-full opaque layers that made a frame flat */
 void stereo_forget(const void *mem);     /* a target is freed: drop its pending stamps/wipe */
 void stereo_batch_stats(unsigned *batches, unsigned *verts);  /* deferred stamp draws, vertices */
 void pica_forget(const void *mem);

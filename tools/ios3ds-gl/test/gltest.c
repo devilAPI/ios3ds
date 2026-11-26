@@ -813,6 +813,12 @@ static void arena_churn_check(const char *backend)
    surface. Checks the class map the GPU mirror reads: wallpaper SA_BG,
    icons SA_ICONS, dock SA_FRONT, colours untouched by the stamp, and a
    following app frame (a second opaque full-screen draw) wiped flat. */
+/* a depth class magic (boot/common/stereo.h): 0x33/0x66/0x99/0xCC */
+static int stereo_class_of_test(unsigned char a)
+{
+    return a == 0x33 || a == 0x66 || a == 0x99 || a == 0xCC;
+}
+
 static int stereo_frame_check(void)
 {
     static const struct { int x, y; unsigned char a; const char *what; } probe[] = {
@@ -918,6 +924,32 @@ static int stereo_frame_check(void)
                        p2[i].a[k]);
                 bad++;
             }
+        }
+    }
+    /* An app under the status bar: an opaque window over 0,20-W,H is not
+       an exact full-screen quad, but the frame is flat all the same, and
+       so are the app's later damage updates. */
+    for (k = 0; k < 2; k++) {
+        glBindFramebufferOES(GL_FRAMEBUFFER, off_fb);
+        glViewport(0, 0, W, H);
+        glColor4f(0.9f, 0.9f, 0.9f, 1);
+        if (!k) {
+            quad(0, 20, W, H, 0);                    /* the app's window */
+            quad(0, 0, W, 20, 0);                    /* status bar */
+        } else {
+            quad(40, 120, 90, 190, 0);               /* the app redraws a button */
+            quad(110, 120, 160, 190, 0);
+        }
+        glFlush();
+        glReadPixels(5, 200, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
+        if (px[3] != 0x00) {
+            printf("gltest: stereo app frame %d: alpha 0x%02x at 5,200, want 0x00 FAIL\n", k, px[3]);
+            bad++;
+        }
+        glReadPixels(60, 150, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
+        if (stereo_class_of_test(px[3])) {
+            printf("gltest: stereo app frame %d: button stamped 0x%02x FAIL\n", k, px[3]);
+            bad++;
         }
     }
     printf("gltest: stereo %s (%d failed)\n", bad ? "FAIL" : "PASS", bad);
