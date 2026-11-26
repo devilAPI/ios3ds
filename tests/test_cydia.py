@@ -137,6 +137,35 @@ class Manifest(unittest.TestCase):
         tls = [p for p in m["packages"] if p["package"] == "com.skyglow.tlsfix"]
         self.assertEqual([p.get("group") for p in tls], ["tlsfix"])
 
+    def test_ios2_set(self):
+        """iPhone OS 2.x set (rootfs/cydia-2.x.json): Cydia 1.0.x, no Substrate/TLSFix,
+        its own cache, Cydia's stash check patched out, the role preset"""
+        m = cydia.load_manifest(os.path.join(ROOT, "rootfs", "cydia-2.x.json"))
+        names = {p["package"]: p["version"] for p in m["packages"]}
+        self.assertTrue(names["cydia"].startswith("1.0."))
+        for want in ("apt7-lib", "apt7-key", "dpkg", "apr-lib", "pcre", "uikittools", "essential"):
+            self.assertIn(want, names)
+        for no in ("mobilesubstrate", "com.skyglow.tlsfix", "cydia-lproj"):
+            self.assertNotIn(no, names)
+        self.assertNotIn("substrate", m)
+        self.assertEqual(m["cache"], "cydia-2.x")
+        for p in m["packages"]:
+            self.assertRegex(p["sha256"], r"^[0-9a-f]{64}$", p["package"])
+            self.assertTrue(p["path"].startswith("debs/"))
+        self.assertEqual(len(m["patch"]), 7)
+        for p in m["patch"]:
+            self.assertEqual((p["path"], p["orig"], p["new"]), ("/Applications/Cydia.app/Cydia_", "00d1", "00e0"))
+        role = plistlib.loads(m["write"]["/var/lib/cydia/metadata.plist"].encode())
+        self.assertEqual(role, {"Settings": {"Role": "User"}})
+        self.assertNotIn("patch", cydia.load_manifest())      # 4.x set unchanged
+
+    def test_patch_file(self):
+        m = {"patch": [{"path": "/a", "offset": "0x2", "orig": "00d1", "new": "00e0"}]}
+        self.assertEqual(cydia.patch_file(m, "/a", b"xx\x00\xd1yy", False), b"xx\x00\xe0yy")
+        self.assertEqual(cydia.patch_file(m, "/b", b"xx\x00\xd1yy", False), b"xx\x00\xd1yy")
+        with self.assertRaises(SystemExit):
+            cydia.patch_file(m, "/a", b"xxzzyy", False)
+
     def test_recipe_and_release(self):
         with open(os.path.join(ROOT, "rootfs", "recipe.json")) as f:
             recipe = json.load(f)

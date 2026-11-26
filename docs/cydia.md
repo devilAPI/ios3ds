@@ -225,6 +225,44 @@ BigBoss, ModMyi, ZodTTD and, for iOS 4, `repo666.ultrasn0w.com`, exactly as on a
 2011 device. ModMyi, ZodTTD and repo666 no longer exist, so a refresh reports
 errors for them; remove them in Sources > Edit.
 
+## iPhone OS 2.x: Cydia 1.0.3222 (rootfs/cydia-2.x.json)
+
+`rootfs/overlay-2.2.1.json` points `"cydia"` at its own manifest,
+`rootfs/cydia-2.x.json`; 3.1.3, 4.1 and 4.2.1 keep `rootfs/cydia.json`.
+
+- **Set:** Cydia 1.0.3222-73 (the last 1.0.x without `firmware (>= 4.0)`,
+  `DTSDKName iphoneos2.0.saurik`, `MinimumOSVersion 2.0`, armv6, setuid-root
+  `Cydia_` behind a bash `Cydia` wrapper) plus the closure of its
+  Depends/Pre-Depends, `essential` and the repo's Essential `base`/`debianutils` (29 packages, newest versions on
+  apt.saurik.com: apt7-lib/apt7-key 0.7.25.3, dpkg 1.18.10, apr-lib, pcre,
+  uikittools 1.1.12, ...). No Substrate, TLSFix, cydia-lproj or BigBoss icons.
+  Every Mach-O in it has no `LC_DYLD_INFO(_ONLY)` and all of its non-weak
+  imports resolve in 5H11a's own dylibs/frameworks or in the set (only lazy
+  `___floatundidf`/`___floatundisf`, missing from 2.2.1's libgcc_s, in a few
+  size-printing paths of coreutils/tar/find/sysctl).
+- **Own cache:** the manifest's `"cache": "cydia-2.x"` keeps its debs in
+  `build/cydia-2.x`, never in the 4.x set's `build/cydia`.
+- **Stash check patched out:** Cydia 1.0.x "Reorganizes" (moves
+  `/Applications`, `/usr/share`, `/usr/libexec`, ... to `/var/stash`, then stops
+  SpringBoard) whenever one of them is a real directory; it has no
+  `/.cydia_no_stash` check. On our one-volume rootfs that never finished and
+  every launch ended on the home screen. The manifest's `"patch"` list
+  (`scripts/cydia.py patch_file`) turns the seven `bne` after its `readlink()`
+  calls into `b` while the deb is unpacked; the original bytes are checked.
+- **Preset role and sources:** `/var/lib/cydia/metadata.plist` sets
+  `Settings/Role = User`, so the first launch opens the home tab instead of
+  "Who Are You?" (Manage > Settings changes it);
+  `/etc/apt/sources.list.d/saurik.list` lists Telesphoreo (`tangelo-3.7`),
+  which 1.0.x does not add itself. `/etc/apt/preferences` pins `cydia` to
+  1.0.3222-73 (priority 1001), so the repo's 1.1.30 (which never launched on
+  2.2.1, re-log 131) is not offered; a dpkg hold instead made Cydia's refresh
+  fail with "pkgProblemResolver::Resolve generated breaks". `base` and
+  `debianutils` are in the set because they are the repo's other Essential
+  packages.
+- **Home page:** with Wi-Fi, Cydia loads saurik's live home page for this
+  version, which says "This version of Cydia is no longer supported: please
+  upgrade to 1.1.x". That is the server's text for 1.0.x clients.
+
 ## Turning it off
 
 - `make sd CYDIA=0` / `make sdimg CYDIA=0` (passes `--no-cydia` to `scripts/mksd.py`)
@@ -237,7 +275,8 @@ To remove it from a built image, rebuild with one of the above. To prefetch
 
 ## Updating the pins
 
-Edit `version`/`path` in `rootfs/cydia.json`, then `python3 scripts/cydia.py pin`
+Edit `version`/`path` in `rootfs/cydia.json` (or `rootfs/cydia-2.x.json`, with
+`--manifest`), then `python3 scripts/cydia.py pin`
 re-downloads each listed deb and rewrites `size` and `sha256`. Check new Mach-Os
 still carry an armv6 (or generic ARM) slice.
 

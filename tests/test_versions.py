@@ -255,8 +255,10 @@ class TestVersions(unittest.TestCase):
                             "StandardOutPath"], "/dev/console")
                 if v == "2.2.1":
                     self.assertEqual(recipe["disable_daemons"], [])
-                # Cydia without TLSFix (no Substrate loader on 3.x/2.x)
-                self.assertEqual(recipe["cydia"], "rootfs/cydia.json" if v == "3.1.3" else False)
+                # Cydia without TLSFix (no Substrate loader on 3.x/2.x); 2.x
+                # gets its own era set (Cydia 1.0.3222, rootfs/cydia-2.x.json)
+                self.assertEqual(recipe["cydia"], "rootfs/cydia.json" if v == "3.1.3"
+                                 else "rootfs/cydia-2.x.json")
                 self.assertFalse(recipe["tlsfix"])
                 self.assertEqual(recipe["cydia_pseudo"]["firmware"], v)
                 self.assertEqual(recipe["write"]["/etc/fstab"], "/dev/md0 / hfs rw 0 0\n")

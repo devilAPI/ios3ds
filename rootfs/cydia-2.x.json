@@ -1,0 +1,318 @@
+{
+ "_comment": "Cydia for iPhone OS 2.x (2.2.1, rootfs/overlay-2.2.1.json; docs/cydia.md, re-log NEXT). Cydia 1.0.3222-73 is the last 1.0.x release that does not depend on firmware >= 4.0 (1.0.3366 does) and still names iphoneos2.0 as its SDK (MinimumOSVersion 2.0). The rest is the closure of its Depends/Pre-Depends + Essential, newest versions in apt.saurik.com/debs. Every Mach-O in the set was checked against 5H11a: no LC_DYLD_INFO(_ONLY), and every non-weak import resolves in 5H11a's own libraries/frameworks or in the set (the only misses are lazy ___floatundidf/___floatundisf in a few coreutils/tar/find/sysctl paths that print 64-bit sizes as floats). No Substrate/TLSFix (2.x has neither). Debs are cached in build/cydia-2.x (never in the shared 4.x cache).",
+ "cache": "cydia-2.x",
+ "mirrors": [
+  "http://apt.saurik.com/"
+ ],
+ "packages": [
+  {
+   "package": "apr-lib",
+   "version": "1.3.3-2",
+   "path": "debs/apr-lib_1.3.3-2_iphoneos-arm.deb",
+   "size": 63896,
+   "sha256": "6455c85e8d72018a3494a1c4aca05a83e0721eaee7bcadce9cf2cd511931778d"
+  },
+  {
+   "package": "apt7-key",
+   "version": "0.7.25.3-3",
+   "path": "debs/apt7-key_0.7.25.3-3_iphoneos-arm.deb",
+   "size": 2962,
+   "sha256": "5f96dcc9778aea3d5f0a02a035f14426d257c2ffe328984c8226b48ae03b77ff"
+  },
+  {
+   "package": "apt7-lib",
+   "version": "0.7.25.3-16",
+   "path": "debs/apt7-lib_0.7.25.3-16_iphoneos-arm.deb",
+   "size": 501632,
+   "sha256": "dc31276fb9c912c0b731f69abc49d29f5489bfc1f002a03014ca3d055183c985"
+  },
+  {
+   "package": "base",
+   "version": "1-4",
+   "path": "debs/base_1-4_iphoneos-arm.deb",
+   "size": 1800,
+   "sha256": "447b0251ce391afdd70224402c07d0976f50b9f9fbc7f71258cdcd9683e5685d"
+  },
+  {
+   "package": "bash",
+   "version": "4.0.44-16",
+   "path": "debs/bash_4.0.44-16_iphoneos-arm.deb",
+   "size": 314702,
+   "sha256": "f66313093e9ccadd856491aba8dbda0dd58a336663d1555641e4cf8c58010bef"
+  },
+  {
+   "package": "bzip2",
+   "version": "1.0.5-8",
+   "path": "debs/bzip2_1.0.5-8_iphoneos-arm.deb",
+   "size": 23772,
+   "sha256": "ad0cb4b6333a32423bafbac36da54f149dbe395f1083a1bdeaded46fa545e7cc"
+  },
+  {
+   "package": "coreutils-bin",
+   "version": "8.12-9",
+   "path": "debs/coreutils-bin_8.12-9_iphoneos-arm.deb",
+   "size": 736480,
+   "sha256": "9ebee84e65b1a3ccf76190286e24ca8b80081ba7b2deda7d31a6122d744292e2"
+  },
+  {
+   "package": "cydia",
+   "version": "1.0.3222-73",
+   "path": "debs/cydia_1.0.3222-73_iphoneos-arm.deb",
+   "size": 735278,
+   "sha256": "18e81fa79a76eb5e075c5a36b2800a53c9ddf445b2b93545c87b94cef1768fc5"
+  },
+  {
+   "package": "darwintools",
+   "version": "1-5",
+   "path": "debs/darwintools_1-5_iphoneos-arm.deb",
+   "size": 5674,
+   "sha256": "e188cb79f4065207463d1fab1ac69fb1be66d78c91df52c2149a97bb5bd24474"
+  },
+  {
+   "package": "debianutils",
+   "version": "3.3.3ubuntu1-1p",
+   "path": "debs/debianutils_3.3.3ubuntu1-1p_iphoneos-arm.deb",
+   "size": 6164,
+   "sha256": "2d0f2b0e05bbd99c2ac3850dd68dc750f90d9d8ab8f60f91aab606c5efab707a"
+  },
+  {
+   "package": "diffutils",
+   "version": "2.8.1-6",
+   "path": "debs/diffutils_2.8.1-6_iphoneos-arm.deb",
+   "size": 92388,
+   "sha256": "308f3835cf81a3c519eaa89d5b8f8c6bfbbab03ab2fc486e8a9beac129ecdfb0"
+  },
+  {
+   "package": "dpkg",
+   "version": "1.18.10-12",
+   "path": "debs/dpkg_1.18.10-12_iphoneos-arm.deb",
+   "size": 422468,
+   "sha256": "87482e0c005a152f269f5c78a753ff514db5736b579cf870bd7dcba96f1463c2"
+  },
+  {
+   "package": "essential",
+   "version": "0-1",
+   "path": "debs/essential_0-1_iphoneos-arm.deb",
+   "size": 694,
+   "sha256": "1fd7b099f9022a783f5b62ebfd4d537158016b8ca3e244f96847abf5b89d5f68"
+  },
+  {
+   "package": "findutils",
+   "version": "4.2.33-7",
+   "path": "debs/findutils_4.2.33-7_iphoneos-arm.deb",
+   "size": 157872,
+   "sha256": "6f0154ab3a0d8a04a128163c7ef49f0d425e1225f176fa16eca72a36492c48d0"
+  },
+  {
+   "package": "firmware-sbin",
+   "version": "0-1",
+   "path": "debs/firmware-sbin_0-1_iphoneos-arm.deb",
+   "size": 1106,
+   "sha256": "17c2a22ee7e46d6d261967e4a75ba3f89062ca5f8f27f6bcaa870706c25e378e"
+  },
+  {
+   "package": "gnupg",
+   "version": "1.4.8-4",
+   "path": "debs/gnupg_1.4.8-4_iphoneos-arm.deb",
+   "size": 470686,
+   "sha256": "9ead71f65ad62e95b31cc821dd6e7b6a3dbd930a7a49e96f280a2988288f5187"
+  },
+  {
+   "package": "grep",
+   "version": "2.5.4-3",
+   "path": "debs/grep_2.5.4-3_iphoneos-arm.deb",
+   "size": 84338,
+   "sha256": "d518772e85b0c2438371913de18678b60fc8c5f999aa3e16ed639b05245cf618"
+  },
+  {
+   "package": "gzip",
+   "version": "1.6-7",
+   "path": "debs/gzip_1.6-7_iphoneos-arm.deb",
+   "size": 97818,
+   "sha256": "78a687909cbef8e67c2f1e706160aff67cab52d4409f21399208cd7cc84254bf"
+  },
+  {
+   "package": "lzma",
+   "version": "4.32.7-5",
+   "path": "debs/lzma_4.32.7-5_iphoneos-arm.deb",
+   "size": 94200,
+   "sha256": "eeb6f7a7859d3f5233bc422d01a54fbdde48490be438131ccbd14df4f24998e8"
+  },
+  {
+   "package": "ncurses",
+   "version": "5.7-15",
+   "path": "debs/ncurses_5.7-15_iphoneos-arm.deb",
+   "size": 335922,
+   "sha256": "d8fa54475605a6c48c3b1647e936da4b11b5029890174c8cb19cc99b6216b3da"
+  },
+  {
+   "package": "pam",
+   "version": "32.1-4",
+   "path": "debs/pam_32.1-4_iphoneos-arm.deb",
+   "size": 54922,
+   "sha256": "5480e9721aec54d3e2c67b07cd676218947daa9d2120570a2bd243b4a0b86533"
+  },
+  {
+   "package": "pam-modules",
+   "version": "36.1-5",
+   "path": "debs/pam-modules_36.1-5_iphoneos-arm.deb",
+   "size": 5518,
+   "sha256": "c72d01a5b48b9d1ae91cbbed1e6d1b071ab4a5f806cc6f2f0f7edb889682640a"
+  },
+  {
+   "package": "pcre",
+   "version": "8.30-6",
+   "path": "debs/pcre_8.30-6_iphoneos-arm.deb",
+   "size": 175766,
+   "sha256": "89cc75f86fcd3fdca47c3596cbf82421ead39833fd33bf45f429483f5f330bd3"
+  },
+  {
+   "package": "readline",
+   "version": "6.0-8",
+   "path": "debs/readline_6.0-8_iphoneos-arm.deb",
+   "size": 103884,
+   "sha256": "bc26a670d3e0987085b6296f4f94f60c540c2e0e77f52e637aee7b452d9d18c0"
+  },
+  {
+   "package": "sed",
+   "version": "4.1.5-8",
+   "path": "debs/sed_4.1.5-8_iphoneos-arm.deb",
+   "size": 73272,
+   "sha256": "60c88d55b75517d1673980819a5b95dc5787c089f9951d9232048e8ff289acf7"
+  },
+  {
+   "package": "shell-cmds",
+   "version": "118-7",
+   "path": "debs/shell-cmds_118-7_iphoneos-arm.deb",
+   "size": 10900,
+   "sha256": "d5a2d17f76eb8d133d712401204da4f281127a9b929433f02b5d9541a64f7dd9"
+  },
+  {
+   "package": "system-cmds",
+   "version": "433.8-14",
+   "path": "debs/system-cmds_433.8-14_iphoneos-arm.deb",
+   "size": 84630,
+   "sha256": "33f5bf0ad1360c5a5134d95cb329fe80b30738caee064b613a5101d141afdbe9"
+  },
+  {
+   "package": "tar",
+   "version": "1.29-10",
+   "path": "debs/tar_1.29-10_iphoneos-arm.deb",
+   "size": 270662,
+   "sha256": "aab3c8563228b46e354eaffcead7eefe79d197a370d590952f37c6e99181941e"
+  },
+  {
+   "package": "uikittools",
+   "version": "1.1.12",
+   "path": "debs/uikittools_1.1.12_iphoneos-arm.deb",
+   "size": 31968,
+   "sha256": "6c8d484763f0fd83c70d9bd660d2a0daca6175b6898a624a3ca256f08d9399e0"
+  }
+ ],
+ "keep_stock": [
+  "firmware-sbin"
+ ],
+ "pseudo": [
+  {
+   "package": "firmware",
+   "version": "4.2.1",
+   "description": "almost impressive Apple frameworks",
+   "name": "iOS Firmware"
+  },
+  {
+   "package": "cy+os.ios",
+   "version": "4.2.1",
+   "description": "virtual operating system dependency"
+  },
+  {
+   "package": "cy+cpu.arm",
+   "version": "0",
+   "description": "virtual CPU dependency"
+  },
+  {
+   "package": "cy+model.ipod",
+   "version": "2.1",
+   "description": "virtual model dependency"
+  },
+  {
+   "package": "cy+kernel.darwin",
+   "version": "10.4.0",
+   "description": "virtual kernel dependency"
+  },
+  {
+   "package": "cy+lib.corefoundation",
+   "version": "550.52",
+   "description": "virtual corefoundation dependency"
+  }
+ ],
+ "mkdirs": [
+  "/var/lib/dpkg/updates",
+  "/var/lib/dpkg/triggers",
+  "/var/lib/apt/lists/partial",
+  "/var/cache/apt/archives/partial",
+  "/var/mobile/Library/Cydia",
+  "/var/mobile/Library/Caches/com.saurik.Cydia"
+ ],
+ "write": {
+  "/.cydia_no_stash": "",
+  "/var/lib/cydia/firmware.ver": "6\n",
+  "/etc/apt/apt.conf.d/99ios3ds-speed": "// Cydia refresh on a 400 MHz ARM11.\n// Do not spend minutes on a hanging host, retry or fetch translations.\nAcquire::http::Timeout \"10\";\nAcquire::https::Timeout \"10\";\nAcquire::Retries \"0\";\nAcquire::Languages \"none\";\n// Most sources publish Packages as gz, bz2 and lzma; gzip decompresses\n// much faster on the ARM11 (measured: emu/cydia_perf.py --fill 2000 --bz2).\nAcquire::CompressionTypes::Order { \"gz\"; \"bz2\"; \"lzma\"; };\n",
+  "/private/etc/hosts": "##\n# Host Database\n#\n# localhost is used to configure the loopback interface\n# when the system is booting.  Do not change this entry.\n##\n127.0.0.1\tlocalhost\n255.255.255.255\tbroadcasthost\n::1             localhost \nfe80::1%lo0\tlocalhost\n# Three of Cydia's five 2011 default sources no longer exist (ModMyi,\n# ZodTTD, repo666.ultrasn0w.com). Point them at the loopback address so a\n# refresh fails at once instead of waiting for DNS/connect timeouts; the\n# sources stay listed until the user removes them in Sources > Edit.\n127.0.0.1\tapt.modmyi.com\n127.0.0.1\tcydia.zodttd.com\n127.0.0.1\trepo666.ultrasn0w.com\n",
+  "/var/lib/cydia/metadata.plist": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict>\n\t<key>Settings</key>\n\t<dict>\n\t\t<key>Role</key>\n\t\t<string>User</string>\n\t</dict>\n</dict>\n</plist>\n",
+  "/etc/apt/sources.list.d/saurik.list": "deb http://apt.saurik.com/ tangelo-3.7 main\n",
+  "/etc/apt/preferences": "Package: cydia\nPin: version 1.0.3222-73\nPin-Priority: 1001\n"
+ },
+ "patch": [
+  {
+   "path": "/Applications/Cydia.app/Cydia_",
+   "offset": "0x16a1a",
+   "orig": "00d1",
+   "new": "00e0",
+   "why": "Cydia 1.0.3222 -[Cydia applicationDidFinishLaunching:] (0x179a0..): readlink() of /Applications, /Library/Ringtones, /Library/Wallpaper, /usr/include, /usr/lib/pam, /usr/libexec, /usr/share; any real directory (-1/EINVAL) starts 'Reorganizing' (free.sh moves it to /var/stash and stops SpringBoard). On our one-volume md0 rootfs that never succeeds, so Cydia stopped SpringBoard on every launch (QEMU). Newer Cydia skips it when /.cydia_no_stash exists; this build has no such check, so each 'adds r0,#1; bne next' -> 'b next' (Thumb d100 -> e000): the result is treated as a symlink and the stash is never started."
+  },
+  {
+   "path": "/Applications/Cydia.app/Cydia_",
+   "offset": "0x16a2c",
+   "orig": "00d1",
+   "new": "00e0",
+   "why": "same (readlink #2)"
+  },
+  {
+   "path": "/Applications/Cydia.app/Cydia_",
+   "offset": "0x16a3e",
+   "orig": "00d1",
+   "new": "00e0",
+   "why": "same (readlink #3)"
+  },
+  {
+   "path": "/Applications/Cydia.app/Cydia_",
+   "offset": "0x16a50",
+   "orig": "00d1",
+   "new": "00e0",
+   "why": "same (readlink #4)"
+  },
+  {
+   "path": "/Applications/Cydia.app/Cydia_",
+   "offset": "0x16a62",
+   "orig": "00d1",
+   "new": "00e0",
+   "why": "same (readlink #5)"
+  },
+  {
+   "path": "/Applications/Cydia.app/Cydia_",
+   "offset": "0x16a74",
+   "orig": "00d1",
+   "new": "00e0",
+   "why": "same (readlink #6)"
+  },
+  {
+   "path": "/Applications/Cydia.app/Cydia_",
+   "offset": "0x16a86",
+   "orig": "00d1",
+   "new": "00e0",
+   "why": "same (readlink #7)"
+  }
+ ],
+ "_metadata": "metadata.plist: Cydia 1.0.x asks 'Who Are You?' on first launch until Settings/Role is set (the 4.x Cydia 1.1.30 does not ask). Preset to User (Graphical Only), the role most users picked; Manage > Settings changes it.",
+ "_sources": "Cydia 1.0.x writes no default sources (its jailbreak bootstrap shipped saurik.list): Telesphoreo is listed here. 'tangelo-3.7' serves the same Packages as dists/ios/<CF>. Cydia is pinned to this version (/etc/apt/preferences): the repo's Cydia 1.1.30 installed on 2.2.1 but never launched (re-log 131). A dpkg hold instead made Cydia's refresh fail with 'pkgProblemResolver::Resolve generated breaks, this may be caused by held packages' (QEMU). base and debianutils are the repo's other Essential packages; without them APT wants to install them on the first refresh."
+}

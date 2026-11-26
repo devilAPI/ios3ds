@@ -96,7 +96,10 @@ def fetch(manifest=None, cache=None, verbose=True, groups=("tlsfix",)):
     Packages of an optional "group" are fetched only if the group is in groups;
     if one of them can't be had, only that group is left out."""
     m = manifest or load_manifest()
-    cache = cache or os.environ.get("IOS3DS_CYDIA_CACHE") or CACHE
+    # a manifest with its own "cache" (the 2.x set, rootfs/cydia-2.x.json) keeps
+    # its debs in build/<cache>, apart from the 4.x set's build/cydia
+    own = os.path.join(ROOT, "build", m["cache"]) if m.get("cache") else None
+    cache = cache or os.environ.get("IOS3DS_CYDIA_CACHE") or own or CACHE
     os.makedirs(cache, exist_ok=True)
     out, dropped = [], set()
     for p in m["packages"]:
@@ -327,6 +330,23 @@ def pseudo_entry(name, version, desc, title=None):
     return e
 
 
+def patch_file(m, path, data, verbose=True):
+    """Manifest "patch": byte patches {path, offset, orig, new, why} applied to a
+    package file as it is unpacked (the 2.x set's Cydia, rootfs/cydia-2.x.json).
+    A mismatch of "orig" fails the build: the pinned sha256 makes it a bug."""
+    for p in m.get("patch", []):
+        if p["path"] != path:
+            continue
+        off, orig, new = int(p["offset"], 16), bytes.fromhex(p["orig"]), bytes.fromhex(p["new"])
+        if len(orig) != len(new) or data[off:off + len(orig)] != orig:
+            raise SystemExit("[cydia] patch %s @%s: bytes %s, expected %s"
+                             % (path, p["offset"], data[off:off + len(orig)].hex(), p["orig"]))
+        data = data[:off] + new + data[off + len(new):]
+        if verbose:
+            say("patched %s @%s" % (path, p["offset"]))
+    return data
+
+
 def install(img, hfs, debs, manifest=None, verbose=True):
     """Unpack debs [(entry, path)] into the HFS+ image img (hfs = mkrootfs.hfs) and
     write the dpkg database. Returns the number of files written."""
@@ -363,7 +383,7 @@ def install(img, hfs, debs, manifest=None, verbose=True):
                 if ti.issym():
                     im.symlink(dst, ti.linkname)
                 elif ti.isfile() or ti.islnk():
-                    data = tar.extractfile(ti).read()
+                    data = patch_file(m, dst, tar.extractfile(ti).read(), verbose)
                     md5[dst] = hashlib.md5(data).hexdigest()
                     im.put(dst, data, ti.mode)
                 else:
