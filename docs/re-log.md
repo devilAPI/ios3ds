@@ -5851,7 +5851,7 @@ missing on 8B117. Everything below was read from this worktree's staged
   `scripts/inject_dylib.py`. With that, `make test` passes again and the six
   4.2.1 hashes above are unchanged.
 
-## NEXT. Safari's first cold page on 4.1 and 3.1.3: -urlpoll opened p1 before Wi-Fi (2026-11-25)
+## 143. Safari's first cold page on 4.1 and 3.1.3: -urlpoll opened p1 before Wi-Fi (2026-11-25)
 
 Continues §104/§112 and §133. Task: on 4.1 the first Safari page after a cold
 start showed "Cannot allocate memory", on 3.1.3 "Cannot Open Page … Invalid

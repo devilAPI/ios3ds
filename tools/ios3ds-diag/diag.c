@@ -76,7 +76,7 @@ static int iobusy(int secs)
    With ios3ds_urlwait=1 (set by every other safari_test run) the poll waits
    for the harness's URL instead: on a cold boot of 4.1/3.1.3 the 40 s timer
    fires before Wi-Fi/DHCP is up, so Safari was launched with no link and
-   its first page failed with ENOMEM/EINVAL (re-log NEXT). */
+   its first page failed with ENOMEM/EINVAL (re-log 143). */
 #include <errno.h>
 #include <stdint.h>
 time_t time(time_t *);

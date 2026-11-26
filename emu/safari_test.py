@@ -17,7 +17,7 @@ every image; any Safari alert (e.g. "Cannot allocate memory") fails it.
 /next answers "pending" (not a URL) until the harness has a URL for Safari.
 Every normal run boots with ios3ds_urlwait=1: without it ios3ds-diag -urlpoll
 opens page 1 by itself 40 s after boot, often before Wi-Fi/DHCP is up, and
-Safari shows ENOMEM (4.1) or EINVAL (3.1.3) (re-log NEXT). --nolink leaves
+Safari shows ENOMEM (4.1) or EINVAL (3.1.3) (re-log 143). --nolink leaves
 the flag off so the no-network alert is still exercised.
 Prints the [mem] lines before Safari, after the first page and at the end.
 boot.cfg is restored and the Wi-Fi files are removed afterwards.
