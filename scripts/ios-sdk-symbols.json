@@ -92,6 +92,7 @@
     "_IOPMAssertionCreateWithName",
     "_IORegistryEntryCreateCFProperties",
     "_IORegistryEntryCreateCFProperty",
+    "_IORegistryEntrySearchCFProperty",
     "_IORegistryEntrySetCFProperty",
     "_IOServiceAddMatchingNotification",
     "_IOServiceClose",

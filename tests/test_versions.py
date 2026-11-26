@@ -203,7 +203,13 @@ class TestVersions(unittest.TestCase):
                         "build/rootfs-add/ios2/ios3ds-gps": "/usr/bin/ios3ds-gps",
                         "build/rootfs-add/ios2/ios3ds-gpstest": "/usr/libexec/ios3ds-gpstest",
                         "tools/ios3ds-gps/com.ios3ds.gpstest.plist":
-                        "/System/Library/LaunchDaemons/com.ios3ds.gpstest.plist"})
+                        "/System/Library/LaunchDaemons/com.ios3ds.gpstest.plist",
+                        # Wi-Fi: the shim-ifnet daemon and the in-process Apple80211 bridge
+                        "build/rootfs-add/ios2/ios3ds-wifid": "/usr/libexec/ios3ds-wifid",
+                        "build/rootfs-add/ios2/ios3ds-nettest": "/usr/libexec/ios3ds-nettest",
+                        "build/rootfs-add/ios2/ios3ds-a80211.dylib": "/usr/lib/ios3ds-a80211.dylib",
+                        "tools/ios3ds-wifi/daemon/com.ios3ds.wifi.plist":
+                        "/System/Library/LaunchDaemons/com.ios3ds.wifi.plist"})
                     self.assertEqual(list(recipe["plist_set"]),
                                      ["/System/Library/LaunchDaemons/com.apple.SpringBoard.plist"])
                     env = recipe["plist_set"]["/System/Library/LaunchDaemons/com.apple.SpringBoard.plist"][
