@@ -415,7 +415,15 @@ static long https_get(const char *url, char *err, int n)
         long code = e ? ((MI)msg)(e, sel("code")) : 0;
         void *dom = e ? ((M0)msg)(e, sel("domain")) : 0;
         const char *ds = dom ? (const char *)((M0)msg)(dom, sel("UTF8String")) : "?";
-        snprintf(err, (size_t)n, "%s %ld", ds ? ds : "?", code);
+        /* NSCocoaErrorDomain 256 only says "could not read": the CFNetwork /
+           NSURL error underneath (DNS, TLS, timeout) is in its userInfo */
+        void *ui = e ? ((M0)msg)(e, sel("userInfo")) : 0;
+        void *ue = ui ? ((M1)msg)(ui, sel("objectForKey:"), ((M1)msg)(gc("NSString"), sel("stringWithUTF8String:"), "NSUnderlyingError")) : 0;
+        long ucode = ue ? ((MI)msg)(ue, sel("code")) : 0;
+        void *udom = ue ? ((M0)msg)(ue, sel("domain")) : 0;
+        const char *uds = udom ? (const char *)((M0)msg)(udom, sel("UTF8String")) : 0;
+        if (uds) snprintf(err, (size_t)n, "%s %ld (%s %ld)", ds ? ds : "?", code, uds, ucode);
+        else snprintf(err, (size_t)n, "%s %ld", ds ? ds : "?", code);
     }
     ((M0)msg)(pool, sel("release"));
     return len;
@@ -441,7 +449,11 @@ static void check_wifi(void)
     if (u) while (u[i] && u[i] != ' ' && i < (int)sizeof url - 1) { url[i] = u[i]; i++; }
     url[i] = 0;
     if (!url[0]) snprintf(url, sizeof url, "https://example.com/");
-    long n = https_get(url, err, sizeof err);
+    long n = -1;
+    for (int tries = 0; tries < 3 && n <= 0; tries++) {   /* DNS/DHCP can still be settling */
+        if (tries) { out("[hwtest] wifi.https: %s, retrying in 15 s", err); sleep(15); }
+        n = https_get(url, err, sizeof err);
+    }
     if (n > 0) result("wifi.https", PASS, "%s: %ld bytes", url, n);
     else if (ios_major < 4) result("wifi.https", SKIP, "%s: %s (iOS %s TLS is too old for most servers)", url, err, ios_name);
     else result("wifi.https", FAIL, "%s: %s", url, err);
@@ -542,7 +554,7 @@ static void check_cameras(void)
         r.a[0] = c;
         sysctl(mib, (unsigned)m + 1, 0, 0, 0, 0);
         uint32_t st = r.status, got = 0;
-        for (int t = 0; st == CAM_OK && t < 60 && !got; t++) {
+        for (int t = 0; st == CAM_OK && t < 150 && !got; t++) {     /* sensor init can take seconds */
             usleep(100000);
             memset(&r, 0, sizeof r);
             r.op = CAM_OP_FRAME;
@@ -556,7 +568,7 @@ static void check_cameras(void)
         sysctl(mib, (unsigned)m + 1, 0, 0, 0, 0);
         ok += got;
         snprintf(what + strlen(what), sizeof what - strlen(what), "%s%s %s", c ? ", " : "", nm[c],
-                 got ? "frame ok" : st == CAM_OK ? "no frame in 6 s" : "error");
+                 got ? "frame ok" : st == CAM_OK ? "no frame in 15 s" : "error");
         if (!got && st != CAM_OK) snprintf(what + strlen(what), sizeof what - strlen(what), " %u", st);
     }
     free(fb);
