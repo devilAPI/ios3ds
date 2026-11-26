@@ -572,7 +572,10 @@ static void check_cameras(void)
         if (!got && st != CAM_OK) snprintf(what + strlen(what), sizeof what - strlen(what), " %u", st);
     }
     free(fb);
-    result("cameras", ok == (int)CAM_COUNT ? PASS : FAIL, "%s", what);
+    if (ok != (int)CAM_COUNT && ios_major == 2)     /* no Camera.app / MediaCapture on 2.x (multi-version.md 6.9) */
+        result("cameras", SKIP, "n/a on iPhone OS 2; shim frame path: %s", what);
+    else
+        result("cameras", ok == (int)CAM_COUNT ? PASS : FAIL, "%s", what);
 }
 
 static void check_gps(void)

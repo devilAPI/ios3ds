@@ -6670,3 +6670,51 @@ stubs `IOMobileFramebufferEnable/DisableVSyncNotifications` 0x31bf596c/0x31bf595
   boot.cfg `8d4079cf…` (unchanged).
 - **[G]** Making QEMU's PICA200 frames faster (so the pause also goes away
   in the emulator) is a separate performance item, not done here.
+
+## NEXT. One-boot hardware test kit: `boot.cfg hwtest=1` (2026-11-26)
+
+Goal: one console boot that checks every driver and writes a clear
+PASS/FAIL/SKIP block to `log.txt` (and the screen), so a hardware report
+is one file instead of a dozen manual steps. User docs:
+[real-hardware.md](real-hardware.md) §6; README switch table.
+
+### Design
+
+- **ARM9:** new `boot.cfg` key `hwtest` (`bootcfg.c`, host-tested in
+  `tests/test_bootcfg.py`): `hwtest=1|2` appends the boot-arg
+  `ios3ds_hwtest=N` and logs a yellow `[hwtest]` line. Default 0: the
+  generated `boot.cfg` is unchanged (hash `8d4079cf…`); no kernel, shim,
+  devtree, fakeio or GPU file is touched.
+- **Userland:** `tools/ios3ds-diag/hwtest.c` → `/usr/libexec/ios3ds-hwtest`
+  (4.x build for 4.2.1/4.1/3.1.3, `-target armv6-apple-ios2.0 -ffixed-r9`
+  + `dyld2_glue.S` build for 2.2.1). Job `com.ios3ds.hwtest.plist` runs
+  `ios3ds-diag -g ios3ds_hwtest /usr/libexec/ios3ds-hwtest`, so with
+  `hwtest=0` it exits at once (same gate as gltest/gpstest).
+- It waits for SpringBoard's Mach service plus 30 s (45 s on 2.x/3.x), then
+  runs the checks. Reused tools: `ios3ds-tone` (play + `rec`; new env
+  `IOS3DS_HWTEST` makes it write to stdout instead of `/dev/console`),
+  `ios3ds-gyrotest` (4.x, stopped at its `done:` line), `ios3ds-gltest`,
+  `ios3ds-gpstest` (`IOS3DS_HWTEST`: no console redirect, no runtime
+  location switch). Read-only mailbox snapshots: `kern.ios3ds_mcu` (battery,
+  RTC, sliders, HOME/POWER counters, gyro state, backlight),
+  `kern.ios3ds_input` (ring: buttons, pen). Camera: `ios3ds_cam`
+  START/FRAME/STOP per sensor. Accelerometer: ios3ds-mcud keeps it off by
+  default, so hwtest writes `kern.ios3ds_mcuctl` `{acc=1, backlight=0}`
+  for 3 s and back to `acc=0` (only if nobody else had requested it).
+  Wi-Fi: en0 DHCP address (configd/WiFiManager scanned and joined the saved
+  network) + `NSData dataWithContentsOfURL:` of `https://example.com/`
+  (3 tries; `ios3ds_hwtest_url=` overrides).
+- Prompts are `CFUserNotificationDisplayAlert/Notice` (SpringBoard shows them
+  on 2.x–4.x). Every prompt times out; no answer = SKIP. `hwtest=2` skips
+  all prompts. Final on-screen alert: "Hardware test: N PASS, N FAIL,
+  N SKIP" with the check names grouped by result.
+- Version from `kern.osversion`; CoreMotion (gyro) is iOS 4 only, gltest
+  is not on the 3.1.3/2.2.1 rootfs (SKIP with reason), mic on 2.x is SKIP
+  (no built-in mic route, re-log 134), HTTPS failure on 2.x/3.x is SKIP.
+- `emu/hwtest_check.py --mode 2|1|0`: QEMU harness (ctr-wifi AP, mic model
+  `IOS3DS_MIC=sine:440:8000`). Mode 1 plays the person: drags for touch,
+  QEMU keys for buttons/HOME/POWER, `qom-set mcu-volume` / `mcu-3d-slider`.
+  Mode 0 is the control: home screen must come up, no `[hwtest]` line.
+
+### Results (QEMU)
+

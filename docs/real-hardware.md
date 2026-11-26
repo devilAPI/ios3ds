@@ -119,14 +119,14 @@ screen as an alert:
 | `mcu`, `battery`, `rtc` | MCU mailbox (`kern.ios3ds_mcu`): state, firmware, battery %/V/°C, charger, RTC | – |
 | `accel` | switches the accelerometer on for 3 s through ios3ds-mcud's control sysctl and counts the ARM9 samples (then back off) | – |
 | `gyro` | chip found on I2C (ITG-3270 / L3G); on iOS 4, `ios3ds-gyrotest` through CoreMotion plus the ARM9 sample counter | – |
-| `cameras` | `ios3ds_cam` START → one frame → STOP, outer and inner camera | – |
+| `cameras` | `ios3ds_cam` START → one frame (up to 15 s) → STOP, outer and inner camera | – |
 | `gps` | with `gps=` set: `ios3ds-gpstest` must see that location through CoreLocation; otherwise SKIP | – |
 | `gpu` | `ios3ds-gltest`: offscreen render plus pixel checks (SKIP where it isn't installed, e.g. 2.2.1/3.1.3) | – |
 | `speaker` | `ios3ds-tone` plays an 800 ms 1 kHz beep through AudioQueue → CODEC/CSND; route from AudioSession | "Did you hear a beep?" |
 | `headphone` | plug in, a second beep; the iOS route must say `Headphone…` (jack detect) | plug in / unplug |
 | `mic` | 1.5 s recording through AudioQueue; frames and peak must be > 0 | clap or speak |
 | `wifi.join` | en0 gets a DHCP address within 120 s (the saved network was scanned and joined) | – |
-| `wifi.https` | NSData fetch of `https://example.com/` (or `ios3ds_hwtest_url=` in `cmdline`) with this iOS's own TLS; on 2.x/3.x a failure is SKIP (TLS too old for most servers) | – |
+| `wifi.https` | NSData fetch (3 tries, 15 s apart) of `https://example.com/` (or `ios3ds_hwtest_url=` in `cmdline`) with this iOS's own TLS; on 2.x/3.x a failure is SKIP (TLS too old for most servers) | – |
 | `touch` | touch ADC running; pen samples in the input ring while you draw | draw on the bottom screen |
 | `buttons` | A B X Y L R and the D-pad seen in the input ring | press them |
 | `volume`, `home` | volume slider range, HOME press counter | move / press |
