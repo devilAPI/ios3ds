@@ -5845,3 +5845,8 @@ missing on 8B117. Everything below was read from this worktree's staged
   (3.1.3 via a per-pid marker build that was reverted before the commit;
   2.2.1 via `[applog] Maps pid 32` on the console). The marker change never
   entered any commit; `git diff tools/ios3ds-diag/applog.c` is empty.
+- **[V]** After rebasing onto origin/main (c125664, sens221 docs only),
+  `make test` exposed a release-packaging check: the new `mkrootfs` import had
+  to be added to `scripts/mkrelease.py:SOURCES` so the installer ships
+  `scripts/inject_dylib.py`. With that, `make test` passes again and the six
+  4.2.1 hashes above are unchanged.
