@@ -201,7 +201,7 @@
     "offset": "0x12a5844",
     "orig": "f0402de90c708de2",
     "new": "0100a0e31eff2fe1",
-    "why": "7E18 MusicLibrary AOU243378_2(MLSSqliteVFSFile*) -> 1 (ARM mov r0,#1; bx lr; \"allowed\"), skipping the signed .itdb.cbk path. MLSSqliteVFSOpen (VA 0x312a55a0, cache offset 0x12a55a0) is its only caller; on 8C148 the equivalent helper _AOU243378_7_1 is stubbed the same way (recipe.json, docs/audio.md section 10), so iTunes' signed .itdb.cbk checksum file is neither written nor checked. 7E18 has no _AOU243378_7_1: the helper here is AOU243378_2 at 0x312a5844, found by the MusicLibrary image's LC_SYMTAB in the dyld cache. Returning 0 instead made itdbprepserver write a 0-byte Library.itdb; returning 1 leaves a plain, unsigned library that itdbprepserver upgrades and Music.app lists (re-log NEXT).",
+    "why": "7E18 MusicLibrary AOU243378_2(MLSSqliteVFSFile*) -> 1 (ARM mov r0,#1; bx lr; \"allowed\"), skipping the signed .itdb.cbk path. MLSSqliteVFSOpen (VA 0x312a55a0, cache offset 0x12a55a0) is its only caller; on 8C148 the equivalent helper _AOU243378_7_1 is stubbed the same way (recipe.json, docs/audio.md section 10), so iTunes' signed .itdb.cbk checksum file is neither written nor checked. 7E18 has no _AOU243378_7_1: the helper here is AOU243378_2 at 0x312a5844, found by the MusicLibrary image's LC_SYMTAB in the dyld cache. Returning 0 instead made itdbprepserver write a 0-byte Library.itdb; returning 1 leaves a plain, unsigned library that itdbprepserver upgrades and Music.app lists (re-log 147).",
     "mode": "0644"
   }
  ],

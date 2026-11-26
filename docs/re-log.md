@@ -6245,7 +6245,7 @@ off.
 - **[V]** After `git rebase origin/main` (c24a40d): `make test` passes;
   fresh 2.2.1 soak (same command) → **PASS** (cycle 0 Cydia, app diff 52.2);
   fresh 4.2.1 build has the same six hashes; 4.2.1 soak → **PASS**.
-## NEXT. Audio on 4.1, 3.1.3 and 2.2.1: headphone routing, keyboard clicks and the test song (2026-11-26)
+## 147. Audio on 4.1, 3.1.3 and 2.2.1: headphone routing, keyboard clicks and the test song (2026-11-26)
 Design: docs/audio.md §4/§10, docs/multi-version.md §6.9, docs/emulator.md
 (`emu/audio_check.py`). All runs used the worktree-private QEMU
 `/tmp/opencode/qemu-compat2/b/qemu-system-arm`, `--icount 2`, and images built

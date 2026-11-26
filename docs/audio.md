@@ -429,7 +429,7 @@ computer has it, else the file name. `--no-test-song` leaves out the test song.
   playlist (`is_hidden=0`, `distinguished_kind=0`, name "ios3ds") with every
   track and a `container_ui` row, following libgpod's `itdb_sqlite.c`.
 
-**Older versions (re-log NEXT):** 8B117 uses the same sqlite library and
+**Older versions (re-log 147):** 8B117 uses the same sqlite library and
 `MLSSqliteVFSOpen` patch as 4.2.1 (relocated) and plays the ALAC test song.
 7E18's MusicLibrary has no `_AOU243378_7_1`: its signed-`.cbk` helper is
 `AOU243378_2(MLSSqliteVFSFile*)` at dyld-cache offset `0x12a5844`, stubbed to

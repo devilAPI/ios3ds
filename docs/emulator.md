@@ -109,7 +109,7 @@ output stream and CSND start after typing in Spotlight or Notes) and Music.app's
 test song (a new stream plus a non-silent CSND WAV). Per-version tap positions
 are in `UI`; artifacts and the PASS/FAIL report go to `--out`. The script does
 not edit the image; a fresh one is still recommended for repeatable logs.
-See docs/audio.md §10 and re-log NEXT.
+See docs/audio.md §10 and re-log 147.
 
 ### Safari and memory: `emu/safari_test.py`
 `python3 emu/safari_test.py --icount 2` boots with the Wi-Fi model, opens

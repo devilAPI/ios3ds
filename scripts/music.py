@@ -216,7 +216,7 @@ def make_test_song(path):
 
 def make_test_song_wav(path):
     """The same melody as plain PCM for older firmwares whose software ALAC
-    decoder cannot start a stream from our escape-frame .m4a (re-log NEXT)."""
+    decoder cannot start a stream from our escape-frame .m4a (re-log 147)."""
     import array
     samples = render_song()
     with wave.open(path, "wb") as w:
