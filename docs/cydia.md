@@ -249,19 +249,22 @@ errors for them; remove them in Sources > Edit.
   every launch ended on the home screen. The manifest's `"patch"` list
   (`scripts/cydia.py patch_file`) turns the seven `bne` after its `readlink()`
   calls into `b` while the deb is unpacked; the original bytes are checked.
-- **Preset role and sources:** `/var/lib/cydia/metadata.plist` sets
+- **Preset role, no sources:** `/var/lib/cydia/metadata.plist` sets
   `Settings/Role = User`, so the first launch opens the home tab instead of
-  "Who Are You?" (Manage > Settings changes it);
-  `/etc/apt/sources.list.d/saurik.list` lists Telesphoreo (`tangelo-3.7`),
-  which 1.0.x does not add itself. `/etc/apt/preferences` pins `cydia` to
-  1.0.3222-73 (priority 1001), so the repo's 1.1.30 (which never launched on
-  2.2.1, re-log 131) is not offered; a dpkg hold instead made Cydia's refresh
-  fail with "pkgProblemResolver::Resolve generated breaks". `base` and
-  `debianutils` are in the set because they are the repo's other Essential
-  packages.
-- **Home page:** with Wi-Fi, Cydia loads saurik's live home page for this
-  version, which says "This version of Cydia is no longer supported: please
-  upgrade to 1.1.x". That is the server's text for 1.0.x clients.
+  "Who Are You?" (Manage > Settings changes it). No source list is written:
+  1.0.x adds none itself, and with Telesphoreo (`apt.saurik.com tangelo-3.7`)
+  listed its first refresh asks for an "Essential Upgrade" to the repo's
+  Cydia 1.1.30. In QEMU that upgrade unpacked 1.1.30 and the UI then froze; a
+  dpkg hold made the refresh fail ("pkgProblemResolver::Resolve generated
+  breaks"), and an `/etc/apt/preferences` pin still offered the upgrade, which
+  then failed ("unable to locate file for the cydia package"). A user who adds
+  sources should pick "Ignore (Temporary)" at that prompt. `base` and
+  `debianutils` (the repo's other Essential packages) are in the set so a
+  refresh does not ask for them.
+- **Home page:** with Wi-Fi, Cydia loads saurik's live home page
+  (cydia.saurik.com) for this version, which says "This version of Cydia is no
+  longer supported: please upgrade to 1.1.x" (the server's text for 1.0.x
+  clients). Offline it shows "Unable to Load (no Internet connection)".
 
 ## Turning it off
 
