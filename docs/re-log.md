@@ -6076,15 +6076,10 @@ Apple80211.framework. Details in docs/wifi.md section 11.
   "275,226;199,226;123,226;47,226;275,50"` → **PASS** (with the dylib in
   SpringBoard and every app).
 - **[V]** Fresh 4.2.1 soak `--cycles 5 --icount 2` → **PASS**.
-<<<<<<< HEAD
-
-- **[V]** After rebasing onto origin/main (c125664, with the gpu313/sens221
-=======
-- **[V]** After rebasing onto origin/main (0b433f3, with the gpu313/sens221/gyro41
+- **[V]** After rebasing onto origin/main (origin/main with the gpu313/sens221/gyro41
   rounds; the 2.2.1 overlay Wi-Fi entries were re-applied on main's
   overlay): `make test` passes (test_versions knows the Wi-Fi files,
   `IORegistryEntrySearchCFProperty` added to the stub symbol list),
   2.2.1 `wifi_test --case ok` **PASS**, `wifi_ui_test` **8/8 PASS**, fresh
   2.2.1 soak (`--require-app`, targets above) **PASS**, 4.2.1 hashes
   unchanged (same six values), fresh 4.2.1 soak **PASS**.
->>>>>>> 4a678d7 (re-log: post-rebase Wi-Fi 2.2.1 checks)
