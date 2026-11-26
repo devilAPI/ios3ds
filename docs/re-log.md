@@ -7260,7 +7260,7 @@ default stays byte-identical; every action is behind `boot.cfg`
    `PDN_GPU_CNT` on any GPU sysctl). If any fails, set `power_opt=0`.
    Not done: no console with a current meter was available in this worktree.
 
-## NEXT. stereo3d=1 soak re-check: the round-4 SIGKILL failure does not reproduce on main (2026-11-27)
+## 158. stereo3d=1 soak re-check: the round-4 SIGKILL failure does not reproduce on main (2026-11-27)
 
 Goal: find why SpringBoard SIGKILLed apps after Home in the `stereo3d=1`
 5-cycle soak (re-log 155) and make that soak pass.
