@@ -155,7 +155,25 @@ def main():
             b = ImageStat.Stat(img.convert("L")).mean[0]
             if b > 10 and bright > 10 and ImageStat.Stat(ImageChops.difference(
                     img.convert("L"), prev.convert("L"))).mean[0] < 1.0:
-                return img, time.time() - t_start
+                # Not the home screen: one slow frame can hold an animation
+                # still for 2-5 s (3.1.3's GPU compositor in QEMU, re-log
+                # NEXT). Such a frame must stay unchanged 6 s longer.
+                ref = home_ref_box[0]
+                if ref is None or ImageStat.Stat(ImageChops.difference(
+                        img.convert("L"), ref.convert("L"))).mean[0] <= 12:
+                    return img, time.time() - t_start
+                still = True
+                for _ in range(3):
+                    time.sleep(2)
+                    nxt = shot(name)
+                    if ImageStat.Stat(ImageChops.difference(
+                            nxt.convert("L"), img.convert("L"))).mean[0] >= 1.0:
+                        still = False
+                        img = nxt
+                        break
+                if still:
+                    return img, time.time() - t_start
+                b = ImageStat.Stat(img.convert("L")).mean[0]
             prev, bright = img, b
         return prev, time.time() - t_start
 
@@ -398,6 +416,20 @@ def main():
                 return ImageStat.Stat(ImageChops.difference(
                     img.convert("L"), home_ref.convert("L"))).mean[0]
             if diff > 12:
+                # Look again before touching anything: one slow frame can
+                # hold a close animation still for >2 s (3.1.3's GPU
+                # compositor in QEMU, re-log NEXT), which settled() takes
+                # for the end. Only a screen that is still wrong after
+                # this wait needs (and is counted as) a recovery.
+                time.sleep(6)
+                late = dist()
+                if late <= 12:
+                    c["late_settle"] = round(diff, 2)
+                    c["home_diff"] = round(late, 2)
+                    diff = late
+                    log("cycle %d: home screen arrived late (diff %.1f at the first look), no input needed" %
+                        (i, c["late_settle"]))
+            if diff > 12:
                 c["recovered_with"] = "stuck"
                 for step, act in (("page swipe + Home", lambda: (drag(280, 240, 40, 240),
                                                                  time.sleep(3), key("ret"))),
@@ -459,6 +491,14 @@ def main():
                 # screen would report a false lock failure: press Home and
                 # compare the home screen (a slide that never unlocked still
                 # differs; the lock screen ignores Home).
+                if ImageStat.Stat(u0).mean[0] > 5 and ImageStat.Stat(ImageChops.difference(
+                        u0, home_ref.convert("L"))).mean[0] > 12:
+                    # a slow frame can hold the unlock animation still for
+                    # >2 s (see the Home check above): look again first, or
+                    # the Home below lands on page 1 and opens Spotlight
+                    time.sleep(6)
+                    u0, _ = settled("c%03d_unlock" % i)
+                    u0 = u0.convert("L")
                 if ImageStat.Stat(u0).mean[0] > 5 and ImageStat.Stat(ImageChops.difference(
                         u0, home_ref.convert("L"))).mean[0] > 12:
                     key("ret")
@@ -525,6 +565,7 @@ def main():
         if "recovered_with" in c:
             rec.setdefault(c["recovered_with"], []).append(c["cycle"])
     results["recoveries"] = rec
+    results["late_settles"] = [c["cycle"] for c in results["cycles"] if "late_settle" in c]
     stuck = rec.get("stuck", [])
     if stuck or len(rec.get("Dismiss + Home", [])) > 1:
         failed = True
@@ -545,6 +586,7 @@ def main():
              "- cycles run: %d" % len(results["cycles"]),
              "- SpringBoard/input daemon restarts after boot: %d" % results["springboard_restarts"],
              "- not home after Home (cycle lists by what it took to recover): %s" % (rec or "never"),
+             "- home screen late but reached without input (cycles): %s" % (results["late_settles"] or "none"),
              "- taps that opened no app: %s%s" % (no_app or "none",
                                                   " (failure: --require-app)" if a.require_app and no_app else ""),
              "- lock rounds not ending on the home screen (cycles 9, 19, ... lock for %g s): %s" % (a.long_lock, bad_unlock or "none"),

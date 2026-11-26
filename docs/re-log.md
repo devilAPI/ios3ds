@@ -6598,3 +6598,75 @@ compat16 worktree into this worktree's `build/fw-2.2.1`. 5H11a code read with
   `--ios` and `diag=1`, back up the card, boot on a console and attach
   `sd:/ios3ds/log.txt` with the version and IPSW sha1 to an issue. The
   opt-in GPU paths need the console checklists in re-log 135 and 149.
+
+## NEXT. 3.1.3 GPU path: the "dark icons after Home" were one slow GPU frame, not a hang (2026-11-26)
+
+Continues §148. Traced with the QEMU gdbstub (hardware breakpoints through
+`emu/gdb/rsp.py`) on a fresh `IOS3DS_GPU313=1 make sdimg IOS=3.1.3` image.
+7E18 QuartzCore symbols come from the cache's local symbol tables:
+`IOMFBServer::link_callback` 0x31bdc944, `set_next_update` 0x31bdcdec,
+`Server::render_for_time` 0x31bdfba0, `IOMFBDisplay::finish_update`
+0x31bdb7a4, `wait_update` 0x31bdafb8 (calls `IOMobileFramebufferSwapWait`),
+stubs `IOMobileFramebufferEnable/DisableVSyncNotifications` 0x31bf596c/0x31bf595c.
+
+- **[V]** The vsync loop works as designed: `set_next_update` arms
+  `[this+0xf0] = 3` and enables vsync notifications when it was 0, each
+  `link_callback` decrements it and calls `render_for_time`, which calls
+  `set_next_update` again while an animation runs. After the last frame of
+  the close animation (`t2 = inf`) the count runs out and
+  `DisableVSyncNotifications` is called; a later commit re-enables it. No
+  lost enable, no missing callback.
+- **[V]** `IOMobileFramebufferSwapWait` (hint from the 2.2.1 GL work): no call
+  took more than 0.3 s across four Home cycles, so the 2.x "MBX swap token"
+  wait is not what happens on 3.1.3.
+- **[V]** One `render_for_time` → `finish_update` takes **2–5 s wall time**
+  near the end of the close animation (0.5–1.3 s for the others). Sampling
+  the stopped CPU during it (gdb interrupt every 0.25 s, frame-pointer
+  backtraces): ~90 % of samples are the kernel's `machine_delay_until`
+  (0xc006b3ba, spinning on `mach_absolute_time`) called from the shim's GPU
+  part (0xc08b2aa0), i.e. `IODelay` polling in `pica_drv` while the PICA200
+  runs a command list. User side: `api_Clear` → `pica_clear` →
+  `bind_target` → `sync_target` → `d_submit` (engine slide 0x196000). So CA
+  is waiting for QEMU's PICA200 model to finish a full-screen frame.
+- **[V]** The screen is not stuck: a soak variant that first waits 6 s with
+  no input showed the only "stuck" cycle of 10 reach the home screen by
+  itself (home diff 32.5 → ≤ 12, `recovered_with: wait (no input)`), and a
+  24 s screenshot probe saw 0 of 11 cycles still dark. `emu/soak.py`'s
+  `settled()` (two identical shots 2 s apart) took the frozen frame for the
+  end of the animation and then sent page swipe + Home, which made it look
+  like a second Home was needed. The same happens after an unlock (lock
+  rounds 4/9 of a 10-cycle run: a half-drawn frame, then Home on page 1
+  opened Spotlight).
+- **[V]** Fix (harness, `emu/soak.py`, no product code): `settled()` accepts
+  a still frame at once only if it matches the home reference; any other
+  frame must stay unchanged 6 s longer. Before any recovery input the Home
+  check looks again after 6 s, and a cycle that is home by then is reported
+  as `late_settle` ("home screen late but reached without input"), not as a
+  failure; the unlock check also looks again before pressing Home (which on
+  page 1 opens Spotlight). A screen still wrong after that is handled as
+  before. A first 10-cycle run with only the 6 s re-look still had a late
+  Home press (cycle 5) and a half-drawn unlock frame (cycle 9) mistaken for
+  the end; the `settled()` change removed both.
+- **[G]** On hardware the PICA200 runs these lists in milliseconds, so the
+  pause should not be visible. Hardware check: with the opt-in GPU image,
+  open and close five apps and confirm that one Home always shows the full
+  icon grid within ~1 s without touching anything; a `diag=1` log should
+  show no `[pica] TIMEOUT`.
+
+### Verification
+
+- **[V]** Fresh images, `IOS3DS_QEMU=/tmp/opencode/qemu-compat2/b/qemu-system-arm`,
+  `--icount 2`, targets `47,314;123,226;199,226;275,226;123,50`:
+
+  | image | command | result |
+  |---|---|---|
+  | 3.1.3 `IOS3DS_GPU313=1` (run 1) | `soak.py --cycles 10 --require-app --crashlogs` | **PASS**, 10/10 home diff ≤ 0.03, 0 recoveries, 0 late, lock rounds 4/9 home |
+  | 3.1.3 `IOS3DS_GPU313=1` (run 2) | same | **PASS**, 10/10 home diff ≤ 0.03, 0 recoveries, 0 late, lock rounds 4/9 home |
+  | 3.1.3 default | `soak.py --cycles 5 --require-app --crashlogs` | **PASS**, 0 recoveries |
+  | 4.2.1 default | `soak.py --cycles 5` | **PASS**, 0 recoveries |
+
+- **[V]** `make test` passes. 4.2.1 fresh build: kernel `505f451a…`, devtree
+  `25b1bd23…`, fakeio `e5fecd66…`, shim `a35631eb…`, gpu `6bdaf617…`,
+  boot.cfg `8d4079cf…` (unchanged).
+- **[G]** Making QEMU's PICA200 frames faster (so the pause also goes away
+  in the emulator) is a separate performance item, not done here.
