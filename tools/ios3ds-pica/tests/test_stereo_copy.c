@@ -106,6 +106,10 @@ int main(void)
     picture(1);
     display_set_stereo(true, 255);
     blit();
+    /* hysteresis: one home probe is not enough (a transition can show one) */
+    CHECK(*(volatile uint32_t *)lcd == 0, "home + slider: first probe still 2D");
+    CHECK(stereo_reqs == 0, "home + slider: no PDC request after one probe");
+    blit();
     CHECK(*(volatile uint32_t *)lcd == ST_BARRIER_ON, "home + slider: barrier on");
     CHECK(stereo_reqs == 1, "home + slider: PDC switched once");
     diff = 0;
@@ -131,6 +135,20 @@ int main(void)
         CHECK(pixel(TOP1, 50, i) == vr, "front plane right row %u: %06x != %06x",
               i, pixel(TOP1, 50, i), vr);
     }
+    /* 2b. a short flat stretch (a transition) keeps 3D for up to 8 probes,
+       the ninth goes back to 2D */
+    picture(0);
+    for (i = 0; i < 8; i++)
+        blit();
+    CHECK(*(volatile uint32_t *)lcd == ST_BARRIER_ON, "transition: 3D held through 8 flat probes");
+    CHECK(stereo_reqs == 1, "transition: no PDC switch while held");
+    blit();
+    CHECK(*(volatile uint32_t *)lcd == 0, "transition: 2D after the hold");
+    picture(1);
+    blit();
+    blit();
+    CHECK(*(volatile uint32_t *)lcd == ST_BARRIER_ON, "home again: 3D");
+
     /* 3. slider down: flat, barrier off, and the normal copy restored */
     display_set_stereo(true, 0);
     blit();
@@ -149,6 +167,16 @@ int main(void)
     for (i = 0; i < 240; i++)
         diff += pixel(TOP0, 100, i) != pixel(TOP1, 100, i);
     CHECK(diff == 0, "app frame: both eyes identical (%u rows differ)", diff);
+
+    /* 4b. boot.cfg stereo_depth=0: flat with the slider up */
+    picture(1);
+    display_set_stereo_depth(0);
+    display_set_stereo(true, 255);
+    blit();
+    blit();
+    blit();
+    CHECK(*(volatile uint32_t *)lcd == 0, "stereo_depth=0: barrier off");
+    display_set_stereo_depth(100);
 
     /* 5. Dirty-row cache: a full two-eye frame is built in a few bounded
        blits; afterwards a change in one source row rebuilds only the screen
