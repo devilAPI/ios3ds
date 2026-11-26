@@ -134,8 +134,10 @@ def main():
     if os.path.exists(shot):
         os.replace(shot, os.path.join(a.out, "summary-mode%d.png" % a.mode))
     if a.mode == 0:
-        good = not hw
-        print("Result: %s (hwtest=0: %d [hwtest] lines)" % ("PASS" if good else "FAIL", len(hw)))
+        home = "connected to SpringBoard" in log          # ios3ds-mcud: the home screen came up
+        good = home and not hw
+        print("Result: %s (hwtest=0: %d [hwtest] lines, home screen %s)" % ("PASS" if good else "FAIL", len(hw),
+                                                                        "up" if home else "NOT seen"))
         return 0 if good else 1
     print("Result: %s" % ("PASS" if ok else "FAIL (no summary within %d s)" % a.timeout))
     return 0 if ok else 1

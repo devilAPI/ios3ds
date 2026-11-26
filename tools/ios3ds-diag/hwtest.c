@@ -345,7 +345,7 @@ static void check_audio(void)
         else result("speaker", PASS, "tone played through AudioQueue, route \"%s\" (nobody confirmed hearing it)", route);
     }
     /* headphone detect: the route iOS reports must follow the jack */
-    if (barg_on("ios3ds_hwtest_nohp")) result("headphone", SKIP, "skipped by boot-arg");
+    if (!prompts) result("headphone", SKIP, "needs a person (hwtest=1); speaker route \"%s\"", route);
     else if (ask(30, "Hardware test: headphones", "Plug headphones in, then tap OK (Skip if you have none).", "OK", "Skip") != 0)
         result("headphone", SKIP, "no headphones / no answer (speaker route \"%s\")", route);
     else {
@@ -366,7 +366,9 @@ static void check_audio(void)
     unsigned frames = 0, want = 0, nz = 0, peak = 0;
     for (p = buf; (p = strstr(p, "tone: rec ")); p++)
         if (sscanf(p, "tone: rec %u of %u frames in %*u buffers: nonzero %u, peak %u", &frames, &want, &nz, &peak) == 4) break;
-    if (!p) result("mic", FAIL, "no recording (exit %d)", r);
+    if ((!p || !frames) && ios_major == 2)
+        result("mic", SKIP, "no built-in mic route on iPhone OS 2 (re-log 134); %s", p ? "0 frames" : "no recording");
+    else if (!p) result("mic", FAIL, "no recording (exit %d)", r);
     else if (!frames) result("mic", FAIL, "0 of %u frames recorded", want);
     else if (!peak) result("mic", FAIL, "%u frames, all silent", frames);
     else result("mic", PASS, "%u of %u frames, peak %u, %u non-zero", frames, want, nz, peak);
@@ -575,7 +577,10 @@ static void check_gps(void)
     const char *p = strstr(buf, "[gpstest] location: ");
     char loc[48] = "";
     if (p) sscanf(p + 20, "%47[^\n]", loc);
-    result("gps", p && strncmp(loc, "(null)", 6) ? PASS : FAIL, "gps=%s, CoreLocation says %s (exit %d)", v, loc[0] ? loc : "nothing", r);
+    int same = !strncmp(loc, v, 5);
+    result("gps", p && strncmp(loc, "(null)", 6) ? PASS : FAIL, "gps=%s, CoreLocation says %s%s", v, loc[0] ? loc : "nothing",
+           !p ? "" : same ? " (= gps=)" : " (moved at runtime by ios3ds-gps set)");
+    (void)r;
 }
 
 static void check_gpu(void)
