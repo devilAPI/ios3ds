@@ -6138,3 +6138,107 @@ ios3ds_safe=1 ...` from SpringBoard.
   kernel 692874e8, devtree 0965a3f2, fakeio b89cfc32, shim 2f36ac60
   (24268 bytes), gpu 5c3b584d, boot.cfg ff838865.
 - [V] Fresh 4.2.1 soak `--cycles 5 --icount 2` -> PASS; `make test` passes.
+
+## NEXT. Cydia on 2.2.1: an iPhone OS 2 package set (Cydia 1.0.3222) (2026-11-26)
+
+Design and user notes: docs/cydia.md "iPhone OS 2.x". Closes the 2.2.1 Cydia
+row of the driver matrix (docs/multi-version.md §6.9), which re-log 131 left
+off.
+
+### Why the 4.x set was replaced on 2.x
+
+- **[V]** Correction to re-log 131: Cydia 1.1.30's armv6 slice does **not**
+  carry `LC_DYLD_INFO(_ONLY)` (`llvm-objdump --private-headers --arch=armv6`:
+  LC_SEGMENT, SYMTAB, DYSYMTAB, LOAD_DYLINKER, UUID, VERSION_MIN 2.0,
+  UNIXTHREAD, 17 LOAD_DYLIB, CODE_SIGNATURE, ENCRYPTION_INFO,
+  FUNCTION_STARTS, DATA_IN_CODE), and neither do apt7-lib 0.7.25.3-16 or dpkg
+  1.18.10-12. Why 1.1.30 did not launch on 2.2.1 is still unknown. An
+  era-appropriate 1.0.x set was taken instead of chasing it.
+- **[V]** apt.saurik.com/debs still serves every old Telesphoreo build (Cydia
+  0.9.2284 … 1.1.30, apt 0.6.46, apt7 0.7.20/0.7.25, dpkg 1.13/1.14/1.18).
+  Cydia **1.0.3222-73** is the last 1.0.x without `firmware (>= 4.0)` (1.0.3366
+  has it); `DTSDKName iphoneos2.0.saurik`, `MinimumOSVersion 2.0`, armv6,
+  setuid-root `Cydia_` behind a bash `Cydia` wrapper.
+- **[V]** Set = closure of its Depends/Pre-Depends + `essential` + the repo's
+  Essential `base`/`debianutils`, newest versions: 29 packages
+  (`rootfs/cydia-2.x.json`, size + sha256 pinned). A scratch checker (not
+  committed) unpacked every Mach-O: none has LC_DYLD_INFO, and every non-weak
+  import resolves (llvm-nm, two-level namespace) in 5H11a's own
+  dylibs/frameworks or inside the set. Only misses: lazy `___floatundidf` /
+  `___floatundisf` (not in 2.2.1's libgcc_s) in coreutils `ls/dd/df/dir/vdir`,
+  tar, find/locate, `sysctl`, `iostat`, `hostinfo`; they are reached only
+  when printing 64-bit sizes as floats (e.g. `ls -h`, `df -h`) [G].
+
+### What the build does
+
+- `overlay-2.2.1.json`: `"cydia": "rootfs/cydia-2.x.json"`. 3.1.3/4.x keep
+  `rootfs/cydia.json`; the 4.2.1 recipe and manifest are unchanged.
+- `scripts/cydia.py`: a manifest `"cache"` (`cydia-2.x`) keeps these debs in
+  `build/cydia-2.x`, not the shared 4.x cache; new manifest `"patch"` list
+  (`patch_file`, original bytes verified) for byte patches at unpack time.
+- **Stash check:** first QEMU launch showed "Reorganizing / Will Automatically
+  Close When Done", SpringBoard restarted, and every later tap did the same
+  (md0 writes barely moved: the stash never completed). Cydia 1.0.3222's
+  `applicationDidFinishLaunching:` (0x179a0..) `readlink()`s `/Applications`,
+  `/Library/Ringtones`, `/Library/Wallpaper`, `/usr/include`, `/usr/lib/pam`,
+  `/usr/libexec`, `/usr/share` and runs `free.sh` (move to `/var/stash`) when
+  one is a real directory; there is no `/.cydia_no_stash` check in 1.0.x. The
+  seven `adds r0,#1; bne next` become `b next` (Thumb `00d1` → `00e0`, file
+  offsets 0x16a1a … 0x16a86). The page loses its code-signing hash; 2.2.1's
+  `cs-invalid-page-allow` kernel patch lets it load as for liblockdown.
+- `/var/lib/cydia/metadata.plist` presets `Settings/Role = User` (1.0.x
+  otherwise opens on "Who Are You?").
+- **No default source.** With `deb http://apt.saurik.com/ tangelo-3.7 main`
+  listed: refresh → "Essential Upgrade" (upgrade Cydia Installer to 1.1.30,
+  install Cydia Translations + BigBoss Icon Set). Accepting it unpacked 1.1.30
+  over 1.0.3222 (`Setting up cydia (1.1.30)`), 1.1.30's postinst added its
+  2011 sources, and after dismissing their errors the screen stopped updating
+  (heartbeats and input continued, touch target SpringBoard; not debugged). A
+  dpkg hold on `cydia` gave "pkgProblemResolver::Resolve generated breaks, this
+  may be caused by held packages"; an `/etc/apt/preferences` pin still raised
+  the prompt, then "I wasn't able to locate file for the cydia package". So
+  no list is written; docs/cydia.md tells users to pick "Ignore (Temporary)".
+
+### QEMU (5H11a, `--icount 2`, qemu-compat2)
+
+- **[V]** `make sdimg IOS=2.2.1`: `[cydia] 29 packages + 6 virtual`, seven
+  `patched /Applications/Cydia.app/Cydia_ @0x16a..` lines. Cydia icon page 1,
+  row 4, column 2 (iOS point 123,314).
+- **[V]** Tap → navigation/tab bars after ~40 s, Home tab. Offline: "Network
+  Error / Unable to Load (no Internet connection)". With `session.py --wifi`
+  and a wifi.cfg for the ctr-wifi AP: cydia.saurik.com's home page for this
+  version, "Attention: This version of Cydia is no longer supported: please
+  upgrade to 1.1.x at your earliest convenience." (server text). Sections tab
+  lists the installed sections (Administration, Archiving, Development,
+  Packaging, Security, System, Terminal Support); Changes is empty (no
+  sources). Screenshots: `build/emu-cydia221/` (not committed).
+- **[V]** One tap right after the home screen first appeared (t≈60–106 s)
+  opened nothing; the same tap ~30 s later opened Cydia. Boot-time
+  SpringBoard load, not Cydia (later taps always opened it).
+
+### Hardware checklist
+
+- Cydia icon on page 1; tap opens the Home tab within ~1 min (no
+  "Reorganizing", no "Who Are You?"). With Wi-Fi: saurik's "no longer
+  supported" home page; offline: "Unable to Load".
+- Manage > Packages lists the 29 packages + firmware/cy+ virtuals; Sections
+  shows their sections.
+- [G] Refresh/install against a user-added source (APT 0.7.25 + dpkg 1.18
+  on 5H11a), and whether the Essential Upgrade to 1.1.30 also freezes on
+  hardware (pick "Ignore (Temporary)").
+- [G] `ls -h` / `df -h` from a shell (the lazy `___floatundidf` import).
+
+### Verification
+
+- **[V]** `make test` passes (new `test_ios2_set`, `test_patch_file`;
+  test_versions expects `rootfs/cydia-2.x.json` for 2.2.1).
+- **[V]** 4.2.1 default build hashes identical to origin/main before the
+  change: kernel `505f451a…`, devtree `25b1bd23…`, fakeio `e5fecd66…`, shim
+  `a35631eb…`, gpu `6bdaf617…`, boot.cfg `8d4079cf…`.
+- **[V]** Fresh 2.2.1 image, `emu/soak.py --cycles 5 --icount 2
+  --require-app --crashlogs --settle 30 --targets
+  "123,314;275,226;199,226;123,226;47,226"` → **Result: PASS** (cycle 0 =
+  Cydia, app diff 52.2, Cydia's launch screen; 5 apps opened, no Home
+  recovery, no crash reports).
+- **[V]** Fresh 4.2.1 image, `emu/soak.py --cycles 5 --icount 2` →
+  **Result: PASS**.
