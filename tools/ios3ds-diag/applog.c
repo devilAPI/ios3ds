@@ -134,6 +134,99 @@ static void say(const char *what, id str)
     if (l > 0) applog_write(2, line, l);
 }
 
+/*
+ * Crash reasons. Issue 1's SpringBoard exit had no signal, exception or
+ * ReportCrash line at all: none of the CrashReporter directories exist in the
+ * stock 8C148 rootfs (recipe mkdirs now fixes that), and the stock syslog had
+ * nothing to say. Log a fatal signal and an uncaught NSException from inside
+ * SpringBoard before letting Apple's handler/crash report run. This is always
+ * on (not gated by diag=1), and never changes what happens to the process:
+ * the handler restores SIG_DFL and re-raises, or calls the old exception
+ * handler. SIGKILL (jetsam, `kill -9`) cannot be caught in-process; the
+ * CrashReporter directories are what make those reports reachable.
+ */
+static int sb_responds(id o, const char *name);
+extern void (*signal(int sig, void (*handler)(int)))(int);
+extern int raise(int sig);
+#define SIGILL_ 4
+#define SIGTRAP_ 5
+#define SIGABRT_ 6
+#define SIGFPE_ 8
+#define SIGBUS_ 10
+#define SIGSEGV_ 11
+#define SIG_DFL_ 0
+static char crash_prefix[96];
+static int crash_prefix_len;
+
+static const char *sig_name(int sig)
+{
+    switch (sig) {
+    case SIGILL_: return "ILL";
+    case SIGTRAP_: return "TRAP";
+    case SIGABRT_: return "ABRT";
+    case SIGFPE_: return "FPE";
+    case SIGBUS_: return "BUS";
+    case SIGSEGV_: return "SEGV";
+    default: return "?";
+    }
+}
+
+static void crash_signal(int sig)
+{
+    char line[128];
+    int l = 0;
+    while (l < crash_prefix_len) line[l] = crash_prefix[l], l++;
+    if (sig >= 10) line[l++] = (char)('0' + sig / 10);
+    line[l++] = (char)('0' + sig % 10);
+    const char *n = sig_name(sig);
+    while (*n && l < (int)sizeof(line) - 2) line[l++] = *n++;
+    line[l++] = '\n';
+    if (l > 0) applog_write(2, line, l);
+    signal(sig, (void (*)(int))SIG_DFL_);   /* Darwin's default disposition */
+    raise(sig);             /* let ReportCrash see the real fault */
+}
+
+typedef void (*ex_handler)(id);
+static ex_handler crash_old_ex;
+
+static void crash_exception(id exc)
+{
+    const char *name = "?", *reason = "?";
+    if (exc && p_msgSend && p_sel) {
+        id n = sb_responds(exc, "name") ? p_msgSend(exc, p_sel("name")) : 0;
+        id r = sb_responds(exc, "reason") ? p_msgSend(exc, p_sel("reason")) : 0;
+        if (n) name = (const char *)p_msgSend(n, p_sel("UTF8String"));
+        if (r) reason = (const char *)p_msgSend(r, p_sel("UTF8String"));
+    }
+    char line[512];
+    int l = snprintf(line, sizeof(line), "[applog] %s uncaught exception %s: %s\n",
+                     getprogname(), name ? name : "?", reason ? reason : "?");
+    if (l > (int)sizeof(line) - 1) l = (int)sizeof(line) - 1;
+    if (l > 0) applog_write(2, line, l);
+    if (crash_old_ex) crash_old_ex(exc);
+}
+
+static void crash_start(void)
+{
+    crash_prefix_len = snprintf(crash_prefix, sizeof(crash_prefix),
+                                "[applog] %s fatal signal ", getprogname());
+    if (crash_prefix_len < 0 || crash_prefix_len > (int)sizeof(crash_prefix))
+        crash_prefix_len = 0;
+    signal(SIGILL_, crash_signal);
+    signal(SIGTRAP_, crash_signal);
+    signal(SIGABRT_, crash_signal);
+    signal(SIGFPE_, crash_signal);
+    signal(SIGBUS_, crash_signal);
+    signal(SIGSEGV_, crash_signal);
+    void *f = dlopen("/System/Library/Frameworks/Foundation.framework/Foundation", RTLD_NOW | 0x10 /* NOLOAD */);
+    if (!f || !p_msgSend || !p_sel) return;
+    ex_handler (*get)(void) = (ex_handler (*)(void))dlsym(f, "NSGetUncaughtExceptionHandler");
+    ex_handler (*set)(ex_handler) = (ex_handler (*)(ex_handler))dlsym(f, "NSSetUncaughtExceptionHandler");
+    if (!get || !set) return;
+    crash_old_ex = get();
+    set(crash_exception);
+}
+
 /* one trampoline per hooked method (a subclass may call its superclass' one) */
 #define HOOK(n)                                                                  \
     static IMP orig##n;                                                          \
@@ -357,11 +450,15 @@ static void modal_start(void)
  * The two caches survive reboots, so after that only the first open per boot
  * pays for loading them. This does the same work in the background, one item
  * per main-runloop timer tick (0.5 s apart, from 30 s after SpringBoard
- * starts), so the first folder open finds everything ready. Boot-arg
- * ios3ds_sbwarm=0 turns it off.
+ * starts), so the first folder open finds everything ready. Only icons in a
+ * folder need a ghostly image (folders' prepareToGhostCurrentPageIcons), so
+ * warming all 28-30 home-screen icons was most of a 9-15 s main-thread stall
+ * on the New 3DS console in issue 1; the home-screen icons never use it.
+ * Boot-arg ios3ds_sbwarm=0 turns the warm-up off, ios3ds_sbwarm=all restores
+ * the old behaviour (every leaf icon) for A/B comparison.
  */
-static int warm_step;
-static id warm_icons;           /* retained NSArray of SBIconModel's leaf icons */
+static int warm_step, warm_all;
+static id warm_icons;           /* retained NSArray of the icons to warm */
 static unsigned warm_n, warm_done;
 static double warm_t0, warm_busy;
 static double (*p_now)(void);
@@ -383,8 +480,36 @@ static void warm_tick(void *timer, void *info)
         sb_call(p_getClass("SBIcon"), "homeScreenIconOverlayImage");
         sb_call(p_getClass("SBFolderIcon"), "homeScreenIconOverlayImage");
     } else if (warm_step == 2) {
-        id set = sb_call(model, "leafIcons");
-        id arr = sb_responds(set, "allObjects") ? sb_call(set, "allObjects") : set;
+        /* SBIconModel's leafIcons includes every home-screen icon, but only
+           icons in a folder ask for a ghostly image. Walk the root folder's
+           -folderIcons (SBFolderIcon, -folder -> SBFolder) and take each
+           folder's -leafIcons; the root folder's own leafIcons still includes
+           the home-screen icons. Each getIconImage:4 is a synchronous lsd
+           round trip, so warming all 28-30 icons cost 9-15 s on the console. */
+        id arr = 0;
+        id root = sb_call(model, "rootFolder");
+        id fset = sb_call(root, "folderIcons");
+        if (fset) {
+            id folders = sb_responds(fset, "allObjects") ? sb_call(fset, "allObjects") : fset;
+            if (folders && sb_responds(folders, "objectAtIndex:")) {
+                id picked = sb_call(p_getClass("NSMutableArray"), "array");
+                unsigned nf = (unsigned)(uintptr_t)sb_call(folders, "count");
+                for (unsigned i = 0; i < nf && picked; i++) {
+                    id folder_icon = p_msgSend(folders, p_sel("objectAtIndex:"), i);
+                    id icons = sb_call(sb_call(folder_icon, "folder"), "leafIcons");
+                    if (!icons) continue;
+                    id list = sb_responds(icons, "allObjects") ? sb_call(icons, "allObjects") : icons;
+                    if (!list || !sb_responds(list, "objectAtIndex:")) continue;
+                    unsigned n = (unsigned)(uintptr_t)sb_call(list, "count");
+                    for (unsigned j = 0; j < n; j++) {
+                        id icon = p_msgSend(list, p_sel("objectAtIndex:"), j);
+                        if (icon) p_msgSend(picked, p_sel("addObject:"), icon);
+                    }
+                }
+                arr = picked;
+            }
+        }
+        if (!arr && warm_all) arr = sb_call(model, "leafIcons");
         warm_icons = arr && sb_responds(arr, "objectAtIndex:") ? sb_call(arr, "retain") : 0;
         warm_n = warm_icons ? (unsigned)(uintptr_t)sb_call(warm_icons, "count") : 0;
     } else if ((unsigned)warm_step - 3 < warm_n) {
@@ -396,9 +521,10 @@ static void warm_tick(void *timer, void *info)
         }
     } else {
         char line[160];
-        int l = snprintf(line, sizeof(line), "[sbwarm] linen, icon overlay and %u of %u ghostly icons ready "
+        int l = snprintf(line, sizeof(line), "[sbwarm] linen, icon overlay and %u of %u %s ghostly icons ready "
                          "(%d ms on the main thread, done %d s after the first step)\n",
-                         warm_done, warm_n, (int)(warm_busy * 1000), (int)(t - warm_t0));
+                         warm_done, warm_n, warm_all ? "leaf" : "folder",
+                         (int)(warm_busy * 1000), (int)(t - warm_t0));
         if (l > (int)sizeof(line) - 1) l = (int)sizeof(line) - 1;   /* snprintf returns the untruncated length */
         if (l > 0) write(2, line, l);
         if (warm_icons)
@@ -418,6 +544,7 @@ static void warm_start(void)
     if (sysctlbyname("kern.bootargs", ba, &n, NULL, 0) == 0) {
         ba[n < sizeof(ba) ? n : sizeof(ba) - 1] = 0;
         if (strstr(ba, "ios3ds_sbwarm=0")) return;
+        warm_all = strstr(ba, "ios3ds_sbwarm=all") != NULL;
     }
     void *cf = dlopen("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation", RTLD_NOW);
     if (!cf || !p_getClass || !p_sel || !p_msgSend) return;
@@ -1052,6 +1179,7 @@ __attribute__((constructor)) static void applog_init(void)
     probe_init();
     if (!strcmp(getprogname(), "SpringBoard")) {
         modal_start();
+        crash_start();
         warm_start();
     }
     load_substrate();

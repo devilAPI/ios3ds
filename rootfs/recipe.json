@@ -7,6 +7,13 @@
   "/private/var/mobile/Library/Preferences/com.apple.springboard.plist": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict>\n\t<key>SBDisableAutoDim</key>\n\t<true/>\n\t<key>SBDontLockAfterCrash</key>\n\t<true/>\n\t<key>SBDidShowReorderText</key>\n\t<true/>\n\t<key>SBDisableMailAutoLaunch</key>\n\t<true/>\n\t<key>SBNoWatchdogs</key>\n\t<true/>\n\t<key>SBGuardMallocAlways</key>\n\t<true/>\n</dict>\n</plist>\n",
   "/System/Library/Caches/com.apple.dyld/enable-dylibs-to-override-cache": ""
  },
+ "mkdirs": [
+  "/private/var/mobile/Library/Logs",
+  "/private/var/mobile/Library/Logs/CrashReporter",
+  "/private/var/log/CrashReporter"
+ ],
+ "_crash_reports": "Stock 8C148 has none of the CrashReporter directories: ReportCrash silently drops every .crash/.plist, so an unexplained SpringBoard exit leaves no reason in the log or on the card (issue 1). /Library/Logs is a stock symlink to /private/var/log, so these are the real directories behind all three paths scripts/crashlogs.py reads.",
+ "_status_bar_image": "SpringBoard asks for Black_CARRIER_.png with an empty carrier name (no carrier bundle on the 3DS) and logs 'Could not find mapped image' on every boot. This 1x1 transparent PNG is our own, stops the warning and changes no pixels.",
  "disable_daemons": [
   "com.apple.BTServer.plist",
   "com.apple.CommCenter.plist",
@@ -154,7 +161,8 @@
   "build/rootfs-add/System/Library/MediaCapture/vcd.mediacapture": "/System/Library/MediaCapture/vcd.mediacapture",
   "rootfs/files/camera/AVCapture.plist": "/System/Library/PrivateFrameworks/Celestial.framework/N72/AVCapture.plist",
   "rootfs/files/camera/com.apple.coremedia.plist": "/private/var/mobile/Library/Preferences/com.apple.coremedia.plist",
-  "rootfs/files/memory/com.apple.mobilesafari.plist": "/private/var/mobile/Library/Preferences/com.apple.mobilesafari.plist"
+  "rootfs/files/memory/com.apple.mobilesafari.plist": "/private/var/mobile/Library/Preferences/com.apple.mobilesafari.plist",
+  "rootfs/files/statusbar/Black_CARRIER_.png": "/System/Library/CoreServices/SpringBoard.app/Black_CARRIER_.png"
  },
  "chmod": {
   "/usr/libexec/ios3ds-diag": "0755",
@@ -185,7 +193,8 @@
   "/usr/libexec/ios3ds-gpstest": "0755",
   "/System/Library/LaunchDaemons/com.ios3ds.gpstest.plist": "0644",
   "/private/var/mobile/Library/Preferences/com.apple.mobilesafari.plist": "0644",
-  "/System/Library/MediaCapture/vcd.mediacapture": "0755"
+  "/System/Library/MediaCapture/vcd.mediacapture": "0755",
+  "/System/Library/CoreServices/SpringBoard.app/Black_CARRIER_.png": "0644"
  },
  "file_patches": [
   {

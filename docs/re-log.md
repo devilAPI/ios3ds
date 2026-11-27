@@ -7472,3 +7472,121 @@ path.
   to 0:/ios3ds/photos/CAM....RAW` should name the new location and
   `analyze_dump.py` on that file should still decode both frames.
 
+## NEXT. SpringBoard stalls, an exit with no reason, and the empty carrier image (2026-11-27)
+
+A tester's private New 3DS log from build eb90379 (100 commits behind main;
+none of the three items was already fixed there — main's later commits are
+Cydia, HTTPS, battery, stereo and installer work, and an A/B check of main's
+applog found no warm-up, crash-log or carrier-image change).
+
+### sbwarm: 9-15 s of main-thread work for images only folders use
+
+- [V] `sbwarm` is our own SpringBoard warm-up in
+  `tools/ios3ds-diag/applog.c` (re-log 77): a CFRunLoopTimer on the main
+  runloop calls `+[SBLinenView _generateLinenStripsIfNeeded]`, the two
+  `homeScreenIconOverlayImage` methods and `-[SBIcon getIconImage:4]` for
+  every leaf icon, one per 0.5 s tick from 30 s after SpringBoard starts. On
+  the console it reported `28 of 28 ... 8889 ms on the main thread` at L1463
+  and `30 of 30 ... 14499 ms` at L18236, spread over 22/28 s. The timer does
+  spread the work, but every `getIconImage:4` is a synchronous `lsd` render
+  on the main thread; with Cydia/Activator/SBSettings loaded each icon costs
+  hundreds of ms, and the *cumulative* main-thread cost is what the line
+  reports. CA's worst frame in that log was 721 ms (L19358).
+- [V] Only `prepareToGhostCurrentPageIconsForRequester` needs a ghostly image,
+  i.e. icons **inside a folder**. The ~28-30 home-screen icons never use one.
+  Disassembly of 8C148's SpringBoard method lists shows `-[SBFolder
+  folderIcons]`/`-[SBFolder leafIcons]`, `-[SBIconModel rootFolder]` and
+  `-[SBFolderIcon folder]`, while `SBIcon` itself has no `folder` method.
+  `warm_tick` step 2 now walks the root folder's folder icons and warms only
+  each folder's leaf icons instead of taking all home-screen icons, leaving
+  the linen and overlay steps alone. (The root folder's own `leafIcons` still
+  includes home-screen icons: a first attempt warmed 21 of them in QEMU.)
+  `ios3ds_sbwarm=all` restores the old per-leaf warm-up for A/B, and
+  `ios3ds_sbwarm=0` still turns the whole thing off. The marker text now says
+  `folder` or `leaf` so a log identifies which path ran; `emu/soak.py` only
+  looks for `[sbwarm]`, so its gate is unchanged.
+
+### The unexplained SpringBoard exit: no crash reason existed to read
+
+- [V] L17460-17466 of that log: a normal CA frame histogram, then
+  `ios3ds-mcu: accelerometer powered off`, `[mcud] SpringBoard's HID event
+  port went away; reconnecting`, `Terminating in response to SpringBoard's
+  termination.` and `[input] SpringBoard went away; restarting`. There is no
+  exception, signal, jetsam or ReportCrash line before or after it, and
+  launchd starts pid 364 without a crash report. The six
+  `[input] stale touch port ... re-resolving` lines (L1656...) name apps that
+  exited normally (Camera, Preferences, Cydia, Safari) and are unrelated.
+- [V] Memory pressure is a plausible but **unproven** factor: just before the
+  exit Cydia held 39472 KiB resident / 402 MiB VA, `free_nospec` was 44 MiB
+  and `memorystatus_level` 71, with a long-running Cydia package operation and
+  two tweaks loaded into SpringBoard. Nothing in the log names a kill, so the
+  cause cannot be pinned down from that boot — which is the problem fixed
+  here.
+- [V] `make sdimg` never created a CrashReporter directory in the 4.2.1
+  rootfs: `hfsplus ls /private/var/mobile/Library/Logs` and
+  `/private/var/log` have none. ReportCrash silently drops every report on
+  such a system (the same gap was already handled for 3.1.3/2.2.1 via their
+  `mkdirs`). `rootfs/recipe.json` now creates the two real directories behind
+  the three paths `scripts/crashlogs.py` reads (`/Library/Logs` is a stock
+  symlink to `/private/var/log`, which the HFS+ editor cannot descend into),
+  with no change to the kernel, shim, GPU or boot.cfg.
+- [V] `tools/ios3ds-diag/applog.c` now installs a fatal-signal and uncaught
+  `NSException` logger in SpringBoard, always on (not gated by `diag=1`):
+  `[applog] SpringBoard fatal signal 11SEGV` and
+  `[applog] SpringBoard uncaught exception NSInvalidArgumentException: ...`.
+  The uncaught handler calls the previous one; signal handlers restore
+  SIG_DFL and re-raise, so Apple's crash report still happens. SIGKILL from
+  jetsam cannot be caught in-process; a real kill is identified by the
+  CrashReporter report instead of an applog signal line.
+
+### Black_CARRIER_.png
+
+- [V] SpringBoard's `SBStatusBarDataManager` builds image names from
+  `Black_/Silver_` plus the carrier name and searches `System/Library/Carrier
+  Bundles`; with no carrier bundle on the 3DS the name is `Black_CARRIER_.png`
+  and the console prints `Could not find mapped image` at every boot (L977).
+  The build now installs a 68-byte, 1x1 transparent PNG generated for this
+  project at
+  `/System/Library/CoreServices/SpringBoard.app/Black_CARRIER_.png` (0644).
+  No Apple image bytes are copied and the status bar draws no extra pixels.
+
+### Verification
+
+- [V] `make test` green, including the new `tests/test_issue1.py`.
+- [V] Fresh default `make sdimg`: kernel 505f451a, devtree 25b1bd23, fakeio
+  e5fecd66, shim a35631eb, gpu 6bdaf617, boot.cfg 8d4079cf — unchanged.
+- [V] Fresh 4.2.1 image, QEMU `--icount 2`, `diag=1` boot: `[sbwarm] linen,
+  icon overlay and 3 of 3 folder ghostly icons ready (542 ms on the main
+  thread, done 2 s after the first step)`. The first implementation that used
+  the root folder's own `leafIcons` warmed 21 icons in 1728 ms; the old
+  all-leaf warm-up took 2050 ms for 28 icons in re-log 77. No
+  `Could not find mapped image Black_CARRIER_.png` line in the new boot.
+- [V] Fresh 4.2.1 image, `emu/soak.py --cycles 5 --icount 2` → **Result:
+  PASS** (input at 70 s, warm-up ready at 120 s, home reference at 130 s,
+  five apps opened, 0 panics/stalls/crashes/md0 errors/jetsam, the single
+  reported SpringBoard "restart" is the boot-time HID connect).
+- [V] `scripts/crashlogs.py` on the built rootfs walks the new directories
+  without error (no reports on a clean soak image).
+
+### Not done
+
+- This worktree has no `build/fw-{4.1,3.1.3,2.2.1}/staging`, so the older
+  version images and their `--require-app` soaks could not be run here. The
+  applog change compiles into both the 4.x and the 2.x dylib and
+  `scripts/check-stub-symbols.py` knows the new `signal`/`raise` imports;
+  3.1.3/2.2.1 already had their own CrashReporter `mkdirs`, and the PNG is an
+  extra file in the base recipe. A rerun with staged IPSWs is still needed.
+
+### Hardware checklist [G]
+
+- [ ] Boot with `diag=1`, open the Utilities folder after `[sbwarm]`: it
+      must open without the multi-second stall, and `[sbwarm]` must report
+      `folder` icons with a much smaller main-thread time than 9-15 s.
+- [ ] If SpringBoard exits again, attach `log.txt` **and** the reports copied
+      with `python3 scripts/crashlogs.py SD_CARD out/`; expect an
+      `[applog] SpringBoard fatal signal ...` or `uncaught exception ...`
+      line plus a `.crash`/`.panic` report (a jetsam SIGKILL has only the
+      report).
+- [ ] The status bar must not log `Could not find mapped image
+      Black_CARRIER_.png` and must look unchanged.
+- [ ] Try `ios3ds_sbwarm=all` in `boot.cfg` for an A/B warm-up comparison.
