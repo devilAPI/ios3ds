@@ -7389,7 +7389,7 @@ docs/other-versions.md, docs/multi-version.md §6.9.
   two UIKit userInfo keys on 5H11a.
 
 
-## NEXT. Issue 1, third report: "Unable to join, but it takes much longer" (2026-11-27)
+## 160. Issue 1, third report: "Unable to join, but it takes much longer" (2026-11-27)
 
 Log 2026-11-25_23-24-11 (build m1-0.4.0-244-geb90379-20261125.2034, New 2DS XL).
 
