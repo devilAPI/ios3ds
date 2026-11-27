@@ -1162,6 +1162,9 @@ static void on_wmi(const u8 *b, u32 len)
                      A.disc_reason, A.disc_code, T.ssid);
             T.have = 0;
             A.state = NET_ST_IDLE;
+            /* the firmware keeps reconnecting on its own (issue 1 log: ~90 s of
+               association + message 1/2 rounds, 94 "idle" disconnects): end it */
+            wmi_send(WMI_DISCONNECT, &(u32){0}, 4);
             break;
         }
         if (A.disc_reason == 1 && A.state == NET_ST_SCAN) {

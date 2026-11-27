@@ -1002,6 +1002,25 @@ static void test_scan_ie_priority(void)
     nscan = 0;
 }
 
+/* issue 1: after "the WPA2 handshake failed 3 times" the driver gives up, but the
+   firmware kept reconnecting by itself for ~90 s unless we send WMI_DISCONNECT */
+static void test_giveup_disconnect(void)
+{
+    u8 ev[2 + 9];
+    memset(&A, 0, sizeof(A));
+    memset(&T, 0, sizeof(T));
+    A.cred_sz = 1664; A.ep_wmi = 1; A.ep_credits[1] = 8;
+    wmi_queue_clear();
+    mock_reset();
+    T.have = 1; T.security = WIFI_SEC_WPA2; T.ssid_len = 1; T.ssid[0] = 'x';
+    A.from_ios = 1; A.state = NET_ST_AUTH; A.auth_fails = 2;
+    memset(ev, 0, sizeof ev);
+    ev[0] = 0x03; ev[1] = 0x10; ev[2] = 2; ev[10] = 4;   /* DISCONNECT, code 2, WMI reason 4 */
+    on_wmi(ev, sizeof ev);
+    CHECK(!T.have && A.state == NET_ST_IDLE);
+    CHECK(mock_write_calls == 1 && mock_tx[6] == 0x03 && mock_tx[7] == 0x00);   /* WMI_DISCONNECT sent */
+}
+
 int main(void)
 {
     test_ring();
@@ -1022,6 +1041,7 @@ int main(void)
     test_rsn_parse();
     test_rsn_view();
     test_scan_ie_priority();
+    test_giveup_disconnect();
     printf("%s: %d checks, %d failed\n", fails ? "FAIL" : "ok", checks, fails);
     return fails != 0;
 }

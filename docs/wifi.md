@@ -799,6 +799,23 @@ a console join is still outstanding. On a console the expected lines are
 with the security mode and channel if it still fails (no password or network
 name needed).
 
+### 10.10 Giving up after a failed handshake (issue #1, second log)
+
+The second tester log (build m1-0.4.0-244-geb90379, 2026-11-25, which predates
+the 10.9 fix: it still has `key type 2 / 13 bytes` for the home AP and 407/418 IE
+byte probe responses) also joined a phone hotspot. The first two joins failed:
+association, message 1, our message 2 (`EAPOL event 1, reply 121 bytes`), then
+the AP disconnects (WMI reason 4, 802.11 code 2). After the third failure the
+driver logged `the WPA2 handshake failed 3 times: wrong password?` and gave up
+(`association failed (result 3)`), but it never told the firmware to stop: the
+firmware auto-reconnected for another ~90 s (94 `disconnected ... idle` events,
+each a full association and message 1/2 round with the same PMK). A later join
+with a fresh PMK from Settings completed in one round (`EAPOL event 2, reply 99
+bytes`, `link up`), so the handshake code is right and the earlier PMK was
+wrong. The give-up path now sends WMI_DISCONNECT (host test
+`test_giveup_disconnect`). The hotspot's own RSN IE (CCMP/CCMP/PSK, no MFPC) is
+the plain case.
+
 ## 11. iOS 2.2.1 (5H11a)
 
 2.2.1 differs from 3.x/4.x in two ways that matter here (re-log, "Wi-Fi on

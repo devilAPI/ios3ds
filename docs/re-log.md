@@ -7388,3 +7388,34 @@ docs/other-versions.md, docs/multi-version.md §6.9.
   attach `log.txt` and a CrashReporter report: the failure should be dyld's
   two UIKit userInfo keys on 5H11a.
 
+
+## NEXT. Issue 1, third report: "Unable to join, but it takes much longer" (2026-11-27)
+
+Log 2026-11-25_23-24-11 (build m1-0.4.0-244-geb90379-20261125.2034, New 2DS XL).
+
+- **[V]** The build predates the home-AP RSN IE fix: eb90379 (2026-11-25 21:34) is
+  an ancestor of de015bd ("keep SSID/rates/DS/RSN/WPA IEs when a beacon's IEs
+  overflow the scan record", 2026-11-26 06:25), so c24a40d/de015bd are in main
+  only (`git describe`: eb90379 is 0.4.0-244, c24a40d is 0.4.0-289).
+- **[V]** The log shows the same home-AP bug: probe responses of 407/418 IE
+  bytes with RSN, then `[a80211] associate: key type 2 / 13 bytes not supported
+  (WEP?)`. The tester then tried a phone hotspot (109-byte IEs, plain RSN).
+- **[V]** Hotspot, 3 joins. Joins 1 and 2: association OK, message 1
+  (`key info 008a, replay 1`), our message 2 (121 bytes), AP disconnects (reason
+  4, code 2), 3 times -> `handshake failed 3 times: wrong password?`, `giving up`
+  at +0.6 s. Join 3 (new PMK from WiFiManager): message 1/2 then `EAPOL event 2,
+  reply 99 bytes`, `link up`, `en0 configured by configd`. So the 4-way
+  handshake code and the message 2 RSN IE are fine; the first two PMKs did not
+  match the AP.
+- **[V]** The bug found: after giving up the driver set `T.have=0`, state IDLE
+  but sent no WMI_DISCONNECT, so the firmware kept auto-reconnecting: 78
+  associations, 172 message 1/2 rounds and 94 `disconnected ... idle` over ~90 s
+  until the next join. Fix: `ar6k.c` sends WMI_DISCONNECT on give-up. [V] host
+  test `test_giveup_disconnect` (fails on the old code). docs/wifi.md 10.10.
+- **[V]** 4.2.1 hashes unchanged (kernel 505f451a, devtree 25b1bd23, fakeio
+  e5fecd66, shim a35631eb, gpu 6bdaf617; ARM9 only), `make test` green, fresh
+  4.2.1 soak (5 cycles, icount 2, fresh image) PASS.
+- **[G]** Not provable from this log: whether the home AP now joins. The
+  expected lines are `[wifi] connect ... (WPA2-PSK/CCMP)` and no `key type 2`;
+  if it fails with a message 1/2 loop, we need the `[wifi-diag] eapol` lines of
+  that build (a retype of the password rules out a wrong PMK).
