@@ -7419,3 +7419,56 @@ Log 2026-11-25_23-24-11 (build m1-0.4.0-244-geb90379-20261125.2034, New 2DS XL).
   expected lines are `[wifi] connect ... (WPA2-PSK/CCMP)` and no `key type 2`;
   if it fails with a message 1/2 loop, we need the `[wifi-diag] eapol` lines of
   that build (a retype of the password rules out a wrong PMK).
+## NEXT. Camera frame dumps in their own sd:/ios3ds/photos/ folder (2026-11-27)
+
+Issue #1: the ARM9 wrote each camera session's diagnostic
+`CAM<seq>.RAW` straight into `sd:/ios3ds/`. It now writes
+`sd:/ios3ds/photos/CAM<seq>.RAW`: the same 8.3 name (`CAM%08u.RAW`, eight
+digits; a sequence past 99,999,999 wraps so the name stays FAT-safe), with
+`boot/common/cam_dump.h` shared by the ARM9 writer and the host test.
+`camera_init()` creates `photos/` at boot (also when `camera=0`) and renames
+old `CAM########.RAW` files found in `sd:/ios3ds/` into it - no copy and never
+overwriting a same-named file; case-insensitive spellings are accepted, at
+most 64 per boot (the rest migrate on the next boot). The dump writer creates
+the folder again in case it was deleted after boot. `tools/ios3ds-camera/analyze_dump.py`,
+the camera docs, the driver matrix and the README FAQ now point at the new
+path.
+
+### Verification
+
+- **[V]** `make test` passes (132 tests), including the new
+  `CameraDumpFolder.test_dump_path_and_legacy_name`: a host C harness built
+  from `cam_dump.h` checks the exact path, 8.3 length, sequence wrap, small
+  buffer, recognition of legacy names and rejection of lookalikes, plus
+  source checks that the ARM9 writer uses the helper, creates the folder and
+  renames old dumps.
+- **[V]** Fresh default build hashes: kernel `505f451a…`, devtree
+  `25b1bd23…`, fakeio `e5fecd66…`, shim `a35631eb…`, gpu `6bdaf617…`,
+  boot.cfg `8d4079cf…` - all identical to origin/main; shim, kernel,
+  devtree, fakeio and gpu are untouched. With a pinned build version
+  (`VERSION=camfolder-hashcheck`, to remove the timestamp from the version
+  string), the **ARM9 boot image** changed as expected from
+  `arm9.bin` `05a272c7…` to `11d9a808…` and `ios3ds.firm` `04bb1b68…` to
+  `5f69b72a…`, because `boot/arm9/camera.c` now owns the folder and migration;
+  no other 4.2.1 hash changed.
+- **[V]** Fresh 4.2.1 image (`rm -f build/sd.img && make sdimg`),
+  `IOS3DS_QEMU=/tmp/opencode/qemu-compat2/b/qemu-system-arm python3 emu/soak.py
+  --cycles 5 --icount 2` -> **Result: PASS** (0 panics, stalls, crashes, GPU
+  watchdog failures or camera overruns).
+- **[V]** Boot-time migration exercised in QEMU: injected a legacy
+  `sd:/ios3ds/CAM00000042.RAW` into the image, booted `--icount 2`; log
+  `[cam] photos: sd:/ios3ds/photos/ ready, moved 1 old dump(s), kept 0,
+  failed 0` and `mdir` showed `CAM00000042.RAW` inside `photos/`, not the root.
+  The dump *write* itself is covered by the host path test; the soak does not
+  open Camera.app.
+
+### Hardware checklist
+
+- [G] With a card from an older build (root `sd:/ios3ds/CAM*.RAW` present),
+  boot and check `log.txt` for `[cam] photos: ... moved N old dump(s), kept N,
+  failed N`; the named files must now be in `sd:/ios3ds/photos/` and gone from
+  the root. Copy the log into an issue if `failed` is nonzero.
+- [G] Open Camera.app, take a photo and close it; `[cam] dumped frames seq ...
+  to 0:/ios3ds/photos/CAM....RAW` should name the new location and
+  `analyze_dump.py` on that file should still decode both frames.
+

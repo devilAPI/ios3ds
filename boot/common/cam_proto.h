@@ -112,7 +112,7 @@ typedef struct {
     uint32_t probing;          /* 1 while no data has arrived since the start */
     /* shim -> ARM9, line 4 for the frame dump (docs/camera.md section 4.1):
        at STOP the shim has stopped writing and cleaned the buffers, the ARM9
-       copies the two newest complete frames to sd:/ios3ds/CAM<seq>.RAW */
+       copies the two newest complete frames to sd:/ios3ds/photos/CAM<seq>.RAW */
     uint32_t buf_pa[CAM_NBUF];/* frame buffers' physical addresses (0 = none) */
     uint32_t newest;          /* buffer index of the newest complete frame (CAM_NBUF = none) */
     uint32_t newest_seq;      /* its sequence number (0 = none yet this session) */

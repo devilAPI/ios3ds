@@ -38,6 +38,63 @@ class PreviewCounter(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
 
+@unittest.skipUnless(shutil.which("cc"), "no host C compiler")
+class CameraDumpFolder(unittest.TestCase):
+    """The ARM9 dump path and the 8.3 names come from boot/common/cam_dump.h.
+    Check the header against the writer, so a return to sd:/ios3ds/CAM*.RAW
+    (or an unsafe long name) fails the test. See docs/camera.md section 4.1."""
+
+    def test_dump_path_and_legacy_name(self):
+        cam = os.path.join(ROOT, "boot", "arm9", "camera.c")
+        with open(cam) as f:
+            src = f.read()
+        for needed in ('#include "cam_dump.h"', "cam_dump_path(path",
+                       "f_mkdir(CAM_PHOTOS_DIR)", "f_rename(from, to)",
+                       "cam_photos_init();"):
+            self.assertIn(needed, src, needed)
+
+        harness = r'''
+#include <stdio.h>
+#include <string.h>
+#include "cam_dump.h"
+int main(void)
+{
+    char p[CAM_DUMP_PATH_LEN], small[8];
+    const char *bad[] = {"CAM0000123.RAW", "CAM000012345.RAW",
+                         "CAM00001234.TXT", "CAM0000ABCD.RAW",
+                         "CAM00001234.RAWx", "LOG00000001.RAW",
+                         "photos/CAM00001234.RAW", ""};
+    if (cam_dump_path(p, sizeof(p), 1234u) != 32 ||
+        strcmp(p, "0:/ios3ds/photos/CAM00001234.RAW")) return 1;
+    if (cam_dump_path(p, sizeof(p), 0u) != 32 ||
+        strcmp(p, "0:/ios3ds/photos/CAM00000000.RAW")) return 2;
+    memset(small, '#', sizeof(small));
+    if (cam_dump_path(small, sizeof(small), 1u) != 0 || small[0] != '#') return 3;
+    /* a sequence past 8 digits wraps instead of breaking the FAT 8.3 name */
+    if (cam_dump_path(p, sizeof(p), 0xFFFFFFFFu) != 32 ||
+        strcmp(p, "0:/ios3ds/photos/CAM94967295.RAW")) return 4;
+    if (strlen(strrchr(p, '/') + 1) != CAM_DUMP_NAME_LEN) return 5;
+    if (!cam_is_dump_name("CAM00001234.RAW") ||
+        !cam_is_dump_name("cam00001234.raw")) return 6;
+    for (unsigned i = 0; i < sizeof(bad) / sizeof(bad[0]); i++)
+        if (cam_is_dump_name(bad[i])) return 7;
+    puts(p);
+    return 0;
+}
+'''
+        with tempfile.TemporaryDirectory() as td:
+            csrc = os.path.join(td, "dump.c")
+            exe = os.path.join(td, "dump")
+            with open(csrc, "w") as f:
+                f.write(harness)
+            subprocess.run(["cc", "-O1", "-Wall", "-Wextra", "-Werror",
+                            "-I" + os.path.join(ROOT, "boot", "common"),
+                            csrc, "-o", exe], check=True)
+            r = subprocess.run([exe], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(r.stdout.strip(), "0:/ios3ds/photos/CAM94967295.RAW")
+
+
 class CameraRootfs(unittest.TestCase):
     def test_recipe(self):
         with open(os.path.join(ROOT, "rootfs", "recipe.json")) as f:

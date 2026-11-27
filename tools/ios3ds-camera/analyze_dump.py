@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """Analyse an ios3ds camera frame dump (build 44+).
 
-The ARM9 monitor writes sd:/ios3ds/CAM<seq>.RAW at every camera stop: the
-shim's two newest complete YUV422 320x240 frames, straight out of its buffers
-(docs/camera.md section 4.1).
+The ARM9 monitor writes sd:/ios3ds/photos/CAM<seq>.RAW at every camera stop:
+the shim's two newest complete YUV422 320x240 frames, straight out of its
+buffers (docs/camera.md section 4.1). Older builds put the dumps in
+sd:/ios3ds/; on boot ios3ds moves them into photos/, so both paths are valid
+input here.
 
     CAMD u32 header (little-endian): magic 0x44554D43, version 1, width,
     height, cam, port, seq of frame 1, seq of frame 2; then frame 1 (newest),
     frame 2. No padding anywhere.
 
-    python3 tools/ios3ds-camera/analyze_dump.py sd/ios3ds/CAM00001077.RAW [--dir out]
+    python3 tools/ios3ds-camera/analyze_dump.py sd/ios3ds/photos/CAM00001077.RAW [--dir out]
 
 Writes <out>/frame1.yuyv.bmp, frame1.uyvy.bmp, frame2.*.bmp (YUV byte order
 both ways: which one looks right settles the colour question), frame2-on-1.png

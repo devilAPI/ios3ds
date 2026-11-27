@@ -43,7 +43,7 @@ wiggle with pixels instead of guessing (build 44, this commit):
      wrote an uninitialised `pa` into `C.buf_pa[]` (IOMallocContiguous only
      fills it when it allocates), so from session 2 on the ARM9 saw pa = 0.
    - ARM9 (`boot/arm9/camera.c`): at every stop dumps the shim's two newest
-     complete frames **straight out of its buffers** to `sd:/ios3ds/CAM<seq>.RAW`
+     complete frames **straight out of its buffers** to `sd:/ios3ds/photos/CAM<seq>.RAW`
      (`[cam] dump check: ...` line states the guard values, skipped-dump lines
      say why); an independent `[cam] monitor` CAM_STAT watcher the XNU cannot
      starve (per monitor-loop sample: max fill, near-full count); `drain gap
@@ -85,13 +85,13 @@ wiggle with pixels instead of guessing (build 44, this commit):
 - `sd:/ios3ds/log.txt` → the user calls this **run 30** in
   `build/hwlogs/run30.txt`. The boot rotates the previous boot's log to
   `sd:/ios3ds/log_prev.txt`.
-- `sd:/ios3ds/CAM<seq>.RAW`, ~300 KiB each, one per camera session with ≥2
+- `sd:/ios3ds/photos/CAM<seq>.RAW`, ~300 KiB each, one per camera session with ≥2
   frames: u32×8 header `0x44554D43 ('CAMD'), 1, 320, 240, cam, port,
   seq1, seq2` then frame 1 (newest) and frame 2, each 320×240×2 YUY422, no
-  padding. Copy to `build/hwlogs/` next to the log (`scp devilapi@192.168.178.83:/run/media/devilapi/3ds/ios3ds/'CAM*.RAW' build/hwlogs/`).
+  padding. Copy to `build/hwlogs/` next to the log (`scp devilapi@192.168.178.83:/run/media/devilapi/3ds/ios3ds/'photos/CAM*.RAW' build/hwlogs/`).
 - New log lines to expect (documented in `docs/camera.md` §7):
   `[cam] dump check: newest seq ..., idx .../..., pa .../...`,
-  `[cam] dumped frames seq A (newest) and B to 0:/ios3ds/CAM....RAW`,
+  `[cam] dumped frames seq A (newest) and B to 0:/ios3ds/photos/CAM....RAW`,
   `[cam] monitor 10 s / at stop: N CAM_STAT samples, max FIFO fill F units,
   near-full C`, and `drain gap max X.Y ms` inside the 10 s stats line.
 
@@ -118,7 +118,7 @@ to the front for ~20 s, take **one photo** (tests the still/review-image path
 on hardware for the first time), close with Home. Then hand the card back and:
 
     scp devilapi@192.168.178.83:/run/media/devilapi/3ds/ios3ds/log.txt build/hwlogs/run30.txt
-    scp 'devilapi@192.168.178.83:/run/media/devilapi/3ds/ios3ds/CAM*.RAW' build/hwlogs/
+    scp 'devilapi@192.168.178.83:/run/media/devilapi/3ds/ios3ds/photos/CAM*.RAW' build/hwlogs/
 
 ## 5. Odds and ends to know
 

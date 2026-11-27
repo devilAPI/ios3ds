@@ -28,6 +28,7 @@
 #include "log.h"
 #include "util.h"
 #include "cam_proto.h"
+#include "cam_dump.h"
 #include "fatfs/ff.h"
 
 #define BUS_DSI         0           /* i2c.c bus numbers: 0 = 0x10161000, 1 = 0x10144000 */
@@ -283,18 +284,60 @@ static void watch_report(const char *when)
     watch_n = watch_max = watch_full = 0;
 }
 
-/* The shim's two newest complete frames to sd:/ios3ds/CAM<seq>.RAW, straight
-   out of its buffers (docs/camera.md section 4.1). Called at stop: the shim
-   has turned the capture off and cleaned its buffers before `want` went to 0,
-   so nothing changes under the copy (a fast switch that already started again
-   is caught by the seq check, the scene is dumped on the next stop). */
+/* ---- frame dump storage -------------------------------------------------
+   Dumps live in sd:/ios3ds/photos/CAM<seq>.RAW (cam_dump.h). Older builds put
+   them straight in sd:/ios3ds/, so on boot create the folder and move those
+   files into it by rename (no copy, no overwrite). The writer creates the
+   folder again in case it was deleted after boot. */
+static void cam_photos_init(void)
+{
+    FRESULT r = f_mkdir(CAM_PHOTOS_DIR);
+    if (r != FR_OK && r != FR_EXIST) {
+        log_warn("[cam] photos: cannot create sd:/ios3ds/photos/ (FRESULT %d)\n", (int)r);
+        return;
+    }
+    static char names[64][CAM_DUMP_NAME_LEN + 1];
+    DIR d;
+    FILINFO fi, dst;
+    u32 n = 0, moved = 0, kept = 0, failed = 0;
+    if (f_opendir(&d, CAM_DUMP_ROOT) != FR_OK) return;
+    while (f_readdir(&d, &fi) == FR_OK && fi.fname[0]) {
+        if ((fi.fattrib & AM_DIR) || !cam_is_dump_name(fi.fname)) continue;
+        if (n < ARRAY_SIZE(names)) {
+            strlcpy_(names[n], fi.fname, sizeof(names[0]));
+            n++;
+        } else kept++;             /* next boot picks up the rest */
+    }
+    f_closedir(&d);
+    for (u32 i = 0; i < n; i++) {
+        char from[64], to[64];
+        snprintf(from, sizeof(from), CAM_DUMP_ROOT "/%s", names[i]);
+        snprintf(to, sizeof(to), CAM_PHOTOS_DIR "/%s", names[i]);
+        if (f_stat(to, &dst) == FR_OK) { kept++; continue; }
+        r = f_rename(from, to);
+        if (r == FR_OK) moved++;
+        else {
+            failed++;
+            log_warn("[cam] photos: cannot move %s (FRESULT %d)\n", from, (int)r);
+        }
+    }
+    log_ok("[cam] photos: sd:/ios3ds/photos/ ready, moved %u old dump(s), kept %u, failed %u\n",
+           (unsigned)moved, (unsigned)kept, (unsigned)failed);
+}
+
+/* The shim's two newest complete frames to sd:/ios3ds/photos/CAM<seq>.RAW,
+   straight out of its buffers (docs/camera.md section 4.1). Called at stop:
+   the shim has turned the capture off and cleaned its buffers before `want`
+   went to 0, so nothing changes under the copy (a fast switch that already
+   started again is caught by the seq check, the scene is dumped next stop). */
 static u32 dumped_seq;
 static void dump_frames(void)
 {
     FIL f;
     UINT bw;
+    FRESULT r;
     u32 seq0 = box->newest_seq, seq1 = box->snew_seq;
-    char path[32];
+    char path[CAM_DUMP_PATH_LEN];
     u32 hdr[8];
     log_ok("[cam] dump check: newest seq %u, second %u (last saved %u), idx %u/%u, pa %08x/%08x\n",
            (unsigned)seq0, (unsigned)seq1, (unsigned)dumped_seq,
@@ -314,7 +357,12 @@ static void dump_frames(void)
                  (unsigned)box->buf_pa[box->newest % CAM_NBUF], (unsigned)box->buf_pa[box->snew % CAM_NBUF]);
         return;
     }
-    snprintf(path, sizeof(path), "0:/ios3ds/CAM%08u.RAW", (unsigned)seq0);
+    if (!cam_dump_path(path, sizeof(path), seq0)) return;
+    r = f_mkdir(CAM_PHOTOS_DIR);                 /* also works when it exists */
+    if (r != FR_OK && r != FR_EXIST) {
+        log_warn("[cam] photos: cannot create sd:/ios3ds/photos/ (FRESULT %d)\n", (int)r);
+        return;
+    }
     if (f_open(&f, path, FA_WRITE | FA_CREATE_ALWAYS) != FR_OK) {
         log_warn("[cam] frame dump: cannot create %s\n", path);
         return;
@@ -327,7 +375,7 @@ static void dump_frames(void)
     hdr[5] = box->port;
     hdr[6] = seq0;
     hdr[7] = seq1;
-    FRESULT r = f_write(&f, hdr, sizeof(hdr), &bw);
+    r = f_write(&f, hdr, sizeof(hdr), &bw);
     if (r == FR_OK) r = f_write(&f, (const void *)box->buf_pa[box->newest], CAM_FRAME_BYTES, &bw);
     if (r == FR_OK) r = f_write(&f, (const void *)box->buf_pa[box->snew], CAM_FRAME_BYTES, &bw);
     f_close(&f);
@@ -610,6 +658,7 @@ bool camera_als_sample(uint8_t *luma)
 
 void camera_init(u32 shim_pa, bool enable, bool self_test)
 {
+    cam_photos_init();                  /* also with camera=0 or no shim */
     if (!shim_pa) return;
     box = (volatile cammbox_t *)(shim_pa + SHIM_CAM_OFF);
     for (u32 i = 0; i < sizeof(cammbox_t) / 4; i++) ((vu32 *)box)[i] = 0;

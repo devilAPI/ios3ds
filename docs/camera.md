@@ -209,15 +209,22 @@ Run 29's open question is word-level: the preview in Camera.app shows one
 "first frame" that wiggles, while every counter says the data flows
 (section 7). The pixel truth decides between the suspects, so at every camera
 stop the ARM9 copies the shim's two newest complete 320x240 YUV422 frames
-straight out of its buffers to `sd:/ios3ds/CAM<seq>.RAW` (one file per camera
-session, ~300 KiB; `[cam] dumped frames seq ...` in the log):
+straight out of its buffers to `sd:/ios3ds/photos/CAM<seq>.RAW` (one file per
+camera session, ~300 KiB; `[cam] dumped frames seq ...` in the log). The
+`photos/` folder is created at boot (and again before each dump if it was
+deleted); old `CAM<seq>.RAW` dumps left directly in `sd:/ios3ds/` by earlier
+builds are *renamed* into it at boot, never overwritten:
 
 ```
 header (u32 LE): 0x44554D43 ('CAMD'), 1, 320, 240, cam, port, seq1, seq2
 frame 1 (newest), frame 2 - each 320*240*2 bytes, YUV422, no padding
 ```
 
-On the PC: `python3 tools/ios3ds-camera/analyze_dump.py CAM00001234.RAW`
+The 8.3 name is unchanged (`CAM%08u.RAW`, eight decimal digits) and stays
+FAT-safe: a sequence past 99,999,999 wraps rather than growing past eight
+digits. Both the ARM9 writer and the host test use `boot/common/cam_dump.h`.
+
+On the PC: `python3 tools/ios3ds-camera/analyze_dump.py sd/ios3ds/photos/CAM00001234.RAW`
 decodes both frames to BMPs (in both YUYV and UYVY byte orders, which settles
 the colour question by eye) and prints
 
@@ -344,7 +351,7 @@ What the code does about it (all logged):
 6. `[cam] monitor 10 s / at stop`: the ARM9's own `CAM_STAT` sampling (each monitor-loop turn, so it cannot be starved by XNU) -
    max FIFO fill and near-full count. This observer cannot be starved by
    XNU's interrupt masking, unlike the shim's.
-7. At stop: `[cam] dumped frames seq ... to ios3ds/CAM....RAW` (section 4.1).
+7. At stop: `[cam] dumped frames seq ... to ios3ds/photos/CAM....RAW` (section 4.1). At boot: `[cam] photos: sd:/ios3ds/photos/ ready, moved N old dump(s), kept N, failed N`.
 
 How to read it:
 - Bits 0/1 toggle and the fill changes on one block → data arrives; the
