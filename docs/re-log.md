@@ -7591,7 +7591,7 @@ applog found no warm-up, crash-log or carrier-image change).
       Black_CARRIER_.png` and must look unchanged.
 - [ ] Try `ios3ds_sbwarm=all` in `boot.cfg` for an A/B warm-up comparison.
 
-## NEXT. launchd hangs on a dirty disk: stale directory counts, repaired by the ARM9 before iOS starts
+## 163. launchd hangs on a dirty disk: stale directory counts, repaired by the ARM9 before iOS starts
 
 Report: a New 3DS (build c24a40d, `stereo3d=1`) booted to SpringBoard, the log ended
 abruptly at ~98 s (power-off or crash), and the next two boots hung. After
