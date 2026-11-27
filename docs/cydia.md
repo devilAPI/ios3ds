@@ -183,7 +183,9 @@ first:
 
 What it cannot catch: a boot that hangs before SpringBoard starts (launchd or
 a daemon). A dirty rootfs after a forced panic or power cut can hang launchd
-the same way; safe mode skips tweaks, it does not repair the disk. Tweak
+the same way (stale directory entry counts; the ARM9 now repairs those and the
+allocation bitmap before iOS starts, re-log "launchd hangs on a dirty disk");
+safe mode skips tweaks, it does not repair the disk. Tweak
 daemons that Cydia installs (e.g. `sbsettingsd`, `rocketd`) are ordinary
 launchd jobs and are not affected by safe mode. This is a 4.x/Substrate
 feature: 3.1.3 and 2.2.1 install Cydia but no Substrate, so there are no

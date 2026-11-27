@@ -7590,3 +7590,94 @@ applog found no warm-up, crash-log or carrier-image change).
 - [ ] The status bar must not log `Could not find mapped image
       Black_CARRIER_.png` and must look unchanged.
 - [ ] Try `ios3ds_sbwarm=all` in `boot.cfg` for an A/B warm-up comparison.
+
+## NEXT. launchd hangs on a dirty disk: stale directory counts, repaired by the ARM9 before iOS starts
+
+Report: a New 3DS (build c24a40d, `stereo3d=1`) booted to SpringBoard, the log ended
+abruptly at ~98 s (power-off or crash), and the next two boots hung. After
+`/dev/md0 on / (hfs...)` and `launchctl: Couldn't stat("/etc/mach_init.d")` came
+`launch_msg(): Socket is not connected`; nothing was ever exec'd (no AMFI line), md0 stopped at ~1085
+requests, the heartbeat PC sat at k80067b34. Same symptom as re-log 145.
+
+### Root cause [V]
+
+- **Not a launchd/plist problem.** The image's `/System/Library/LaunchDaemons` (68 plists) and
+  `/Library/LaunchDaemons` (`com.saurik.Cydia.Startup.plist`) are the same as in the 0728 image that
+  booted; no tweak added a daemon. `Couldn't stat("/etc/mach_init.d")` is in every good boot too.
+- **k80067b34 is the idle loop** (`cpsie if; bx lr` after `ml_set_interrupts_enabled`): every thread is
+  blocked, nothing spins. launchd's bootstrap `launchctl` just cannot talk to launchd.
+- **The volume is dirty**, and not only by the flag. `rootfs-...1739-nobooting.hfs`: attributes
+  0x80000000 (bit 8 clear, the ARM9 logs `NOT cleanly unmounted`), no journal. `fsck.hfsplus -fn`:
+  22 thread records without a file/folder record (an interrupted bulk delete: CrashReporter logs,
+  `/private/var/tmp/SpringBoard_reboot_flag`, `cydia.log`), **9 directories with a wrong entry count
+  (valence)**, 211 blocks in use by files that the bitmap and the header's free count list as free
+  (+3 leaked), file/folder counts off. The 0728 image has only the harmless free-count/overlap notes.
+- **The damage that blocks launchd is the directory counts**, found by bisecting copies in QEMU
+  (`--icount 2`, current build, same hang with the same PC every time):
+
+  | image | result |
+  |---|---|
+  | failing image as is | hang (reproduced: `launch_msg(): Socket is not connected`, k80067b34) |
+  | `fsck.hfsplus -fy` of it | boots to SpringBoard |
+  | failing image, allocation bitmap repaired only | hang |
+  | failing image, bitmap + directory counts repaired (orphan threads left in place) | boots, AMFI lines, launchd runs |
+
+  Among the wrong counts: `/private/var/tmp` says 0 entries but holds `launchd/` (launchd keeps its
+  control socket in `/var/tmp/launchd/sock`). The orphan thread records and the stale VH file/folder
+  counts are harmless to the kernel.
+- **Why the card got there**: the volume is not journaled; XNU keeps the catalog changes in its buffer
+  cache and writes them late, so a power cut / panic / crash during file deletions leaves the directory
+  records behind the files. Re-log 86 already noted that Apple's fsck cannot run on the mounted md0
+  (EBUSY) and that safe mode only skips tweaks, so nothing repaired it.
+
+### Fix [V]
+
+`boot/arm9/hfsfix.c` (host-testable, no FatFs/ARM9 dependencies) runs from `blksrv_open` when the
+volume header says not cleanly unmounted (so only after a bad shutdown), before XNU mounts md0:
+
+1. Walks the extents-overflow tree and the catalog leaf chains (the catalog's own overflow extents
+   included) and marks every block that any fork owns as allocated. It only ever turns free bits into
+   used bits (a leaked block stays leaked), recounts the free blocks and rewrites the volume header and
+   its backup.
+2. Counts the children of every directory CNID and rewrites every folder record whose valence differs
+   (one u16 table in the idle cache memory; skipped with a log line above ~110k catalog IDs).
+3. Logs `[blk] rootfs.hfs: REPAIRED the dirty volume: N block(s) ... M directory entry count(s)
+   corrected`; a journaled volume is left alone; any I/O error logs and mounts as-is. Orphan thread
+   records and the VH counts are not touched (not needed).
+
+Cost: reads the extents tree and catalog once for the bitmap and the counts and once more for the
+counts (~27 MB on this card), a few seconds on a dirty boot only. A clean boot does nothing.
+Test: `tests/test_hfsfix.py` (mkfs.hfsplus + `build/tools/hfsplus`, skipped without them; `make test`):
+bitmap wiped and rebuilt byte for byte, a leaked block is not freed, two valences broken and fixed,
+journaled volume refused, `fsck.hfsplus -fn` clean afterwards.
+
+### Repairing an existing rootfs [V]
+
+On the PC, with the card's `ios3ds/rootfs.hfs` copied elsewhere first:
+`fsck.hfsplus -fy rootfs.hfs` (Linux package `hfsprogs`; the image is case-sensitive HFS+, no
+journal). It repairs the threads, counts, bitmap and sets the clean flag; no file is removed (orphan
+threads had no data). Alternatively just boot the new build: the ARM9 does the bitmap and count
+repair itself (it does not remove the orphan threads).
+
+### Verification [V]
+
+- Failing image + new build in QEMU: `[blk] rootfs.hfs: REPAIRED the dirty volume: 214 block(s) ... 9
+  directory entry count(s) corrected (17919 files)`, then SpringBoard (home screen screenshot at 160 s).
+- `rootfs-repaired.hfs` (fsck.hfsplus -fy of the failing image, clean flag set) + new build: boots to
+  SpringBoard (`[blk] rootfs.hfs: cleanly unmounted`, 39 AMFI lines).
+- Hashes unchanged (kernel 505f451a, devtree 25b1bd23, fakeio e5fecd66, shim a35631eb, gpu 6bdaf617,
+  boot.cfg 8d4079cf); only the ARM9 firm changed. Fresh 4.2.1 soak `--cycles 5 --icount 2`: PASS.
+  `make test` green (incl. `tests/test_hfsfix.py`).
+
+### Not done
+
+- No kernel-side or launchd-side watchdog for a hang before SpringBoard: with this repair there is no
+  known hang left, and a reboot into safe mode would not repair a disk anyway.
+- Why exactly XNU/launchd stalls on `valence == 0` in `/var/tmp` was not traced (the boot test is the
+  evidence).
+
+### Hardware checklist [G]
+
+- [ ] After a hard power-off during use, the next boot logs `[blk] rootfs.hfs: NOT cleanly unmounted`
+      followed by `REPAIRED the dirty volume` (or `consistent`), then reaches SpringBoard.
+- [ ] That boot takes a few seconds longer before `XNU started`.

@@ -20,7 +20,7 @@ ARM9_FLAGS  := -mcpu=arm946e-s -mfloat-abi=soft
 ARM11_FLAGS := -mcpu=mpcore -mfloat-abi=soft
 LDFLAGS     := -nostdlib -Wl,--gc-sections -Wl,--no-warn-rwx-segments
 
-ARM9_SRC  := arm9/start.S arm9/main.c arm9/bootcfg.c arm9/console.c arm9/log.c arm9/sdmmc.c arm9/diskio.c arm9/blksrv.c arm9/blkcache.c arm9/display.c arm9/tsc.c arm9/swap.c arm9/audio.c arm9/gpumirror.c arm9/i2c.c arm9/mcu.c arm9/gyro.c arm9/exthid.c arm9/camera.c arm9/powersave.c arm9/power.c \
+ARM9_SRC  := arm9/start.S arm9/main.c arm9/bootcfg.c arm9/console.c arm9/log.c arm9/sdmmc.c arm9/diskio.c arm9/blksrv.c arm9/blkcache.c arm9/hfsfix.c arm9/display.c arm9/tsc.c arm9/swap.c arm9/audio.c arm9/gpumirror.c arm9/i2c.c arm9/mcu.c arm9/gyro.c arm9/exthid.c arm9/camera.c arm9/powersave.c arm9/power.c \
              $(addprefix arm9/wifi/,wifi.c wifi_cfg.c wifi_ring.c wifi_frame.c wpa2.c sdio.c ar6k.c vnic.c nwmcode.c) \
              arm9/fatfs/ff.c arm9/fatfs/ffunicode.c common/util.c
 ARM11_SRC := arm11/start.S arm11/main.c common/util.c

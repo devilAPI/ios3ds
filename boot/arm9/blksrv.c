@@ -5,11 +5,13 @@
  */
 #include "blksrv.h"
 #include "blkcache.h"
+#include "hfsfix.h"
 #include "log.h"
 #include "util.h"
 #include "fatfs/ff.h"
 
 static bool cache_flush(bool sync);
+static void dirty_volume_repair(void);
 
 static FIL f;
 static DWORD clmt[32768];   /* 128 KiB: a 1 GiB image copied onto a busy card can have ~15k fragments */
@@ -22,7 +24,7 @@ static u32 served, errors, sectors_moved;
    transactions. 512 slots x 512 B; the ARM9 has ~600 KiB free BSS. */
 #define CACHE_SLOTS 512u
 #define CACHE_DIRECT_SECTORS 16u      /* bigger writes go straight to the file */
-static u8 cache_data[CACHE_SLOTS * BLKC_SECTOR];
+static u8 cache_data[CACHE_SLOTS * BLKC_SECTOR] __attribute__((aligned(4)));
 static u32 cache_lba[CACHE_SLOTS];
 static u32 cache_map[CACHE_SLOTS * 2];
 static u8 cache_dirty[CACHE_SLOTS];
@@ -245,8 +247,8 @@ int blksrv_open(const char *path, u32 *sectors)
                  path, HFS_VH_OFF);
     else if (!(vh_attrs & HFS_UNMOUNTED))
         log_warn("[blk] rootfs.hfs: NOT cleanly unmounted (attributes 0x%08x, bit 8 clear): the last iOS run "
-                 "was cut short. Apple's fsck cannot check md0 while it is mounted (EBUSY), so the volume "
-                 "was mounted as-is; back up the image if files look wrong\n", vh_attrs);
+                 "was cut short. Apple's fsck cannot check md0 while it is mounted (EBUSY); the allocation "
+                 "bitmap and directory counts are checked below before iOS mounts it\n", vh_attrs);
     else
         log_ok("[blk] rootfs.hfs: cleanly unmounted (attributes 0x%08x)\n", vh_attrs);
     blkc_init(&cache, cache_data, cache_lba, cache_map, cache_dirty, CACHE_SLOTS);
@@ -261,11 +263,53 @@ int blksrv_open(const char *path, u32 *sectors)
                  (unsigned)clmt[0], (unsigned)ARRAY_SIZE(clmt));
         f.cltbl = NULL;
     }
+    if (vh_ok && !(vh_attrs & HFS_UNMOUNTED)) dirty_volume_repair();
     *sectors = f_size(&f) / 512;
     m->dev_sectors = *sectors;
     m->magic = BLK_MAGIC;
     open_ok = true;
     return 0;
+}
+
+static int fix_rd(void *ctx, u32 lba, u32 cnt, void *buf)
+{
+    UINT n = 0;
+    (void)ctx;
+    if (f_lseek(&f, (FSIZE_t)lba * BLKC_SECTOR) != FR_OK) return 1;
+    return f_read(&f, buf, cnt * BLKC_SECTOR, &n) != FR_OK || n != cnt * BLKC_SECTOR;
+}
+
+static int fix_wr(void *ctx, u32 lba, u32 cnt, const void *buf)
+{
+    UINT n = 0;
+    (void)ctx;
+    if (f_lseek(&f, (FSIZE_t)lba * BLKC_SECTOR) != FR_OK) return 1;
+    return f_write(&f, buf, cnt * BLKC_SECTOR, &n) != FR_OK || n != cnt * BLKC_SECTOR;
+}
+
+/* Dirty volume: re-mark every block the catalog owns as allocated before XNU
+   mounts it (boot/arm9/hfsfix.h, re-log launchdhang). cache_data is idle until
+   blkc_init and serves as scratch. */
+static void dirty_volume_repair(void)
+{
+    hfsfix_io_t io = { fix_rd, fix_wr, NULL };
+    hfsfix_result_t r;
+    int rc = hfsfix_bitmap(&io, cache_data, sizeof cache_data, &r);
+    if (rc == HFSFIX_OK && f_sync(&f) != FR_OK) rc = HFSFIX_IO;
+    if (rc != HFSFIX_OK)
+        log_warn("[blk] rootfs.hfs: allocation bitmap check failed (%d): mounting as-is\n", rc);
+    else if (r.fixed_blocks || r.valences_fixed)
+        log_warn("[blk] rootfs.hfs: REPAIRED the dirty volume: %u block(s) in use by files were marked free "
+                 "(free blocks %u -> %u, %u bitmap sector(s) rewritten), %u directory entry count(s) corrected "
+                 "(%u files)\n",
+                 r.fixed_blocks, r.free_before, r.free_after, r.bitmap_sectors_written, r.valences_fixed, r.files);
+    else
+        log_ok("[blk] rootfs.hfs: allocation bitmap and directory counts consistent with the catalog "
+               "(%u files, %u free blocks)\n", r.files, r.free_after);
+    if (rc == HFSFIX_OK && r.valence_skipped)
+        log_warn("[blk] rootfs.hfs: directory entry counts not checked (too many catalog IDs for the scratch table)\n");
+    if (rc == HFSFIX_OK && r.bad_extents)
+        log_warn("[blk] rootfs.hfs: %u file extent(s) point outside the volume (not repaired)\n", r.bad_extents);
 }
 
 /* returns true if a request was served */
