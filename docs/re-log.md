@@ -7419,7 +7419,7 @@ Log 2026-11-25_23-24-11 (build m1-0.4.0-244-geb90379-20261125.2034, New 2DS XL).
   expected lines are `[wifi] connect ... (WPA2-PSK/CCMP)` and no `key type 2`;
   if it fails with a message 1/2 loop, we need the `[wifi-diag] eapol` lines of
   that build (a retype of the password rules out a wrong PMK).
-## NEXT. Camera frame dumps in their own sd:/ios3ds/photos/ folder (2026-11-27)
+## 161. Camera frame dumps in their own sd:/ios3ds/photos/ folder (2026-11-27)
 
 Issue #1: the ARM9 wrote each camera session's diagnostic
 `CAM<seq>.RAW` straight into `sd:/ios3ds/`. It now writes
