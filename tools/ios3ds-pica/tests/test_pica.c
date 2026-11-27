@@ -818,11 +818,9 @@ static void test_sim(void)
 
 /* The arena allocator under CA's pattern (hardware runs 19-21, issues 1/5):
    a 1 MiB render target and its 600 KiB copy come and go while small layer
-   textures are uploaded and evicted, with the arena about 3/4 full. Big
-   blocks are placed from the top and small ones from the bottom, so when a
-   target does not fit, evicting the highest small blocks (what the GL engine
-   does for big requests) frees about as much as the target needs instead of
-   most of the textures. */
+   textures are uploaded and evicted. Big blocks come from their own top
+   pool, so with a 12/16 MiB arena 150 targets need no texture evictions;
+   with one shared pool and random eviction it was ~42 MiB (re-log 75). */
 static int t_alive(uint32_t o) { (void)o; return 1; }
 static void t_log(const char *f, ...) { (void)f; }
 static uint32_t alloc_churn(uint32_t big_min, uint32_t *evicted_kb)
@@ -846,7 +844,7 @@ static uint32_t alloc_churn(uint32_t big_min, uint32_t *evicted_kb)
         uint32_t sz;
         rnd = rnd * 1103515245u + 12345u;
         sz = (((rnd >> 8) % 96) + 1) * 1024;                                /* 1-96 KiB textures */
-        while (n && (held + sz > (8u << 20) || n >= 210)) {                 /* LRU-ish eviction */
+        while (n && (held + sz > (2u << 20) || n >= 210)) {                 /* LRU-ish eviction */
             k = (rnd >> 4) % n;
             CHECK_EQ(pica_drv_free(&d, 1, live[k]), PICA_OK);
             held -= livesz[k];
@@ -904,13 +902,46 @@ static void test_alloc(void)
     d.block[0].size = PICA_DRV_CMD_SIZE;
     d.nblocks = 1;
     CHECK_EQ(pica_drv_alloc(&d, 0, 1u << 20, 0x1000, &pa), PICA_OK);
-    CHECK_EQ(pa, d.pa + d.size - (1u << 20));                               /* big: from the top */
+    CHECK_EQ(pa, d.pa + PICA_DRV_HUGE_FLOOR(d.size) - (1u << 20));          /* big: top of the medium pool */
     CHECK_EQ(pica_drv_alloc(&d, 0, 4096, 0, &pa), PICA_OK);
     CHECK_EQ(pa, d.pa + PICA_DRV_CMD_SIZE);                                 /* small: from the bottom */
     fails = alloc_churn(PICA_DRV_BIG, &kb);
     CHECK_EQ(fails, 0);
-    CHECK(kb < 20 * 1024);          /* evicting at random instead: ~42 MiB */
+    CHECK_EQ(d.full_logs, 0);               /* no arena-full line under this churn */
+    CHECK(kb < 20 * 1024);          /* one pool + random eviction: ~42 MiB */
     printf("alloc: 150 targets placed in a 3/4 full arena, %u KiB of textures evicted for them\n", kb);
+}
+
+/* Hardware log 2026-11-25 (New-model console, 12 MiB arena): hundreds of
+   failed allocations with 0.6-1.8 MiB free in 85-129 blocks, then a 4 MiB
+   texture refused with 10.8 MiB free. Small layer textures were allowed into
+   the top of the arena, so a huge block never found a contiguous gap. Here
+   128 KiB blocks fill the arena, every other one is freed, and a 4 MiB block
+   plus another 128 KiB one must still fit: the huge pool stays untouched. */
+static void test_partition(void)
+{
+    static pica_plat_t plat;
+    static pica_drv_t d;
+    uint32_t pa[160], big, small, n = 0, i;
+    plat.alive = t_alive;
+    plat.log = t_log;
+    memset(&d, 0, sizeof d);
+    d.p = &plat;
+    d.pa = 0x24000000;
+    d.size = 12u << 20;
+    d.state = PICA_OK;
+    d.block[0].size = PICA_DRV_CMD_SIZE;
+    d.nblocks = 1;
+    while (n < 160 && pica_drv_alloc(&d, 1, 128u << 10, 0, &pa[n]) == PICA_OK)
+        n++;
+    CHECK(n > 20);
+    for (i = 1; i < n; i += 2)
+        CHECK_EQ(pica_drv_free(&d, 1, pa[i]), PICA_OK);
+    CHECK_EQ(pica_drv_alloc(&d, 1, 4u << 20, 0, &big), PICA_OK);
+    CHECK(big >= d.pa + PICA_DRV_HUGE_FLOOR(d.size));
+    CHECK_EQ(pica_drv_alloc(&d, 1, 128u << 10, 0, &small), PICA_OK);
+    CHECK(small < big);
+    printf("arena: %u small blocks churned, 4 MiB + 128 KiB still fit\n", n);
 }
 
 /* The camera's frame buffers live in the arena under an owner that no client
@@ -1016,6 +1047,7 @@ int main(int argc, char **argv)
     test_ff();
     test_sim();
     test_alloc();
+    test_partition();
     test_cam_reserve();
     test_scatter();
     (void)argc; (void)argv;

@@ -119,14 +119,23 @@ address registers) before anything untrusted may use GL.
   them (`c7,c6,1`). Blocks are multiples of 128 bytes, so a line never holds
   two owners' data.
 - The first 128 KiB are the driver's command-list staging buffer.
-- Placement (`pica_drv.c`, re-log 75): blocks of 256 KiB and more (render
-  targets, depth buffers, read-back staging, the mirror's texture) are placed
-  first-fit from the top of the arena, smaller ones (textures) first-fit from
-  the bottom; the block table holds 224 entries (160 filled up on a New 2DS
-  XL, issue 1). When a big block does not fit, the GL engine evicts the
-  textures highest in the arena first, which frees the space next to the big
-  blocks; LRU order is kept for small requests (test_pica: about 4x fewer
-  bytes evicted for the same targets).
+- Placement (`pica_drv.c`, re-log 75 and NEXT): blocks of 256 KiB-2 MiB
+  (render targets, depth buffers, read-back staging, the mirror's texture)
+  come first-fit from the top of the **medium** pool; smaller ones (textures)
+  use page-granular first fit from its bottom (best fit was tried and made
+  QEMU scatter small blocks and log retries). The top
+  `PICA_DRV_HUGE_RESERVE` (6 MiB in a 12 MiB
+  arena, 2 MiB in 8-11 MiB) is two-sided: blocks >= 2 MiB come down from its
+  top, small blocks fall back into its bottom and 256 KiB-2 MiB blocks into
+  its top only when the medium pool is full, and neither may take the top
+  `PICA_DRV_HUGE_KEEP` (4 MiB on New models).
+  A 4 MiB texture can then be placed even with small textures
+  and 1 MiB targets filling the medium pool (hardware log 2026-11-25).
+  The block table holds 224 entries (160 filled up on
+  a New 2DS XL, issue 1); free space is the gaps between live blocks, so
+  adjacent freed blocks coalesce implicitly. When a block does not fit, the
+  GL engine evicts the textures highest in the arena first; LRU order is kept
+  for small requests.
 
 ### Power and clock
 

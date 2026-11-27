@@ -35,6 +35,20 @@ typedef struct pica_plat {
 #define PICA_DRV_CMD_SIZE 0x20000u                  /* command list staging inside the arena */
 #define PICA_DRV_ALIGN    0x80u                     /* allocation granule (>= 2 cache lines, 16-byte GPU units) */
 #define PICA_DRV_BIG      0x40000u                  /* blocks this big are placed from the top of the arena */
+/* Keep a top reserve for >= 2 MiB blocks (6 MiB in a 12 MiB arena, 2 MiB in
+   8-11 MiB, a quarter below), with smaller blocks falling back into its
+   bottom if the medium pool fills. A 4 MiB texture then fits even when
+   small layer textures and 1 MiB targets have filled the rest; the smaller
+   reserve keeps an Old-model 10 MiB arena from running out of medium space. */
+#define PICA_DRV_HUGE     0x200000u                 /* blocks this big get the reserved top pool */
+#define PICA_DRV_HUGE_RESERVE(sz) \
+    ((sz) >= (12u << 20) ? (6u << 20) : (sz) >= (8u << 20) ? (2u << 20) : ((sz) >> 2))
+#define PICA_DRV_HUGE_FLOOR(sz) \
+    ((sz) - PICA_DRV_HUGE_RESERVE(sz))
+/* Part of the reserve smaller blocks may never take: a 4 MiB request must
+   still fit on a New-model arena even after medium-pool churn. */
+#define PICA_DRV_HUGE_KEEP(sz) \
+    ((sz) >= (12u << 20) ? (4u << 20) : 0u)
 
 typedef struct pica_drv {
     const pica_plat_t *p;
@@ -45,6 +59,7 @@ typedef struct pica_drv {
     uint32_t submits, timeouts;
     uint32_t nblocks;
     uint32_t full_logs;                     /* failed allocations (log rate limit) */
+    uint32_t huge_floor;                    /* >= PICA_DRV_HUGE blocks stay above this offset */
     struct { uint32_t off, size, owner; } block[PICA_DRV_BLOCKS];   /* sorted by off */
 } pica_drv_t;
 

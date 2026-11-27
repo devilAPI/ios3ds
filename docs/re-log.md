@@ -7590,3 +7590,109 @@ applog found no warm-up, crash-log or carrier-image change).
 - [ ] The status bar must not log `Could not find mapped image
       Black_CARRIER_.png` and must look unchanged.
 - [ ] Try `ios3ds_sbwarm=all` in `boot.cfg` for an A/B warm-up comparison.
+
+## NEXT. PICA arena pools: stop small layer textures from eating the big-block space (2026-11-27)
+
+- **[V]** Tester's New-model console log (private, 2026-11-25, build
+  `eb90379`; section 160 identifies the console as a New 2DS XL; not
+  attached or quoted here) reports `[pica] arena full` lines with 0.6-1.8 MiB
+  free in 85-129 blocks, a rate-limit count of 256 failed 128 KiB allocations,
+  and later a 4 MiB texture refused with **10.8 MiB free in the 12 MiB arena**.
+  That is not a leak or a full block table: it is a free-space layout problem.
+  `uva_to_pa()` also refuses CA's second 320x480 surface as non-contiguous
+  in 8 log occurrences (one rate-limited shim line, seven engine lines); that is
+  the known scattered-IOSurface path, already handled per surface by
+  `PICA_OP_SCATTER` since re-log 54/78, not a new fault. The
+  depth probe's `standard 4608 FAIL ... using reversed` is the *expected*
+  result on hardware (re-log 17/§16), and the one
+  `[gpu] mirror did not acknowledge the mode change within 100 ms` is an ARM9
+  timing warning in a case QEMU cannot model (hardware checklist below).
+- **[V]** `git diff eb90379 origin/main -- tools/ios3ds-pica/src/pica_drv.c
+  kernel/shim/pica.c tools/ios3ds-gl/pica_be.c` has no allocator or present
+  change: main does **not** fix this. It adds the optional idle clock, the
+  CLCD-swap dirty flag and a swap diagnostic only.
+- **[V]** Cause in `pica_drv.c`: one arena, small textures first-fit from the
+  bottom, big blocks (>= 256 KiB) first-fit from the top. When the lower half
+  fills, a *small* texture is placed in the top free space too. Big blocks then
+  have no contiguous hole even with most of the arena free; freeing scattered
+  small blocks leaves many sub-128 KiB gaps. Free space is already implicit
+  (only live blocks are in the table, so adjacent freed blocks coalesce), and
+  reviving dead clients cannot help when their owners are alive.
+- **[V]** Fix (`tools/ios3ds-pica/{include/pica_drv.h,src/pica_drv.c}`): three
+  size bands in two directions. Small textures keep page-granular bottom-up
+  first fit; power-of-two classes wasted half of a 10 MiB arena and best fit
+  scattered blocks and caused retries, so both were dropped. 256 KiB-2 MiB
+  blocks (targets, depth, read-back, the
+  mirror's 1 MiB texture) come down from the top of the medium pool as
+  before; when that pool fills, small textures fall back into the bottom of
+  the top reserve and medium blocks into its top, capped so 4 MiB stays free
+  there on New models;
+  >= 2 MiB blocks come down from the reserve's top
+  (`PICA_DRV_HUGE_RESERVE`: 6 MiB in a 12 MiB arena, 2 MiB in 8-11 MiB).
+  Several QEMU-guided variants were rejected: a hard 5/5 split and a reserve
+  no 1 MiB block could enter failed their soaks; power-of-two classes wasted
+  memory, best fit scattered holes, and a 4 MiB reserve still logged ten
+  recoverable 256 KiB retries. The arena-full line now reports the largest
+  gap in each pool; it showed a 220 KiB request with a 128 KiB medium gap and
+  an empty reserve, which led to the capped two-sided fallback. 8-11 MiB
+  arenas use a 2 MiB reserve, New-model 12 MiB arenas keep 6 MiB.
+  Freed holes coalesce implicitly (the table holds
+  live blocks only). `pica_drv_init` logs the split once. Kernel, devtree,
+  fakeio and boot.cfg are untouched; the GPU part and the one branch into it
+  from the main shim part change.
+- **[V]** Host test `test_partition` (new): with 128 KiB blocks churned and
+  every other one freed, old code fails the 4 MiB allocation with
+  `PICA_ERR_NO_MEM` (`FAIL tests/test_pica.c:940`) after filling 95 blocks;
+  new code fits both 4 MiB and 128 KiB with 63 blocks in the lower pools.
+  `alloc_churn`'s 150 targets need 0 KiB of texture evictions and log no
+  arena-full line. `make test`: green.
+- **[V]** QEMU before/after, fresh `build/sd.img` per run, `--icount 2`,
+  `IOS3DS_QEMU=/tmp/opencode/qemu-compat2/b/qemu-system-arm`, Old 3DS/10 MiB
+  arena. Counting the `(N times)` counter in every
+  `[pica] arena full: X bytes wanted` line: **baseline** `emu/soak.py
+  --cycles 5`: **0** arena-allocation failures, `stress.py --cycles 10`: **0**
+  (one `reclaimed blocks` line, no CPU fallback); **after this change** the
+  5-cycle soak and the `stereo3d=1` 5-cycle soak (`--slider3d 255`) both
+  print **Result: PASS** with **0** failures. The final 10-cycle churn rerun
+  (`rm -f build/sd.img && make sdimg`, then `emu/soak.py --cycles 10 --icount 2
+  --out build/soak-after10-run`) printed **Result: PASS**, 10/10 cycles with
+  every tap opening an app and **0** `arena full` lines; the earlier 10-cycle
+  log had been cut short by the previous run's timeout. The final
+  `stereo3d=1` run used a fresh image with the flag actually changed in
+  `sd:/ios3ds/boot.cfg` (the file is CRLF, so an LF-only edit silently leaves
+  `stereo3d=0`) and `--slider3d 255`: `soak.py --cycles 5 --icount 2` ->
+  **Result: PASS**, 5/5 cycles, every tap opened an app, **0** `arena full`
+  lines and no CPU GPU fallback. QEMU's smaller arena and GPU model
+  never reproduced the New-model 12 MiB fragmentation; the deterministic
+  host test above does. The rejected intermediate builds logged 10 failures
+  each (256 KiB, then 220 KiB, then 512 KiB/1 MiB requests) before the
+  two-sided capped fallback brought that to zero.
+- **[V]** SHA-256 of a fresh default 4.2.1 `build/sd/ios3ds/`:
+
+  | File | Before (HEAD) | After |
+  |---|---|---|
+  | `kernel.bin` | `505f451a44d9da6aae7034d427d5524d7392d9fc70640ec997c374b0b5a70e38` | unchanged |
+  | `devtree.bin` | `25b1bd233447ddfc60eb69e30ad4cbd085c1963f86e77052fda969469d8327cc` | unchanged |
+  | `fakeio.bin` | `e5fecd6645b3bc44d6510d7af7397c667fdc25da4517e2cd9fabc42fb673570d` | unchanged |
+  | `shim.bin` | `a35631eb66b3c2855a1a02e656bb88b77b132dd89f7a3c69a429f9a033a4a3a1` | `c005ae8a76a648b67980840637cdda80563debe0b1f7b0202e4c7eec5aabf39c` |
+  | `gpu.bin` | `6bdaf6177b66a3d268d3472958a74c8797ce18c64a1a4556f04806292691f479` | `0de631c4a18c1f14648a222b01e3cd8ac29140951977184db40bec71c84f67a7` |
+  | `boot.cfg` | `8d4079cfe114e5006a82967dee51b28de666376474fa86ebd8c9a5d4969b5e29` | unchanged |
+
+  After `git fetch origin && git rebase origin/main` (`b0b379a`), a fresh
+  default `make sdimg` reproduced all six hashes above, `make test` was green
+  (6750 checks, 0 failures in `test_pica`), and a fresh 5-cycle soak
+  (`--icount 2`) again printed **Result: PASS** with 0 `arena full` lines.
+
+  `pica_drv.c` is linked into the shim's GPU part, hence the new `gpu.bin`.
+  The main shim part has one branch into that part (`0x80840ee4` calls a
+  GPU-part function); its target moves by a few bytes, which is why the
+  configured `shim.bin` changes too. No main-shim *source* changed.
+- **[G]** On a New 3DS, boot with `diag=1` and check the new
+  `[pica] arena pools: small below ...` line (4 MiB/8 MiB for a 12 MiB arena).
+  Open/close Photos, Settings, Notes, Safari and Music 10 times, swipe pages
+  and return Home. There must be no `[pica] arena full: ... 4 MiB ...` and no
+  `[gl] pica: GPU arena full ... CPU from now on`; `[gl] CA:` lines must keep
+  their GPU presents. A non-contiguous destination may still log once and
+  take `via an arena copy`; it must not become a CPU read-back. Check whether
+  the mirror's 100 ms mode-change warning still appears on screen changes
+  (lock/wake, page swipe); it is timing-only and needs a console log.
