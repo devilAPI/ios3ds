@@ -309,11 +309,15 @@ class Image:
 
 # --- install ------------------------------------------------------------------
 
-def status_entry(control, extra=(), hold=False):
+def status_entry(control, extra=(), hold=False, version=None):
     lines = control.strip("\n").splitlines()
     out = []
     for line in lines:
-        out.append(line)
+        # manifest "status_version" (the 2.x Cydia epoch pin): dpkg's database
+        # declares a higher installed version than the deb's control file, so
+        # APT/Cydia never offer an upgrade from a user-added source. Files and
+        # maintainer scripts still come from the pinned deb.
+        out.append("Version: %s" % version if version and line.startswith("Version:") else line)
         if line.startswith("Package:"):
             out.append("Status: %s ok installed" % ("hold" if hold else "install"))
     out.extend(extra)
@@ -396,7 +400,8 @@ def install(img, hfs, debs, manifest=None, verbose=True):
                 extra.append("Conffiles:")
                 extra += [" %s %s" % (c, md5.get(c, "newconffile")) for c in conff]
             # held packages (manifest "hold"): APT/Cydia never upgrade or reinstall them
-            status.append(status_entry(control, extra, pkg in m.get("hold", ())))
+            status.append(status_entry(control, extra, pkg in m.get("hold", ()),
+                                       m.get("status_version", {}).get(pkg)))
             info = "/var/lib/dpkg/info/" + pkg
             im.makedirs("/var/lib/dpkg/info")
             im.put(info + ".list", ("\n".join(listed) + "\n").encode())

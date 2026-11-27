@@ -157,7 +157,24 @@ class Manifest(unittest.TestCase):
             self.assertEqual((p["path"], p["orig"], p["new"]), ("/Applications/Cydia.app/Cydia_", "00d1", "00e0"))
         role = plistlib.loads(m["write"]["/var/lib/cydia/metadata.plist"].encode())
         self.assertEqual(role, {"Settings": {"Role": "User"}})
+        # Cydia 1.1.x imports two UIKit symbols 5H11a does not have, so the
+        # installed version carries an epoch: APT sees it as newer than 1.1.30
+        self.assertEqual(m["status_version"], {"cydia": "1:1.0.3222-73"})
+        prefs = m["write"]["/etc/apt/preferences"]
+        self.assertIn("Package: cydia\nPin: version *\nPin-Priority: -1", prefs)
+        self.assertIn("Package: cydia-lproj\nPin: version *\nPin-Priority: -1", prefs)
+        self.assertNotIn("sources.list", " ".join(m["write"]))  # no default source
         self.assertNotIn("patch", cydia.load_manifest())      # 4.x set unchanged
+
+    def test_status_version(self):
+        """Manifest status_version changes only dpkg's Version line (2.x epoch pin)."""
+        control = "Package: cydia\nVersion: 1.0.3222-73\nDepends: dpkg\n"
+        self.assertEqual(cydia.status_entry(control),
+                         "Package: cydia\nStatus: install ok installed\n"
+                         "Version: 1.0.3222-73\nDepends: dpkg\n")
+        self.assertEqual(cydia.status_entry(control, version="1:1.0.3222-73"),
+                         "Package: cydia\nStatus: install ok installed\n"
+                         "Version: 1:1.0.3222-73\nDepends: dpkg\n")
 
     def test_patch_file(self):
         m = {"patch": [{"path": "/a", "offset": "0x2", "orig": "00d1", "new": "00e0"}]}

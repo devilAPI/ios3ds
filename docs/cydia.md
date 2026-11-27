@@ -262,15 +262,23 @@ errors for them; remove them in Sources > Edit.
 - **Preset role, no sources:** `/var/lib/cydia/metadata.plist` sets
   `Settings/Role = User`, so the first launch opens the home tab instead of
   "Who Are You?" (Manage > Settings changes it). No source list is written:
-  1.0.x adds none itself, and with Telesphoreo (`apt.saurik.com tangelo-3.7`)
-  listed its first refresh asks for an "Essential Upgrade" to the repo's
-  Cydia 1.1.30. In QEMU that upgrade unpacked 1.1.30 and the UI then froze; a
-  dpkg hold made the refresh fail ("pkgProblemResolver::Resolve generated
-  breaks"), and an `/etc/apt/preferences` pin still offered the upgrade, which
-  then failed ("unable to locate file for the cydia package"). A user who adds
-  sources should pick "Ignore (Temporary)" at that prompt. `base` and
-  `debianutils` (the repo's other Essential packages) are in the set so a
-  refresh does not ask for them.
+  1.0.x adds none itself. `base` and `debianutils` (the repo's other Essential
+  packages) are in the set so a refresh does not ask for them.
+- **Cydia 1.1.30 is held off (re-log NEXT).** With Telesphoreo
+  (`apt.saurik.com tangelo-3.7`) listed, 1.0.3222's first refresh used to offer
+  an "Essential Upgrade" to 1.1.30. That build imports two UIKit symbols that
+  2.2.1 does not have (`UIKeyboardAnimationCurveUserInfoKey` and
+  `UIKeyboardAnimationDurationUserInfoKey`, both non-lazy), so after the
+  upgrade Cydia no longer opened (QEMU screenshot/log in the re-log). A plain
+  dpkg `hold` only made the resolver fail ("pkgProblemResolver::Resolve
+  generated breaks"), and a preferences pin alone still left the upgrade in
+  Cydia's Changes list. The 2.x manifest therefore writes an APT **epoch** into
+  dpkg's status, `Version: 1:1.0.3222-73` (`status_version` in the manifest,
+  applied by `scripts/cydia.py status_entry`): APT compares `1:` as a higher
+  epoch than the repo's `0:1.1.30`, so no upgrade is offered. An
+  `/etc/apt/preferences` negative pin (-1 for all versions of `cydia` and
+  `cydia-lproj`) is a second barrier for installs. Cydia Translations can still
+  be upgraded on its own; it does not touch the Cydia installer.
 - **Home page:** with Wi-Fi, Cydia loads saurik's live home page
   (cydia.saurik.com) for this version, which says "This version of Cydia is no
   longer supported: please upgrade to 1.1.x" (the server's text for 1.0.x

@@ -120,8 +120,11 @@ for the full table.
   streams frames from both sensors, and `hwtest=2` reports the cameras PASS
   under QEMU's hardware-realistic timing (re-log 153).
 - Cydia **1.0.3222** opens, with APT/dpkg but no default source, no TLSFix and
-  no Substrate. By default the interface is composited in software with the
-  ARM9 screen copy (`gpu_mirror=0`); the PICA200 path is opt-in (below).
+  no Substrate. It is held at `1:1.0.3222-73` in dpkg's status: adding a source
+  no longer offers the Cydia 1.1.30 upgrade, which cannot open on 2.2.1
+  (missing UIKit symbols; [docs/cydia.md](cydia.md), re-log NEXT). By default
+  the interface is composited in software with the ARM9 screen copy
+  (`gpu_mirror=0`); the PICA200 path is opt-in (below).
 
 If a non-default version does not boot, attach `sd:/ios3ds/log.txt` and the
 exact `--ios` value and IPSW sha1 when you [open an issue](https://github.com/devilAPI/ios3ds/issues/new/choose).

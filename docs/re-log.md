@@ -7299,3 +7299,92 @@ Goal: find why SpringBoard SIGKILLed apps after Home in the `stereo3d=1`
 - No fix was needed, so there is no code change; docs/stereo3d.md gets a
   short note. The flag stays experimental until a console test (re-log 155
   checklist).
+## NEXT. Cydia 1.1.30 on 2.2.1: missing UIKit symbols, held by an epoch in dpkg status (2026-11-27)
+
+Continues re-log 146, which left the freeze after the Telesphoreo "Essential
+Upgrade" unexplained. Design/user notes: docs/cydia.md "iPhone OS 2.x",
+docs/other-versions.md, docs/multi-version.md §6.9.
+
+### Cause: two non-lazy UIKit symbols that 5H11a never exported
+
+- **[V]** Unpacked `cydia_1.1.30_iphoneos-arm.deb` to
+  `build/cydia-analysis/Cydia` (fat: armv6 slice at 0x4000, 566928 bytes).
+  `/usr/bin/llvm-nm-18 --arch armv6 -u` lists 414 undefined symbols; a scratch
+  Mach-O symbol-table reader over the 264 dylibs/frameworks extracted from a
+  built 5H11a rootfs (195300 defined symbols) found exactly two without a
+  definition: `_UIKeyboardAnimationCurveUserInfoKey` and
+  `_UIKeyboardAnimationDurationUserInfoKey`. Every other import resolves, so
+  this is not APT/dpkg, Substrate or a new UIKit class.
+- **[V]** 5H11a's `UIKit.framework/UIKit` only has
+  `UIKeyboardBoundsUserInfoKey`, `UIKeyboardCenterBeginUserInfoKey` and
+  `UIKeyboardCenterEndUserInfoKey`: the animation userInfo keys arrived with a
+  later UIKit; Cydia 1.1.30 was built against it (its armv6 slice still says
+  `LC_VERSION_MIN_IPHONEOS 2.0`, which is why the file loads at all).
+- **[V]** The two symbols are indirect entries 285/286. In that slice
+  `__nl_symbol_ptr` covers indirect entries 264..316 (53 entries) and
+  `__la_symbol_ptr` 317..580: both are **non-lazy**, so dyld binds them before
+  `main()`. An upgrade to 1.1.30 therefore leaves a Cydia that cannot launch,
+  not a Cydia that fails when the keyboard opens.
+- **[V]** QEMU repro on a fresh 2.2.1 image with a temporarily added Telesphoreo
+  source (`--icount 2`, ctr-wifi): the Essential Upgrade prompt appeared,
+  accepted it; dpkg logged `Setting up cydia (1.1.30) ...`, then
+  "Close Cydia (Restart)" and, after tapping the Cydia icon, no UI came back
+  (home screen again: `build/emu-session/repro-launch2.png`; full sequence in
+  `repro-prompt.png` … `repro-final.png`). **[G]** dyld's own "Symbol not
+  found" line was not captured: the guest's `/var/log/syslog` was empty and no
+  CrashReporter report was written, so the exact console wording remains
+  unverified. The missing non-lazy bindings and the unlaunchable app are [V].
+- **[V]** Re-log 146's alternatives were re-checked: `Status: hold` on cydia
+  makes apt 0.7's resolver fail ("pkgProblemResolver::Resolve generated
+  breaks"), and `/etc/apt/preferences` pinning 1.0.3222 or 1.1.30 alone still
+  left "Cydia Installer" in Changes (the repository also offers 1.1.27 and
+  Cydia 1.0 draws its upgrade list from the cache, not the pin).
+
+### Fix: an APT epoch in dpkg's status plus a negative pin
+
+- `rootfs/cydia-2.x.json` now has `"status_version": {"cydia":
+  "1:1.0.3222-73"}`. `scripts/cydia.py status_entry()` replaces only the
+  `Version:` line of that package's generated dpkg status entry: the pinned
+  deb's files, md5sums and maintainer scripts are unchanged. APT compares
+  `1:1.0.3222-73` (epoch 1) as newer than the repository's `0:1.1.30`, so
+  Cydia 1.0 no longer classifies the installer as upgradable.
+- `/etc/apt/preferences` pins every version of `cydia` and `cydia-lproj` to
+  `Pin-Priority: -1`, a second barrier for direct APT installs. Neither
+  mechanism changes 4.x: `status_version` is only in the 2.x manifest, and
+  `status_entry()` without an override emits exactly the old status text.
+- **[V]** With a Telesphoreo source written into a test image, the fixed
+  build opened Cydia straight into the Home tab with **no Essential Upgrade
+  prompt** (`build/emu-session/epoch-cydia.png`: only saurik's "no longer
+  supported" banner) and Changes listed only "Cydia Translations", not the
+  installer (`build/emu-session/epoch-changes.png`). Those two test-only
+  source lines were removed again before the final image.
+
+### Verification
+
+- **[V]** `make test` passes, including the new
+  `test_status_version` and the extended `test_ios2_set` (epoch, -1 pins, no
+  default source).
+- **[V]** Fresh 2.2.1 image (`rm -f build/sd.img && make sdimg IOS=2.2.1`),
+  `emu/soak.py --cycles 5 --icount 2 --require-app --crashlogs --settle 30
+  --targets "123,314;275,226;199,226;123,226;47,226"` → **Result: PASS**
+  (five apps opened, no Home recovery, no crash reports). Cycle 0's Cydia
+  screenshot is `build/cydia130-proof/cydia-open-221.png` (tab bar + Cydia's
+  Home tab, offline "Unable to Load"); the source-added prompt/changes and
+  freeze-repro shots are in the same folder.
+- **[V]** Six 4.2.1 hashes after a fresh default build: kernel `505f451a…`,
+  devtree `25b1bd23…`, fakeio `e5fecd66…`, shim `a35631eb…`, gpu `6bdaf617…`,
+  boot.cfg `8d4079cf…` — identical to origin/main.
+- **[V]** Fresh 4.2.1 image, `emu/soak.py --cycles 5 --icount 2` → **Result:
+  PASS** (0 panics, stalls, crashes or GPU watchdog failures).
+
+### Hardware checklist
+
+- [G] Install a 2.2.1 build, add a Telesphoreo source in Manage > Sources,
+  refresh: no Essential Upgrade sheet and no "Cydia Installer" in Changes.
+- [G] Manage > Packages shows Cydia Installer `1:1.0.3222-73` and Cydia still
+  opens after a reboot. Cydia Translations may upgrade on its own; check that
+  Cydia still opens afterwards.
+- [G] If someone upgrades Cydia anyway (a manually fetched deb and `dpkg -i`),
+  attach `log.txt` and a CrashReporter report: the failure should be dyld's
+  two UIKit userInfo keys on 5H11a.
+
