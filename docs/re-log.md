@@ -7299,7 +7299,7 @@ Goal: find why SpringBoard SIGKILLed apps after Home in the `stereo3d=1`
 - No fix was needed, so there is no code change; docs/stereo3d.md gets a
   short note. The flag stays experimental until a console test (re-log 155
   checklist).
-## NEXT. Cydia 1.1.30 on 2.2.1: missing UIKit symbols, held by an epoch in dpkg status (2026-11-27)
+## 159. Cydia 1.1.30 on 2.2.1: missing UIKit symbols, held by an epoch in dpkg status (2026-11-27)
 
 Continues re-log 146, which left the freeze after the Telesphoreo "Essential
 Upgrade" unexplained. Design/user notes: docs/cydia.md "iPhone OS 2.x",

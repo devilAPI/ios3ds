@@ -264,7 +264,7 @@ errors for them; remove them in Sources > Edit.
   "Who Are You?" (Manage > Settings changes it). No source list is written:
   1.0.x adds none itself. `base` and `debianutils` (the repo's other Essential
   packages) are in the set so a refresh does not ask for them.
-- **Cydia 1.1.30 is held off (re-log NEXT).** With Telesphoreo
+- **Cydia 1.1.30 is held off (re-log 159).** With Telesphoreo
   (`apt.saurik.com tangelo-3.7`) listed, 1.0.3222's first refresh used to offer
   an "Essential Upgrade" to 1.1.30. That build imports two UIKit symbols that
   2.2.1 does not have (`UIKeyboardAnimationCurveUserInfoKey` and

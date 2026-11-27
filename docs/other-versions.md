@@ -122,7 +122,7 @@ for the full table.
 - Cydia **1.0.3222** opens, with APT/dpkg but no default source, no TLSFix and
   no Substrate. It is held at `1:1.0.3222-73` in dpkg's status: adding a source
   no longer offers the Cydia 1.1.30 upgrade, which cannot open on 2.2.1
-  (missing UIKit symbols; [docs/cydia.md](cydia.md), re-log NEXT). By default
+  (missing UIKit symbols; [docs/cydia.md](cydia.md), re-log 159). By default
   the interface is composited in software with the ARM9 screen copy
   (`gpu_mirror=0`); the PICA200 path is opt-in (below).
 
