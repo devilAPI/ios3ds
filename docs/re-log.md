@@ -7472,7 +7472,7 @@ path.
   to 0:/ios3ds/photos/CAM....RAW` should name the new location and
   `analyze_dump.py` on that file should still decode both frames.
 
-## NEXT. SpringBoard stalls, an exit with no reason, and the empty carrier image (2026-11-27)
+## 162. SpringBoard stalls, an exit with no reason, and the empty carrier image (2026-11-27)
 
 A tester's private New 3DS log from build eb90379 (100 commits behind main;
 none of the three items was already fixed there — main's later commits are
